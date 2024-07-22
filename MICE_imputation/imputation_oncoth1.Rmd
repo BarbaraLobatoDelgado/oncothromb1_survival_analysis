@@ -95,31 +95,23 @@ oncoth1_data %>%
 
 # Exploration of missing values distribution
 
+
 ```{r}
-# Function to check proportion of missing data per column/row
-proportion_missing_values <- function(x) {sum(is.na(x))/length(x)*100}
+# Summary of dataset, including percentage of missing values
+naniar_summary = miss_var_summary(oncoth1_data)
+
+# Show variables with missing values 
+naniar_summary %>%
+  filter(!pct_miss == 0)
 ```
 
 
 ```{r}
-# Missing data proportion by column
-percentage_missing_values_per_var = as.data.frame(apply(oncoth1_data, 2, proportion_missing_values))
-
-# Show only variables with missing values
-percentage_missing_values_per_var = percentage_missing_values_per_var[percentage_missing_values_per_var != 0]
-
-percentage_missing_values_per_var
-```
-
-
-```{r}
-# Remove columns related to VTE events
-#apply(oncoth1_data, 1, proportion_missing_values)
-```
-
-```{r}
+# Heatmap with missing data patterns
+# Useful for investigating any structure of missing observations in the data
 md.pattern(
   oncoth1_data %>% select(
+    # Select clinical variables of interest
     albumin, 
     aptt, 
     aptt_ratio,
@@ -131,9 +123,10 @@ md.pattern(
     venous_insufficiency, 
     catheter_device, 
     creatinine, 
-    oral_contraceptive_tx
-  ), 
-rotate.names = TRUE)
+    oral_contraceptive_tx), 
+  plot = TRUE,
+  rotate.names = TRUE
+  )
 ```
 
 
