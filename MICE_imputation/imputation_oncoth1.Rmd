@@ -238,7 +238,10 @@ Filter(is.numeric, data_for_imputation) %>% # Get only numeric variables
 data_for_imputation %>% 
   select(-c(id)) %>% # Remove ID
   # Transform some factors into numeric
-  mutate(c_across(performance_status_category_corrected), ~ as.numeric(.x)) %>%
+  mutate(across(c(
+    performance_status_category_corrected, 
+    khorana_risk_score, 
+    n_metastases), ~ as.numeric(.x))) %>%
   # Filter(is.factor, .) %>% # Get only factors
   model.matrix(~0+., data = .) %>% # One-hot encoding (no intercept)
   cor(use="pairwise.complete.obs") %>% 
