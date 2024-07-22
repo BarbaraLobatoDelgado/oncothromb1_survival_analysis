@@ -29,6 +29,7 @@ pacman::p_load(
   naniar,
   mice,
   mctest,
+  plotly,
   install = FALSE, update = FALSE
   )
 ```
@@ -240,6 +241,7 @@ data_for_imputation %>%
     id, 
     # patient_group, 
     bmi_category,
+    oral_contraceptive_tx, 
     low_hemoglobin,
     leukocytosis, 
     thrombocytosis,
@@ -260,13 +262,21 @@ data_for_imputation %>%
   # Filter(is.factor, .) %>% # Get only factors
   model.matrix(~0+., data = .) %>% # One-hot encoding (no intercept)
   cor(use = "pairwise.complete.obs") %>% 
-  ggcorrplot::ggcorrplot(
-    show.diag = FALSE, 
-    type = "lower", 
-    lab = TRUE, 
-    lab_size = 2, 
-    tl.cex = 10
-    )
+  as.data.frame() %>% # Convert matrix to data frame
+  # Create a lower triangular matrix
+  {lower_tri <- function(m) { 
+    m[lower.tri(m, diag = FALSE)] <- NA
+    m
+  }}() %>%
+  # Create an interactive heatmap with Plotly
+  plot_ly(
+    x = colnames(.),
+    y = rownames(.),
+    z = as.matrix(.),
+    type = "heatmap",
+    colors = colorRamp(c("blue", "white", "red")), # Adjust color scale as needed
+    colorbar = list(title = "Correlation")
+  )
 ```
 
 
