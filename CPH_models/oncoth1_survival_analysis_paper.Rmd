@@ -135,22 +135,30 @@ survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, le
 
 ```{r}
 # Load DB
-oncoth1 = get_project("oncothr1", version = "0.0.8001")
-```
-
-```{r}
-table(oncoth1$data$patient_group)
+oncoth1 = get_project("oncothr1", version = "0.0.8003") # 0.0.8001
 ```
 
 
 ```{r}
-table(oncoth1$data$patient_group, oncoth1$data$vte_recurrence)
+# Get data slot
+oncoth1_data = oncoth1$data
 ```
 
 
 ```{r}
+table(oncoth1_data$patient_group)
+```
+
+
+```{r}
+table(oncoth1_data$patient_group, oncoth1_data$vte_recurrence)
+```
+
+
+```{r}
+UPDATE an9leproject!!!
 # Correct information for patient id = 118
-oncoth1$data %<>%
+oncoth1_data %<>%
   mutate(vte_recurrence = case_when(
     id == 118 ~ "No VTE", 
     TRUE ~ vte_recurrence
@@ -160,7 +168,7 @@ oncoth1$data %<>%
 
 ```{r}
 # Number of comorbidities
-comorbidities_cols_index = which(colnames(oncoth1$data) %in% c(
+comorbidities_cols_index = which(colnames(oncoth1_data) %in% c(
   "diabetes_mellitus", 
   "dyslipidemia", 
   # "tobacco_use_imp", # it is not considered an illness
@@ -170,9 +178,9 @@ comorbidities_cols_index = which(colnames(oncoth1$data) %in% c(
   "renal_insufficiency", 
   "venous_insufficiency"))
 
-oncoth1$data$n_comorbidities <- rowSums(oncoth1$data[, comorbidities_cols_index] == "Yes")
+oncoth1_data$n_comorbidities <- rowSums(oncoth1_data[, comorbidities_cols_index] == "Yes")
 
-oncoth1$data %<>%
+oncoth1_data %<>%
   mutate(n_comorbidities = case_when(
     n_comorbidities == 0 ~ "0",
     n_comorbidities == 1 ~ "1",
@@ -183,7 +191,7 @@ oncoth1$data %<>%
     n_comorbidities == 6 ~ "2+"), .after = venous_insufficiency) %>%
   mutate(n_comorbidities = as.factor(n_comorbidities)) 
 
-oncoth1$data %<>%
+oncoth1_data %<>%
   mutate(tobacco_use_imp_grouped = case_when(
     tobacco_use_imp == "Never has smoked" ~ "Never", 
     tobacco_use_imp == "Former smoker" ~ "Former/current",
@@ -191,7 +199,7 @@ oncoth1$data %<>%
     .after = tobacco_use_imp)
 
 # Create quartiles for age 
-oncoth1$data %<>%
+oncoth1_data %<>%
   mutate(age_quartiles = case_when(
     age_when_cancer_dx <= 60 ~ "33-60", 
     age_when_cancer_dx > 60 & age_when_cancer_dx <= 69 ~ "61-69",
@@ -204,7 +212,7 @@ oncoth1$data %<>%
 ```{r}
 # Correct ties between death date and DVT date
 # THIS IS NOT NECESSARY IF TIES ARE BETWEEN EVENT AND TDC
-#oncoth1$data %<>%
+#oncoth1_data %<>%
 #  mutate(follow_up_length_from_cancer_diagnosis_days = case_when(
 #    id == 60 | 
 #      id == 246 | 
@@ -223,7 +231,7 @@ oncoth1$data %<>%
 ## Time-dependent data set
 
 ```{r}
-covariates_df = oncoth1$data %>%
+covariates_df = oncoth1_data %>%
   select(id, 
          patient_group,
          age_when_cancer_dx,
@@ -367,7 +375,7 @@ covariates_df = oncoth1$data %>%
 
 
 ```{r}
-survival_data = oncoth1$data %>%
+survival_data = oncoth1_data %>%
   select(id, 
          patient_group, 
          date_cancer_dx, 
@@ -450,7 +458,7 @@ survival_vte_tmerge = tmerge(
 
 ```{r}
 #survival_dataset = merge(
-#  oncoth1$data %>% 
+#  oncoth1_data %>% 
 #    select(id, follow_up_length_from_cancer_diagnosis_days, censored_patient),
 #  covariates_df, 
 #  by = "id"
@@ -596,20 +604,20 @@ stratified_stage_cph_tests_summary$robscore[["pvalue"]]
 
 # Count n patients in each subgroup
 n_stages_i_ii_iii_no_vte = sum(
-  oncoth1$data$tnm_stage_two_groups == "I-II-III" & 
-    oncoth1$data$patient_group == "Control")
+  oncoth1_data$tnm_stage_two_groups == "I-II-III" & 
+    oncoth1_data$patient_group == "Control")
 
 n_stages_i_ii_iii_vte = sum(
-  oncoth1$data$tnm_stage_two_groups == "I-II-III" & 
-    oncoth1$data$patient_group == "Case")
+  oncoth1_data$tnm_stage_two_groups == "I-II-III" & 
+    oncoth1_data$patient_group == "Case")
 
 n_stages_iv_no_vte = sum(
-  oncoth1$data$tnm_stage_two_groups == "IV" & 
-    oncoth1$data$patient_group == "Control")
+  oncoth1_data$tnm_stage_two_groups == "IV" & 
+    oncoth1_data$patient_group == "Control")
 
 n_stages_iv_vte = sum(
-  oncoth1$data$tnm_stage_two_groups == "IV" & 
-    oncoth1$data$patient_group == "Case")
+  oncoth1_data$tnm_stage_two_groups == "IV" & 
+    oncoth1_data$patient_group == "Case")
 
 legend_labels_and_n = c(
   paste0("Stages I-II-III w/o CAT (n=", n_stages_i_ii_iii_no_vte, ")"), 
@@ -803,36 +811,36 @@ stratified_primary_tumor_td_survival_km_plot
 
 # Count n patients in each subgroup
 n_colorectal_no_vte = sum(
-  oncoth1$data$primary_tumor_simplified == "Colorectal" & 
-    oncoth1$data$patient_group == "Control")
+  oncoth1_data$primary_tumor_simplified == "Colorectal" & 
+    oncoth1_data$patient_group == "Control")
 
 n_colorectal_vte = sum(
-  oncoth1$data$primary_tumor_simplified == "Colorectal" & 
-    oncoth1$data$patient_group == "Case")
+  oncoth1_data$primary_tumor_simplified == "Colorectal" & 
+    oncoth1_data$patient_group == "Case")
 
 n_nsclc_no_vte = sum(
-  oncoth1$data$primary_tumor_simplified == "NSCLC" & 
-    oncoth1$data$patient_group == "Control")
+  oncoth1_data$primary_tumor_simplified == "NSCLC" & 
+    oncoth1_data$patient_group == "Control")
 
 n_nsclc_vte = sum(
-  oncoth1$data$primary_tumor_simplified == "NSCLC" & 
-    oncoth1$data$patient_group == "Case")
+  oncoth1_data$primary_tumor_simplified == "NSCLC" & 
+    oncoth1_data$patient_group == "Case")
 
 n_oesophagogastric_no_vte = sum(
-  oncoth1$data$primary_tumor_simplified == "Oesophago-gastric" & 
-    oncoth1$data$patient_group == "Control")
+  oncoth1_data$primary_tumor_simplified == "Oesophago-gastric" & 
+    oncoth1_data$patient_group == "Control")
 
 n_oesophagogastric_vte = sum(
-  oncoth1$data$primary_tumor_simplified == "Oesophago-gastric" & 
-    oncoth1$data$patient_group == "Case")
+  oncoth1_data$primary_tumor_simplified == "Oesophago-gastric" & 
+    oncoth1_data$patient_group == "Case")
 
 n_pancreatic_no_vte = sum(
-  oncoth1$data$primary_tumor_simplified == "Pancreatic" & 
-    oncoth1$data$patient_group == "Control")
+  oncoth1_data$primary_tumor_simplified == "Pancreatic" & 
+    oncoth1_data$patient_group == "Control")
 
 n_pancreatic_vte = sum(
-  oncoth1$data$primary_tumor_simplified == "Pancreatic" & 
-    oncoth1$data$patient_group == "Case")
+  oncoth1_data$primary_tumor_simplified == "Pancreatic" & 
+    oncoth1_data$patient_group == "Case")
 
 
 legend_labels_and_n = c(
@@ -1811,146 +1819,6 @@ rms::vif(all_covariates_td_cph_reg)
 cox.zph(all_covariates_td_cph_reg)
 ```
 
-## Backward feature selection in CPH regression model
-
-```{r}
-# backward_fs_cph = riskRegression::selectCox(
-#   Surv(time = tstart, time2 = tstop, event = death) ~ 
-#     cluster(id) + 
-#     vte_event + 
-#     primary_tumor_simplified + 
-#     age_when_cancer_dx_65 + 
-#     #gender + # Multicollinear with menopausal status
-#     menopausal_status_imp +
-#     weight + 
-#     height + 
-#     body_surface_area + 
-#     bmi_value +
-#     bmi_category + 
-#     performance_status_category_corrected_imp + 
-#     #albumin_imp + 
-#     #albumin_imp_category + # High albumin is collinear with something
-#     #aptt_imp + 
-#     aptt_imp_category +
-#     #aptt_ratio_imp + 
-#     #bilirubin_imp + 
-#     #alkaline_phosphatase_imp + 
-#     #hemoglobin + 
-#     #inr_imp + # causes problems
-#     inr_imp_category +
-#     #leukocytes_imp + 
-#     #platelets + 
-#     leukocytosis_imp + 
-#     thrombocytosis + 
-#     low_hemoglobin + 
-#     #personal_background + 
-#     #major_surgery_in_medical_history + 
-#     #hormone_therapy + 
-#     #pregnancy + 
-#     #oral_contraceptive_tx + 
-#     diabetes_mellitus + 
-#     dyslipidemia + 
-#     tobacco_use_imp + 
-#     copd + 
-#     arterial_hypertension + 
-#     chronic_cardiac_insufficiency + 
-#     renal_insufficiency + 
-#     venous_insufficiency_imp +
-#     #khorana_risk_score_imp + 
-#     #two_groups_krs + 
-#     #tic_onco_imp + 
-#     previous_onco_surgery + 
-#     tumor_surgically_removed + 
-#     #progression_according_to_clinical_stage_imp + 
-#     #tnm_stage + 
-#     #tnm_stage_detailed + 
-#     tnm_stage_grouped + 
-#     #t_stage_grouped + 
-#     #n_stage_grouped + 
-#     #m_stage_grouped + 
-#     histology_type_imp + 
-#     mucinous_histology_imp + 
-#     grade_histological_differentiation_imp + 
-#     #n_metastases + 
-#     #metastasis_adrenal_glands + 
-#     #metastasis_bones +
-#     #metastasis_brain + 
-#     #metastasis_liver + 
-#     #metastasis_lung + 
-#     #metastasis_lymph_nodes + 
-#     #metastasis_peritoneum + 
-#     #metastasis_pleura + 
-#     #metastasis_skin + 
-#     ##metastasis_soft_tissues + 
-#     #other_metastases + 
-#     catheter_device_imp + 
-#     family_background_vte + 
-#     #family_background_vte_n + 
-#     #family_background_vte_all_relatives +
-#     #family_background_VTE_father + 
-#     #family_background_VTE_mother + 
-#     #family_background_VTE_siblings + 
-#     #family_background_VTE_offspring + 
-#     #family_background_VTE_other_relatives +
-#     previous_vte + 
-#     previous_ate + 
-#     #n_previous_ate +
-#     #previous_ate_type +
-#     #cva_ate + 
-#     #myocardial_infarction_ate + 
-#     #pad_ate + 
-#     #tia_ate + 
-#     #other_thromb_ate + 
-#     #anticoag_tx_vte + 
-#     #anticoag_tx_vte_drugs + 
-#     #anticoag_tx_cardiopathy + 
-#     #anticoag_tx_other_causes + 
-#     #anticoag_tx_reason + 
-#     #anticoag_tx_apixaban + 
-#     #anticoag_tx_dabigatran + 
-#     #anticoag_tx_lmwh + 
-#     #anticoag_tx_lmwh_dosage + 
-#     #anticoag_tx_vit_k_antag + 
-#     #anticoag_tx_other_drugs + 
-#     #anticoag_tx_currently + 
-#     #n_antiaggreg_tx +
-#     #antiaggreg_tx_reason + 
-#     #antiaggreg_tx_cardiopathy + 
-#     #antiaggreg_tx_cva + 
-#     #antiaggreg_tx_other_causes + 
-#     #antiaggreg_tx_currently
-#     blood_transfusion + # Correlated with low blood cells, low hemoglobin, etc.
-#     immobilisation + # Correlated with PS
-#     #recent_major_surgery + 
-#     thromboprophylaxis_hospital + 
-#     erythropoietin_tx, # Correlated with low red blood cells
-#   data = survival_vte_tmerge, 
-#   rule = "aic"
-# )
-# 
-# backward_fs_cph
-
-```
-
-```{r}
-# Replicate model obtained by backward feature selection to evaluate PH
-#cox.zph(coxph(
-#  Surv(time = tstart, time2 = tstop, event = death) ~
-#    cluster(id) + 
-#    vte_event + 
-#    primary_tumor_simplified + 
-#    performance_status_category_corrected_imp + 
-#    thrombocytosis + 
-#    tumor_surgically_removed + 
-#    tnm_stage_grouped + 
-#    grade_histological_differentiation_imp + 
-#    blood_transfusion + 
-#    immobilisation,
-#  id = id,
-#  data = survival_vte_tmerge), terms = FALSE)
-```
-
-
 ## Stepwise feature selection CPH
 
 ```{r}
@@ -1972,227 +1840,6 @@ survival_vte_tmerge_stepwise %<>%
 #   select(-starts_with("tu_"))
 
 ```
-
-
-### My.stepwise.coxph
-
-```{r}
-survival_vte_tmerge_dummies = fastDummies::dummy_cols(survival_vte_tmerge)
-```
-
-
-```{r}
-stepwise_var_list = list(
-  "vte_event", 
-  #"`age_when_cancer_dx_50_Younger than 50 years old`",
-  #"`age_when_cancer_dx_50_Older or 50 years old`",
-  "`age_when_cancer_dx_65_Younger than 65 years old`",
-  "`age_when_cancer_dx_65_Older or 65 years old`", 
-  #"gender_Male", 
-  #"gender_Female",                            
-  "menopausal_status_imp_Male", 
-  "`menopausal_status_imp_Pre-menopausal`",
-  "`menopausal_status_imp_Peri-menopausal`", 
-  "`menopausal_status_imp_Post-menopausal`",
-  #"weight", 
-  #"height", 
-  "body_surface_area", 
-  #"bmi_value",
-  "bmi_category_Underweight", 
-  "bmi_category_Normal", 
-  "bmi_category_Overweight", 
-  "bmi_category_Obese", 
-  "performance_status_category_corrected_imp_0",
-  "performance_status_category_corrected_imp_1", 
-  "performance_status_category_corrected_imp_2", 
-  "albumin_imp_category_Normal", 
-  "albumin_imp_category_Low", 
-  "albumin_imp_category_High",  
-  "aptt_imp_category_Normal", 
-  "aptt_imp_category_Low", 
-  "aptt_imp_category_High",
-  "aptt_ratio_imp_category_Normal", 
-  "aptt_ratio_imp_category_Low",
-  "aptt_ratio_imp_category_High", 
-  "bilirubin_imp_category_Normal",
-  "bilirubin_imp_category_Low", 
-  "bilirubin_imp_category_High", 
-  "creatinine_imp_category_Normal", 
-  "creatinine_imp_category_Low", 
-  "creatinine_imp_category_High",
-  "alkaline_phosphatase_imp_category_Normal", 
-  "alkaline_phosphatase_imp_category_Low", 
-  "alkaline_phosphatase_imp_category_High", 
-  "hemoglobin_category_Normal", 
-  "hemoglobin_category_Low",
-  "hemoglobin_category_High", 
-  "`inr_imp_category_Normal coagulation`", 
-  "`inr_imp_category_Fast coagulation`", 
-  "`inr_imp_category_Slow coagulation`",
-  "leukocytes_imp_category_Normal", 
-  "leukocytes_imp_category_Low",
-  "leukocytes_imp_category_High", 
-  #"platelets_category_Normal", 
-  #"platelets_category_Low", 
-  #"platelets_category_High", 
-  #"platelets_category_NA", 
-  "leukocytosis_imp_No",  
-  "leukocytosis_imp_Yes", 
-  "thrombocytosis_No",
-  "thrombocytosis_Yes", 
-  "low_hemoglobin_No", 
-  "low_hemoglobin_Yes", 
-  "personal_background_No",
-  "personal_background_Yes", 
-  "major_surgery_in_medical_history_No", 
-  "major_surgery_in_medical_history_Yes", 
-  #"hormone_therapy_imp_No", 
-  #"hormone_therapy_imp_Yes", 
-  #"pregnancy_imp_Male", 
-  #"pregnancy_imp_No", 
-  #"pregnancy_imp_Yes", 
-  #"oral_contraceptive_tx_Male", 
-  #"oral_contraceptive_tx_No", 
-  #"oral_contraceptive_tx_NA",
-  #"diabetes_mellitus_No", 
-  #"diabetes_mellitus_Yes", 
-  #"diabetes_mellitus_NA",
-  #"dyslipidemia_No", 
-  #"dyslipidemia_Yes",
-  #"dyslipidemia_NA",
-  "`tobacco_use_imp_Never has smoked`", 
-  "`tobacco_use_imp_Former smoker`", 
-  "`tobacco_use_imp_Active smoker`", 
-  #"copd_No", 
-  #"copd_Yes", 
-  #"copd_NA",
-  #"arterial_hypertension_No", 
-  #"arterial_hypertension_Yes", 
-  #"arterial_hypertension_NA",
-  #"chronic_cardiac_insufficiency_No", 
-  #"chronic_cardiac_insufficiency_Yes",
-  #"chronic_cardiac_insufficiency_NA",
-  #"renal_insufficiency_No", 
-  #"renal_insufficiency_Yes", 
-  #"renal_insufficiency_NA",
-  "venous_insufficiency_imp_No", 
-  "venous_insufficiency_imp_Yes",
-  #"khorana_risk_score_imp_0",
-  #"khorana_risk_score_imp_1",
-  #"khorana_risk_score_imp_2",
-  #"khorana_risk_score_imp_3", 
-  #"khorana_risk_score_imp_4", 
-  #"krs_category_Low risk", 
-  #"krs_category_Intermediate risk",
-  #"krs_category_High risk", 
-  #"two_groups_krs_Low risk",
-  #"two_groups_krs_High risk",
-  #"tic_onco_imp_Low risk",
-  #"tic_onco_imp_High risk", 
-  "previous_onco_surgery_No", 
-  "previous_onco_surgery_Yes", 
-  "tumor_surgically_removed_No", 
-  "tumor_surgically_removed_Yes", 
-  "primary_tumor_simplified_Colorectal", 
-  "primary_tumor_simplified_NSCLC", 
-  "`primary_tumor_simplified_Oesophago-gastric`",
-  "primary_tumor_simplified_Pancreatic",
-  #"progression_according_to_clinical_stage_imp_Surgically removed tumor/In complete remission",
-  #"progression_according_to_clinical_stage_imp_Locally advanced", 
-  #"progression_according_to_clinical_stage_imp_Metastatic", 
-  "`tnm_stage_grouped_I-II`", 
-  "tnm_stage_grouped_III", 
-  "tnm_stage_grouped_IV", 
-  "histology_type_imp_Other",
-  "histology_type_imp_Adenocarcinoma", 
-  "histology_type_imp_Epidermoid", 
-  "mucinous_histology_imp_No", 
-  "mucinous_histology_imp_Yes", 
-  "`grade_histological_differentiation_imp_Well differentiated`", 
-  "`grade_histological_differentiation_imp_Moderately differentiated`", 
-  "`grade_histological_differentiation_imp_Poorly differentiated`", 
-  #"n_metastases_0", 
-  #"n_metastases_1",
-  #"n_metastases_2", 
-  #"n_metastases_3",
-  #"n_metastases_4",  
-  #"n_metastases_5", 
-  #"metastasis_adrenal_glands_No",
-  #"metastasis_adrenal_glands_Yes", 
-  #"metastasis_bones_No",
-  #"metastasis_bones_Yes",
-  #"metastasis_brain_No", 
-  #"metastasis_brain_Yes", 
-  #"metastasis_liver_No", 
-  #"metastasis_liver_Yes", 
-  #"metastasis_lung_No",
-  #"metastasis_lung_Yes",
-  #"metastasis_lymph_nodes_No", 
-  #"metastasis_lymph_nodes_Yes", 
-  #"metastasis_peritoneum_No", 
-  #"metastasis_peritoneum_Yes",  
-  #"metastasis_pleura_No", 
-  #"metastasis_pleura_Yes", 
-  #"metastasis_skin_No",
-  #"metastasis_skin_Yes", 
-  #"metastasis_soft_tissues_No",
-  #"metastasis_soft_tissues_Yes", 
-  #"other_metastases_No", 
-  #"other_metastases_Yes", 
-  "catheter_device_imp_No",
-  "catheter_device_imp_Yes", 
-  "family_background_vte_No",
-  "family_background_vte_Yes", 
-  "previous_vte_No", 
-  "previous_vte_Yes", 
-  "previous_ate_No", 
-  "previous_ate_Yes", 
-  #anticoag_tx_vte , 
-  #anticoag_tx_vte_drugs , 
-  #anticoag_tx_cardiopathy , 
-  #anticoag_tx_other_causes , 
-  #anticoag_tx_reason , 
-  #anticoag_tx_apixaban , 
-  #anticoag_tx_dabigatran , 
-  #anticoag_tx_lmwh , 
-  #anticoag_tx_lmwh_dosage , 
-  #anticoag_tx_vit_k_antag , 
-  #anticoag_tx_other_drugs , 
-  #anticoag_tx_currently , 
-  #n_antiaggreg_tx ,
-  #antiaggreg_tx_reason , 
-  #antiaggreg_tx_cardiopathy , 
-  #antiaggreg_tx_cva , 
-  #antiaggreg_tx_other_causes , 
-  #antiaggreg_tx_currently
-  "blood_transfusion", # Correlated with low blood cells, low hemoglobin, etc.
-  "immobilisation", # Correlated with PS
-  #recent_major_surgery , 
-  "thromboprophylaxis_hospital", 
-  "erythropoietin_tx"
-  )
-```
-
-
-```{r}
-# Need to convert categorical variables to dummies
-# My.stepwise::My.stepwise.coxph(
-#   T1 = "tstart", 
-#   T2 = "tstop",
-#   Status = "death", 
-#   variable.list = stepwise_var_list,
-#   data = survival_vte_tmerge_dummies
-# )
-```
-
-
-```{r}
-# stepwise_cph_model
-```
-
-
-
-### StepReg packages
 
 Using `stepReg` package.  
 
@@ -2335,7 +1982,7 @@ AIC(final_cph_model)
 ```
 
 
-#### Training/test set partition and CV
+### Training/test set partition and CV
 
 See if there is consistency in variable selection and predictive capability of CV partitions, as well as with test set.
 
@@ -2347,7 +1994,7 @@ set.seed(2828)
 
 ```{r}
 # Target distribution when event of interest is death
-table(oncoth1$data$patient_status_at_end_study_simplified, useNA = "always")
+table(oncoth1_data$patient_status_at_end_study_simplified, useNA = "always")
 ```
 
 
@@ -2579,7 +2226,7 @@ mean(unlist(stepwise_cv_cindex_results))
 
 ```{r}
 # Do correlation between CVC and tumor surgically removed with primary tumor
-oncoth1_corr_vars = oncoth1$data %>% 
+oncoth1_corr_vars = oncoth1_data %>% 
   select(id, primary_tumor_simplified, catheter_device, tumor_surgically_removed)
 
 # Calculate Cramér's V
@@ -2657,59 +2304,6 @@ vif_results
 ```
 
 
-From model 
-
-stepwise_cv_cph_final_model = coxph(
-  Surv(time = tstart, 
-       time2 = tstop, 
-       event = death) ~ 
-    cluster(id) + 
-    vte_event:vte_recurrence +
-    khorana_risk_score_imp +
-    performance_status_category_corrected_imp +
-    tnm_stage_two_groups +
-    tumor_surgically_removed +
-    mucinous_histology_imp +
-    primary_tumor_simplified,
-  id = id,
-  data = stepwise_training_set
-  )
-  
-we see that KRS and primary tumor are collinear
-
-GVIF Df GVIF^(1/(2*Df))
-khorana_risk_score_imp                    5.309121  4        1.232049
-performance_status_category_corrected_imp 1.305730  2        1.068965
-tnm_stage_two_groups                      1.140239  1        1.067820
-tumor_surgically_removed                  1.468709  1        1.211903
-mucinous_histology_imp                    1.063991  1        1.031500
-primary_tumor_simplified                  5.619393  3        1.333362
-vte_event:vte_recurrence                  1.271319  3        1.040820
-
-
-
-
-
-Results of this model are reasonable:
-
-stepwise_cv_cph_final_model = coxph(
-  Surv(time = tstart, 
-       time2 = tstop, 
-       event = death) ~ 
-    cluster(id) + 
-    vte_event + # :vte_recurrence + # 
-    performance_status_category_corrected_imp +
-    primary_tumor_simplified +
-    tnm_stage_two_groups +
-    tumor_surgically_removed +
-    mucinous_histology_imp + 
-    venous_insufficiency_imp,
-  id = id,
-  data = stepwise_training_set
-  )
-  
-  
-
 ```{r}
 # C-index in testing set
 concordance(stepwise_cv_cph_final_model, newdata = stepwise_testing_set)
@@ -2764,412 +2358,6 @@ yy <- yhat$fit + outer(yhat$se.fit, c(0, -1.96, 1.96), '*')
 yy
 ```
 
-
-## Lasso CPH models
-
-### glmnet package
-
-https://glmnet.stanford.edu/articles/Coxnet.html
-
-
-```{r}
-# Covariates vector
-cv_cph_covariates = c(
-  "vte_event",  
-  "age_when_cancer_dx", 
-  # "menopausal_status_imp",
-  "gender", 
-  # "ethnicity_grouped", 
-  # "weight",
-  # "height",
-  # "body_surface_area",
-  # "bmi_value",
-  "bmi_category",
-  # "performance_status_category_corrected_imp", 
-  # "hemoglobin",
-  #aptt_imp, 
-  # "aptt_ratio_imp",
-  # "bilirubin_imp", 
-  # "alkaline_phosphatase_imp", 
-  # "inr_imp", # causes problems
-  # "leukocytes_imp",  
-  # "platelets", 
-  #leukocytosis_imp + 
-  #thrombocytosis + 
-  # "low_hemoglobin", 
-  # "major_surgery_in_medical_history", 
-  # "oral_contraceptive_tx", 
-  "diabetes_mellitus", 
-  "dyslipidemia", 
-  "tobacco_use_imp_grouped" , 
-  "copd", 
-  "arterial_hypertension", 
-  "chronic_cardiac_insufficiency", 
-  "renal_insufficiency",
-  "venous_insufficiency_imp", 
-  "n_comorbidities",
-  #khorana_risk_score_imp + 
-  #two_groups_krs + 
-  #tic_onco_imp + 
-  "previous_onco_surgery", 
-  "tumor_surgically_removed", 
-  "primary_tumor_simplified",
-  # "progression_according_to_clinical_stage_imp", 
-  "tnm_stage_grouped", 
-  # "t_stage_grouped", 
-  # "n_stage_grouped", 
-  # "m_stage_grouped", 
-  "histology_type_imp",
-  "mucinous_histology_imp", 
-  # "grade_histological_differentiation_imp", # does not hold PH assumption
-  # "n_metastases",
-  # "n_metastases_grouped",
-  # "metastasis_adrenal_glands",
-  # "metastasis_bones",
-  # "metastasis_brain",
-  # "metastasis_liver",
-  # "metastasis_lung",
-  # "metastasis_lymph_nodes",
-  # "metastasis_peritoneum",
-  # "metastasis_pleura",
-  # "metastasis_skin",
-  # "metastasis_soft_tissues",
-  # "other_metastases",
-  "catheter_device_imp", 
-  "family_background_vte", 
-  # "family_background_vte_n", 
-  #family_background_vte_all_relatives +
-  #family_background_VTE_father + 
-  #family_background_VTE_mother + 
-  #family_background_VTE_siblings + 
-  #family_background_VTE_offspring + 
-  #family_background_VTE_other_relatives +
-  "previous_vte",
-  # "previous_ate",
-  #n_previous_ate +
-  #previous_ate_type +
-    #anticoag_tx_vte + 
-    #anticoag_tx_vte_drugs + 
-    #anticoag_tx_cardiopathy + 
-    #anticoag_tx_other_causes + 
-    #anticoag_tx_reason + 
-  "anticoag_tx_currently",  
-  "antiaggreg_tx_currently", #,
-  # "blood_transfusion",
-  # "immobilisation", # Correlated with the poor health of a patient -- somewhat redundant
-  # "recent_major_surgery", 
-  # "thromboprophylaxis_hospital", 
-  "erythropoietin_tx"
-  )
-```
-
-
-```{r}
-# A matrix with dummies has to be created in order to do lasso Cox regression
-# Missing values cause erros
-
-# Select relevant features and ID
-x_pcox = survival_vte_tmerge_stepwise[, c("id", cv_cph_covariates)]
-
-# Transform categorical variables into numeric
-x_matrix = model.matrix(
-  object =  ~ . -1, 
-  data = x_pcox
-  )
-```
-
-
-```{r}
-# y (Surv object)
-yss <- Surv(
-  time = survival_vte_tmerge_stepwise$tstart, 
-  time2 = survival_vte_tmerge_stepwise$tstop, 
-  event = survival_vte_tmerge_stepwise$death
-  )
-```
-
-
-
-```{r}
-set.seed(2828)
-
-# glmnet 
-cv.fit <- cv.glmnet(
-  x = x_matrix, 
-  y = yss, 
-  family = "cox", 
-  nfolds = 5, 
-  alpha = 1
-  )
-
-plot(cv.fit)
-```
-
-```{r}
-cv.fit$lambda.min
-```
-
-
-```{r}
-# Sanity check
-# Check that fitting start-stop responses using glmnet with lambda = 0 matches up with coxph's result
-glmnet_fit <- glmnet(x_matrix, yss, family = "cox", lambda = 0)
-coxph_fit <- coxph(yss ~ x_matrix)
-plot(coef(glmnet_fit), coef(coxph_fit))
-abline(0, 1)
-```
-
-
-
-
-```{r}
-glmnet_fit = glmnet(
-  x = x_matrix, 
-  y = yss, 
-  family = "cox", 
-  alpha = 1,
-  lambda = cv.fit$lambda.min
-  )
-```
-
-
-
-```{r}
-# Get regression coefficients
-# Same as coef(glmnet_fit)
-hrs_cox_glmnet = data.frame(
-  "Variables" = rownames(glmnet_fit$beta), 
-  "Coefficients" = as.numeric(glmnet_fit$beta[, 1])) %>% 
-  filter(Coefficients != 0) %>% 
-  mutate(HRs = exp(Coefficients)) %>%
-  arrange(desc(HRs))
-
-hrs_cox_glmnet
-```
-
-```{r}
-print(hrs_cox_glmnet$Variables)
-```
-
-
-
-```{r}
-# Train CPH model with selected variables
-glmnet_l1_selected_features_cph = coxph(
-  Surv(time = tstart, time2 = tstop, event = death) ~
-    cluster(id) +
-    tnm_stage_grouped +  
-    vte_event +   
-    primary_tumor_simplified +  
-    n_comorbidities + 
-    histology_type_imp +
-    mucinous_histology_imp + 
-    family_background_vte +
-    previous_onco_surgery +
-    catheter_device_imp +
-    tumor_surgically_removed,
-    id = id,
-  data = survival_vte_tmerge_stepwise)
-
-
-glmnet_l1_selected_features_cph %>%
-  gtsummary::tbl_regression(exp = TRUE)
-```
-
-
-Why mucinous CRC is risk factor?
-https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6440160/
-
-
-```{r}
-cox.zph(glmnet_l1_selected_features_cph)
-```
-
-
-```{r}
-# summary(glmnet_l1_selected_features_cph)
-```
-
-
-
-### pcoxtime package
-
-Guide: https://cran.r-project.org/web/packages/pcoxtime/pcoxtime.pdf
-
-
-```{r}
-# CV for pcoxtime
-
-# Build formula with all covariates
-# pcox_formula = as.formula(
-#     sprintf('%s~%s', 'Surv(time = tstart, time2 = tstop, event = death)',
-#             paste(cv_cph_covariates, collapse = "+ ")))
-
-# Find optimal lambda value
-# cv_cph_mortality <- pcoxtimecv(
-#   formula = pcox_formula,
-#   data = survival_vte_tmerge_stepwise,
-#   alphas = 1, # 1 for Lasso (L1) penalty, 0 for Ridge (L2) penalty
-#   lamfract = 1, # If 1, complete regularisation path is considered
-#   nfolds = 3,
-#   refit = TRUE,
-#   quietly = TRUE,
-#   seed = 2828,
-#   nclusters = 8
-# )
-```
-
-
-```{r}
-# str(cv_cph_mortality)
-```
-
-
-
-```{r}
-# print(cv_cph_mortality)
-```
-
-
-
-```{r}
-# summary(cv_cph_mortality)
-```
-
-
-
-```{r}
-# coef(cv_cph_mortality)
-```
-
-
-```{r}
-# Plot solution path depending on lambda value
-# plot(cv_cph_mortality, type = "fit", xvar = "lambda", show_min_cve = TRUE)
-```
-
-
-```{r}
-# Mean cross-validation error for various lambda-alpha combination
-# extractoptimal(cv_cph_mortality, what = "cvm")
-```
-
-The chosen lambda is the one that results in the smaller mean CV error.
-
-
-```{r}
-# l1_penalised_cox = pcoxtime(
-#   formula = pcox_formula,
-#   alpha = 1,
-#   lambda = cv_cph_mortality$lambda.min, # 0.01603357
-#   data = survival_vte_tmerge_stepwise
-# )
-```
-
-
-
-```{r}
-# summary(l1_penalised_cox)
-```
-
-
-```{r}
-# str(l1_penalised_cox)
-```
-
-
-```{r}
-# print(l1_penalised_cox)
-```
-
-
-Si sus niveles de INR están demasiado bajos puede significar que está en riesgo de tener coágulos sanguíneos peligrosos
-Si sus niveles de INR están demasiado altos, puede significar que está en riesgo de tener un sangrado peligroso
-
-INR measures extrinsic coagulation pathway, while aPTT ratio measures the intrinsic coagulation pathway
-
-
-```{r}
-# Get HRs of Lasso Cox regression
-# sort(exp(coef(l1_penalised_cox)[coef(l1_penalised_cox) != 0]), decreasing = TRUE)
-```
-
-
-```{r}
-# pcoxsurvfit(l1_penalised_cox)
-```
-
-
-```{r}
-# concordScore(l1_penalised_cox, stats = TRUE)
-```
-
-
-```{r}
-# coef = coef(l1_penalised_cox, s = "lambda.min")
-# pvalues = 2 * pnorm(-abs(coef/ l1_penalised_cox$se))
-```
-
-
-
-```{r}
-# plot(varimp(l1_penalised_cox))
-```
-
-
-```{r}
-# Train CPH model with selected variables
-# l1_selected_features_cph = coxph(
-#   Surv(time = tstart, time2 = tstop, event = death) ~
-#     cluster(id) +
-#     performance_status_category_corrected_imp + 
-#     tnm_stage_grouped + 
-#     vte_event + 
-#     primary_tumor_simplified + 
-#     grade_histological_differentiation_imp + 
-#     mucinous_histology_imp + 
-#     venous_insufficiency_imp + 
-#     n_comorbidities + 
-#     diabetes_mellitus + 
-#     hemoglobin + 
-#     family_background_vte + 
-#     histology_type_imp + 
-#     catheter_device_imp + 
-#     previous_onco_surgery + 
-#     tumor_surgically_removed,
-#     id = id,
-#   data = survival_vte_tmerge_stepwise)
-
-# summary(l1_selected_features_cph)
-
-# l1_selected_features_cph %>%
-#   gtsummary::tbl_regression(exp = TRUE)
-```
-
-
-```{r}
-# cox.zph(l1_selected_features_cph)
-```
-
-
-## RandomForest (randomForestSRC package)
-
-It returns an error and I don't know why.
-
-```{r}
-# Build formula with all covariates
-# rf_survival_formula = as.formula(
-#     sprintf('%s~%s', 'Surv(time = tstart, time2 = tstop, event = death)',
-#             paste(cv_cph_covariates, collapse = "+ ")))
-```
-
-
-```{r}
-# rf_survival = randomForestSRC::rfsrc(
-#   formula = rf_survival_formula, 
-#   data = survival_vte_tmerge 
-# )
-```
 
 
 ## Adjusted survival curves to account for confounder covariates
@@ -3437,7 +2625,7 @@ oncoth1 = get_project("oncothr1", version = "0.0.8003")
 
 
 ```{r}
-covariates_df = oncoth1$data %>%
+covariates_df = oncoth1_data %>%
   select(id, 
          patient_group,
          age_when_cancer_dx,
@@ -3469,7 +2657,7 @@ covariates_df = oncoth1$data %>%
 
 ```{r}
 # Get events and time until events for VTE according to locations
-all_vte_types_survival_data = oncoth1$data %>%
+all_vte_types_survival_data = oncoth1_data %>%
   select(id, 
          patient_group, 
          date_cancer_dx, 
@@ -3548,7 +2736,7 @@ all_types_vte_tmerge = tmerge(
 # Also patients with no VTE 
 
 # Temporal df
-tmp_id_types_vte = oncoth1$data %>%
+tmp_id_types_vte = oncoth1_data %>%
   select(id, 
          any_crt,
          any_dvt, 
@@ -5155,7 +4343,7 @@ Best to do Fisher test to find correlation between cancer type and type of VTE; 
 
 ```{r}
 # %<>%
-id_no_vte_only_one_type_vte = oncoth1$data %>%
+id_no_vte_only_one_type_vte = oncoth1_data %>%
   filter(n_all_vte == 0 | n_all_vte == 1) %>%
   select(id) %>%
   unlist()
@@ -5163,7 +4351,7 @@ id_no_vte_only_one_type_vte = oncoth1$data %>%
 
 
 ```{r}
-covariates_df_inc_sympt = oncoth1$data %>%
+covariates_df_inc_sympt = oncoth1_data %>%
   filter(id %in% id_no_vte_only_one_type_vte) %>%
   select(id, 
          age_when_cancer_dx_65, 
@@ -5401,8 +4589,8 @@ no_vte_vs_vte_vs_recurrence_km_plot =
     )
 
 # Count number of patients of each category
-n_vte_no_recurrence = sum(oncoth1$data$vte_recurrence == "No VTE recurrence")
-n_vte_recurrence = sum(oncoth1$data$vte_recurrence == "VTE recurrence")
+n_vte_no_recurrence = sum(oncoth1_data$vte_recurrence == "No VTE recurrence")
+n_vte_recurrence = sum(oncoth1_data$vte_recurrence == "VTE recurrence")
 
 
 # Customize risk table title 
@@ -5555,7 +4743,7 @@ cox.zph(cph_recurrence_age, terms = FALSE)
 
 
 ```{r}
-table(oncoth1$data$vte_recurrence, oncoth1$data$age_when_cancer_dx_65, useNA = "always")
+table(oncoth1_data$vte_recurrence, oncoth1_data$age_when_cancer_dx_65, useNA = "always")
 ```
 
 
@@ -5585,7 +4773,7 @@ cox.zph(cph_recurrence_gender, terms = FALSE)
 
 
 ```{r}
-table(oncoth1$data$vte_recurrence, oncoth1$data$gender, useNA = "always")
+table(oncoth1_data$vte_recurrence, oncoth1_data$gender, useNA = "always")
 ```
 
 
@@ -5617,7 +4805,7 @@ NSCLC presents no CAT recurrence. Only the results from pancreatic cancer seem t
 
 
 ```{r}
-table(oncoth1$data$primary_tumor_simplified, oncoth1$data$vte_recurrence, useNA = "always")
+table(oncoth1_data$primary_tumor_simplified, oncoth1_data$vte_recurrence, useNA = "always")
 ```
   
 
