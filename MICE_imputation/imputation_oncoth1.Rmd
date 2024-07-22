@@ -242,6 +242,7 @@ data_for_imputation %>%
     # patient_group, 
     bmi_category,
     oral_contraceptive_tx, 
+    pregnancy,
     low_hemoglobin,
     leukocytosis, 
     thrombocytosis,
