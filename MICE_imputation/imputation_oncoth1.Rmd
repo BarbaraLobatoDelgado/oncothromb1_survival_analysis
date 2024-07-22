@@ -300,9 +300,12 @@ https://datascienceplus.com/handling-missing-data-with-mice-package-a-simple-app
 
 
 ```{r}
-# Detects oral_contraceptive_tx as collinear and eliminates it from imputation
+# Initialise MICE imputation creating a mids object
 init = mice(data_for_imputation, maxit = 0, seed = 2828) 
+# Imputation method for each variable
+# Detects oral_contraceptive_tx as collinear and eliminates it from imputation
 meth = init$method
+# Predictor matrix
 predM = init$predictorMatrix
 ```
 
@@ -395,57 +398,62 @@ visit
 post <- init$post
 
 # Gender-specific variables
+# If gender is "Male", use value "Male"
 post["menopausal_status"] <- "imp[[j]][data$gender[!r[, j]] == 'Male', i] <- 'Male'"
 post["pregnancy"] <- "imp[[j]][data$gender[!r[, j]] == 'Male', i] <- 'Male'"
 post["oral_contraceptive_tx"] <- "imp[[j]][data$gender[!r[, j]] == 'Male', i] <- 'Male'"
 
 # Leukocytes' levels
+# Patients with leukocytosis will have 11,000x10^9/L
 post["leukocytes"] <- "imp[[j]][data$leukocytosis[!r[, j]] == 'Yes', i] <- 11000"
+# Patients with more than 11,000x10^9/L will have leukocytosis
 post["leukocytosis"] <- "imp[[j]][data$leukocytes[!r[, j]] > 11000, i] <- 'Yes'"
 ```
 
 
 ```{r}
-# Imputation process
+# Run imputation process
 imputed = mice(
   data = data_for_imputation, 
   method = meth, 
   predictorMatrix = predM, 
   visitSequence = visit,
-  post = post,
+  post = post, # Apply post-processing changes
   m = 10, # 10 rounds of multiple imputation
   seed = 2828
   )
 ```
 
+## Inspect data resulting from imputation
 
 ```{r}
-# plot(imputed, c(
-#   "menopausal_status", 
-#   "performance_status_category_corrected",  
-#   "albumin",  
-#   "aptt",  
-#   "aptt_ratio",  
-#   "bilirubin",  
-#   "creatinine",  
-#   "alkaline_phosphatase",  
-#   "inr", 
-#   "leukocytes",  
-#   "leukocytosis",  
-#   "pregnancy",  
-#   "oral_contraceptive_tx",
-#   "tobacco_use",  
-#   "venous_insufficiency",  
-#   "progression_according_to_clinical_stage",  
-#   "t_stage",  
-#   "n_stage",  
-#   "histology_type",  
-#   "mucinous_histology",  
-#   "grade_histological_differentiation",  
-#   "catheter_device",  
-#   "khorana_risk_score",  
-#   "tic_onco"
-#   ))
+# Plots for inspecting imputation process through iterations
+plot(imputed, c(
+  "menopausal_status",
+  "performance_status_category_corrected",
+  "albumin",
+  "aptt",
+  "aptt_ratio",
+  "bilirubin",
+  "creatinine",
+  "alkaline_phosphatase",
+  "inr",
+  "leukocytes",
+  "leukocytosis",
+  "pregnancy",
+  # "oral_contraceptive_tx", # not found because no imputation is done on this variable
+  "tobacco_use",
+  "venous_insufficiency",
+  "progression_according_to_clinical_stage",
+  "t_stage",
+  "n_stage",
+  "histology_type",
+  "mucinous_histology",
+  "grade_histological_differentiation",
+  "catheter_device",
+  "khorana_risk_score",
+  "tic_onco"
+  ))
 ```
 
 
@@ -465,13 +473,11 @@ For whatever reason, there is one row where `oral_contraceptive_tx` still has on
 
 
 ```{r}
+# Plot density of numerical variable distributions -- both observed and imputed data
 densityplot(imputed)
 ```
 
-
-```{r}
-stripplot(imputed, pch = 20, cex = 1.2)
-```
+Curves resulting from the iterations of imputation process are overall quite similar to the observed data (although there is some variability). This is a good sign. 
 
 
 ## Review all imputation results
