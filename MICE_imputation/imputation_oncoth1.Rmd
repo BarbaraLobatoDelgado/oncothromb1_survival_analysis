@@ -82,8 +82,6 @@ oncoth1_data %>%
   select(!contains("_study")) %>%
   # Exclude genetic variables
   select(!starts_with("rs")) %>%
-  # Exclude variables related to TiC-Onco score
-  select(!"tic_onco") %>%
   # Exclude variables related to ONCOTHROMB score
   select(!c(starts_with("ONCOTHROMB"), "GRS")) %>%
   # Exclude variables with no missing values
@@ -130,12 +128,13 @@ md.pattern(
 ```
 
 
-# Subset for imputation
+# Variable subset for imputation
 
-Virtually every dataset contains some parts that could better be removed before imputation. This includes, but is not limited to, uninteresting variables with a high proportion of missing data, variables without a code for the missing data, administrative variables, constant variables, duplicated, recoded or standardized variables, and aggregates and indices of other information.
+Virtually, every dataset contains some parts that could better be removed before imputation. This includes, but is not limited to, uninteresting variables with a high proportion of missing data, variables without a code for the missing data, administrative variables, constant variables, duplicated, recoded or standardized variables, and aggregates and indices of other information.
 
 
 ```{r}
+# Select variables for imputation
 data_for_imputation = oncoth1_data %>%
   select(id, 
          patient_group,
@@ -162,8 +161,8 @@ data_for_imputation = oncoth1_data %>%
          leukocytes, 
          platelets,
          leukocytosis, 
-         thrombocytosis, # quitar
-         low_hemoglobin, # quitar
+         thrombocytosis, 
+         low_hemoglobin, 
          tobacco_use,
          copd,
          venous_insufficiency,
@@ -185,45 +184,76 @@ data_for_imputation = oncoth1_data %>%
 
 
 ```{r}
+# Change data
 data_for_imputation %<>%
+  # Get first word of patient status
+  # We only want to know if they are alive, dead or unkown
   mutate(patient_status_at_end_study = word(patient_status_at_end_study, 1)) %>%
+  # Convert to factor
   mutate(patient_status_at_end_study = as.factor(patient_status_at_end_study))
 ```
 
 
 ```{r}
-# Collinear data 
+# Look for collinear data 
+# Compute correlation of numeric variables
 numeric_collinearity = cor(
   Filter(is.numeric, data_for_imputation), 
   use = "pairwise.complete.obs"
   )
+
+# Show heatmap and dendrogram
+heatmap(numeric_collinearity)
 ```
+
+```{r}
+# Diagonal correlation plot for numeric variables
+Filter(is.numeric, data_for_imputation) %>% # Get only numeric variables
+  cor(use = "pairwise.complete.obs") %>% # Calculate correlation
+  ggcorrplot::ggcorrplot(
+    show.diag = FALSE, 
+    type = "lower", 
+    lab = TRUE, 
+    lab_size = 2, 
+    tl.cex = 10
+    )
+```
+
 
 
 ```{r}
 # Inspect multicollineatiry between variables
-#mixed_assoc_results_imp = mixed_assoc(df = whole_imputed_data[, -c(1)]) 
+# mixed_assoc_results_imp = mixed_assoc(df = whole_imputed_data[, -c(1)]) 
 ```
 
 
 ```{r}
 # Cramers V test
-#mixed_assoc_results = mixed_assoc(df = data_for_imputation[, -c(1)])
+# mixed_assoc_results = mixed_assoc(df = data_for_imputation[, -c(1)])
 ```
 
 
 ```{r}
-# One-hot encoding of categorical variables
-#correlation_all_vars = model.matrix(~0+., data=data_for_imputation[, -c(1:3)]) %>% 
-#  cor(use="pairwise.complete.obs")
+# Correlation plot between numeric and categorical variables
+data_for_imputation %>% 
+  select(-c(id)) %>% # Remove ID
+  # Transform some factors into numeric
+  mutate(c_across(performance_status_category_corrected), ~ as.numeric(.x)) %>%
+  # Filter(is.factor, .) %>% # Get only factors
+  model.matrix(~0+., data = .) %>% # One-hot encoding (no intercept)
+  cor(use="pairwise.complete.obs") %>% 
+  ggcorrplot::ggcorrplot(show.diag = F, type="lower", lab=TRUE, lab_size=2, tl.cex = 10)
 ```
+
+
+
 
 
 ```{r}
 # One-hot encoding of categorical variables and corrplot
-#model.matrix(~0+., data=data_for_imputation) %>% # one-hot encoding
-  #cor(use="pairwise.complete.obs") %>% 
-  #ggcorrplot(show.diag = F, type="lower", lab=TRUE, lab_size=2, tl.cex = 6)
+model.matrix(~0+., data=Filter(is.numeric, data_for_imputation))  %>% # one-hot encoding
+  cor(use="pairwise.complete.obs") %>% 
+  ggcorrplot::ggcorrplot(show.diag = F, type="lower", lab=TRUE, lab_size=2, tl.cex = 10)
 ```
 
 
