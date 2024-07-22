@@ -1,5 +1,5 @@
 ---
-title: 'Imputation of missing values in ONCOTHROMB12-01'
+title: 'Imputation of missing values in clinical variables from ONCOTHROMB12-01'
 author: "Bárbara Lobato Delgado"
 output:
   html_document:
@@ -7,7 +7,7 @@ output:
   pdf_document: default
 ---
 
-The imputation of missing values in clinical variables will be done using the MICE method. 
+The imputation of missing values in clinical variables will be done using the MICE (Multiple Imputation by Chained Equations) method. 
 
 The R package used to implement it is called 'mice'.
 
@@ -221,19 +221,6 @@ Filter(is.numeric, data_for_imputation) %>% # Get only numeric variables
 ```
 
 
-
-```{r}
-# Inspect multicollineatiry between variables
-# mixed_assoc_results_imp = mixed_assoc(df = whole_imputed_data[, -c(1)]) 
-```
-
-
-```{r}
-# Cramers V test
-# mixed_assoc_results = mixed_assoc(df = data_for_imputation[, -c(1)])
-```
-
-
 ```{r}
 # Correlation plot between numeric and categorical variables
 data_for_imputation %>% 
@@ -282,35 +269,30 @@ data_for_imputation %>%
 ```
 
 
+## Visualize influx and outflux in data set
 
-
-
-```{r}
-# One-hot encoding of categorical variables and corrplot
-model.matrix(~0+., data=Filter(is.numeric, data_for_imputation))  %>% # one-hot encoding
-  cor(use="pairwise.complete.obs") %>% 
-  ggcorrplot::ggcorrplot(show.diag = F, type="lower", lab=TRUE, lab_size=2, tl.cex = 10)
-```
-
+The influx of a variable quantifies how well its missing data connects to the observed data on other variables. The outflux of a variable quantifies how well its observed data connect to the missing data on other variables. Variables with higher outflux are (potentially) the more powerful predictors. Variables with higher influx depend strongly on the imputation model.    
 
 ```{r}
+# Calculate flux
 dataset_flux = flux(data_for_imputation)
 ```
-
-The influx of a variable quantifies how well its missing data connect to the observed data on other variables. The outflux of a variable quantifies how well its observed data connect to the missing data on other variables. Variables with higher outflux are (potentially) the more powerful predictors. Variables with higher influx depend strongly on the imputation model.    
 
 The group at the left-upper corner has (almost) complete information, so the number of missing data problems for this group is relatively small. The intermediate group has an outflux between 0.5 and 0.8, which is small. Missing data problems are more severe, but potentially this group could contain important variables. The third group has an outflux with 0.5 and lower, so its predictive power is limited.  
 
 Variables that might cause problems later on in the imputations are located in the lower-right corner.
 
 ```{r}
+# Plot influx/outflux
 fluxplot(data_for_imputation, ylim = c(0, 1.05), cex = 0.7, eqscplot = TRUE)
 ```
 
-All points are relatively close to the diagonal, which indicates that influx and outflux are balanced.  
+Most points are relatively close to the diagonal, which indicates that influx and outflux are balanced.  
 
 
 # Imputing missing values with MICE
+
+Useful links:
 
 https://cran.r-project.org/web/packages/finalfit/vignettes/missing.html
 
@@ -340,11 +322,19 @@ For imputation purposes, it is expedient to select a suitable subset of data tha
 
 
 ```{r}
+# Show imputation method that will be used for each of the variables in the dataset
+# Variables with no missing data will be assigned no method
+# Yes/no variables are imputed using logistic regression
+# Categorical variables with more than two levels are imputed with 'polyreg' (polytomous logistic regression)
+# Numerical variables are imputed using 'pmm' (predictive mean matching)
 print(meth)
 ```
 
 ```{r}
 # Use of quickpred to obtain prediction matrix
+# Selects predictors of variables to be imputed according to simple statistics
+# Produces square matrix, with 0/1 values
+# One is used to indicate that a specific variable will be used as predictor for another one
 predM = quickpred(
   data_for_imputation, 
   mincor = 0.2,
@@ -355,7 +345,8 @@ predM = quickpred(
 
 
 ```{r}
-# Tweak prediction matrix
+# Tweak prediction matrix by setting to zero uninformative variables
+# These will not be used as predictors for imputation
 predM[, c("id",
           #"gender", # Do not remove if you want post-imputation to work correctly
           "albumin",
@@ -383,10 +374,13 @@ predM[, c("id",
 table(rowSums(predM))
 ```
 
+
 ```{r}
 # The names of the predictors for any give variable can be obtained by
 names(data_for_imputation)[predM["copd", ] == 1]
 ```
+
+This means that the predictors for imputing missing values in `copd` will be `patient_group`, `patient_status_at_end_study` and `tobacco_use`.
 
 
 ```{r}
@@ -412,13 +406,14 @@ post["leukocytosis"] <- "imp[[j]][data$leukocytes[!r[, j]] > 11000, i] <- 'Yes'"
 
 
 ```{r}
+# Imputation process
 imputed = mice(
-  data_for_imputation, 
+  data = data_for_imputation, 
   method = meth, 
   predictorMatrix = predM, 
   visitSequence = visit,
   post = post,
-  m = 10, 
+  m = 10, # 10 rounds of multiple imputation
   seed = 2828
   )
 ```
@@ -455,13 +450,18 @@ imputed = mice(
 
 
 ```{r}
+# Return completed data after imputation
 whole_imputed_data = complete(imputed)
 ```
 
 
 ```{r}
+# Plot missing data patterns in imputed dataset 
+# No missing values should be present
 md.pattern(whole_imputed_data, rotate.names = TRUE)
 ```
+
+For whatever reason, there is one row where `oral_contraceptive_tx` still has one missing value. This has probably something to do with the fact that this variables is constant (no patient had oral contraceptives during the study).
 
 
 ```{r}
