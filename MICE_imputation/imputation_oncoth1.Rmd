@@ -15,7 +15,7 @@ https://www.rdocumentation.org/packages/mice/versions/3.16.0/topics/mice
 
 ```{r}
 # Deactivate scientific notation
-options(scipen=999)
+options(scipen = 999)
 ```
 
 
@@ -75,12 +75,12 @@ oncoth1_data %>%
   select(!starts_with("type_")) %>% # VTE type
   select(!starts_with("cancer_concomitant_")) %>% # VTE concomitant to cancer diagnosis
   select(!starts_with("eval_")) %>% # VTE diagnosed during study
+  select(!contains("_study")) %>%
   select(!contains("vte_dx_during_cancer_follow_up")) %>%
   select(!starts_with("rec_")) %>% # VTE recurrences
   select(!ends_with("_type_recurrence")) %>%
   # Exclude variables with time until event
   select(!starts_with("tu_")) %>%
-  select(!contains("_study")) %>%
   # Exclude genetic variables
   select(!starts_with("rs")) %>%
   # Exclude variables related to ONCOTHROMB score
@@ -100,7 +100,7 @@ oncoth1_data %>%
 naniar_summary = miss_var_summary(oncoth1_data)
 
 # Show variables with missing values 
-naniar_summary %>%
+naniar_summary_missing_values = naniar_summary %>%
   filter(!pct_miss == 0)
 ```
 
@@ -127,6 +127,7 @@ md.pattern(
   rotate.names = TRUE
   )
 ```
+All these variables have missing values missing not at random (MNAR); except `aptt` and `aptt_ratio`. 
 
 
 # Variable subset for imputation
@@ -278,14 +279,15 @@ The influx of a variable quantifies how well its missing data connects to the ob
 dataset_flux = flux(data_for_imputation)
 ```
 
-The group at the left-upper corner has (almost) complete information, so the number of missing data problems for this group is relatively small. The intermediate group has an outflux between 0.5 and 0.8, which is small. Missing data problems are more severe, but potentially this group could contain important variables. The third group has an outflux with 0.5 and lower, so its predictive power is limited.  
-
-Variables that might cause problems later on in the imputations are located in the lower-right corner.
 
 ```{r}
 # Plot influx/outflux
 fluxplot(data_for_imputation, ylim = c(0, 1.05), cex = 0.7, eqscplot = TRUE)
 ```
+
+The group at the left-upper corner has (almost) complete information, so the number of missing data problems for this group is relatively small. The intermediate group has an outflux between 0.5 and 0.8, which is small. Missing data problems are more severe, but potentially this group could contain important variables. The third group has an outflux with 0.5 and lower, so its predictive power is limited.  
+
+Variables that might cause problems later on in the imputations are located in the lower-right corner.
 
 Most points are relatively close to the diagonal, which indicates that influx and outflux are balanced.  
 
@@ -311,17 +313,9 @@ predM = init$predictorMatrix
 
 As a general rule, using every bit of available information yields multiple imputations that have minimal bias and maximal efficiency.  
 
-It is often beneficial to choose as large a number of predictors as possible. Including as many predictors as possible tends to make the MAR assumption more plausible, thus reducing the need to make special adjustments for MNAR mechanisms.  
+It is often beneficial to choose as large a number of predictors as possible. Including as many predictors as possible tends to make the missing at random (MAR) assumption more plausible, thus reducing the need to make special adjustments for MNAR mechanisms.  
 
 For imputation purposes, it is expedient to select a suitable subset of data that contains no more than 15 to 25 variables.  
-
-
-```{r}
-# Reintroduce variable to be imputed
-# meth["oral_contraceptive_tx"] = "logreg"
-# meth["pregnancy"] = "logreg"
-#meth["copd"] = "rf"
-```
 
 
 ```{r}
@@ -365,14 +359,6 @@ predM[, c("id",
 
 
 ```{r}
-# Add certain variables as predictors of other variables
-#predM["menopausal_status", "age_when_cancer_dx"] = 1
-#predM["menopausal_status", "performance_status_category_corrected"] = 1
-#predM["leukocytosis", "leukocytes"] = 1
-```
-
-
-```{r}
 # Distribution of number of predictions
 table(rowSums(predM))
 ```
@@ -387,8 +373,8 @@ This means that the predictors for imputing missing values in `copd` will be `pa
 
 
 ```{r}
+# Order in which the MICE algorithm will go through the variables
 visit = init$visitSequence
-# visit = append(visit, "menopausal_status")
 visit
 ```
 
@@ -469,7 +455,7 @@ whole_imputed_data = complete(imputed)
 md.pattern(whole_imputed_data, rotate.names = TRUE)
 ```
 
-For whatever reason, there is one row where `oral_contraceptive_tx` still has one missing value. This has probably something to do with the fact that this variables is constant (no patient had oral contraceptives during the study).
+For some reason, there is one row where `oral_contraceptive_tx` still has one missing value. This has probably something to do with the fact that this variable is constant (no patient had oral contraceptives during the study) and no imputation method was asigned.
 
 
 ```{r}
@@ -522,8 +508,8 @@ imputation_data_long = complete(imputed, "long")
 
 
 ```{r}
-# Save results in RData forma
-save(whole_imputed_data, file = "oncoth1_whole_imputed_data.RData")
+# Save results in RData format
+# save(whole_imputed_data, file = "oncoth1_whole_imputed_data.RData")
 ```
 
 
