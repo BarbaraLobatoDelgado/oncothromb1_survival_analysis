@@ -482,10 +482,9 @@ Curves resulting from the iterations of imputation process are overall quite sim
 
 ## Review all imputation results
 
-
 ```{r}
-# Matrix with all imputed values
-#imputation_data_long = complete(imputed, "long")
+# Matrix with all imputed values through all iterations in one dataframe
+imputation_data_long = complete(imputed, "long")
 ```
 
 
@@ -521,9 +520,9 @@ Curves resulting from the iterations of imputation process are overall quite sim
   select(id | ends_with("_imp")) 
 ```
 
-Save results in CSV file.
 
 ```{r}
+# Save results in RData forma
 save(whole_imputed_data, file = "oncoth1_whole_imputed_data.RData")
 ```
 
