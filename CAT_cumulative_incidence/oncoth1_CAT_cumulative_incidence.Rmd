@@ -1,0 +1,232 @@
+---
+title: "Cancer-associated venous thrombosis (CAT) cumulative incidence estimation for ONCOTHROMB12-01 cohort"
+author: "Bárbara Lobato Delgado"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+
+```{r}
+# Deactivate scientific notation
+options(scipen = 999, na.action = "na.pass", max.print = 10000)
+```
+
+
+```{r, message=FALSE}
+# Load libraries
+pacman::p_load(
+  an9elproject, 
+  tidyverse, 
+  lubridate, 
+  survival, 
+  pec, 
+  survminer, 
+  cmprsk, 
+  install = FALSE, update = FALSE
+)
+```
+
+
+# Introduction
+
+In this analysis we estimate the cancer-associated venous thrombosis (CAT) cumulative incidence in competing risks with death, and plot the cumulative incidence over time for the ONCOTHROMB12-01 cohort.
+
+# Cumulative incidence estimation with competing risks — death *vs* CAT
+
+Death and CAT are events in competing risks, given that death impedes CAT — but not the other way around. 
+
+Cumulative incidence describes the probability of a specific event occurring within a certain time frame. It is often used in the context of competing risks, where there are multiple possible events that can occur, and the focus is on estimating the probability of each event type.
+
+In the context of survival analysis with competing risks, the cumulative incidence function (CIF) is used to represent the cumulative probability of experiencing a particular type of event before a given time point, while accounting for the presence of other competing events that could prevent the occurrence of the event of interest.
+
+Mathematically, the cumulative incidence function for a specific event type is defined as:
+
+CIF(t) = P(Event of interest occurs before or at time t)
+
+The cumulative incidence at a specific time point represents the proportion of individuals who have experienced the event of interest up to that time. It's important to note that as time progresses, the cumulative incidence can increase, but it cannot decrease.
+
+When there are competing risks, each event type will have its own cumulative incidence function. *The sum of the cumulative incidence functions for all event types at any given time point cannot exceed 1, as it represents the entire probability space.*
+
+Cumulative incidence functions are commonly used to compare event rates between different groups or categories, and statistical tests like Gray's test can be used to assess whether there are significant differences in the cumulative incidence functions across groups. Gray's test helps you determine if there are statistically significant differences between these CIFs across different groups. It's an extension of the classical log-rank test used in traditional survival analysis, adapted to the competing risks setting.
+
+```{r}
+# Load DB from an9elproject
+oncoth1 = get_project("oncothr1", version = "0.0.8003")
+```
+
+
+```{r}
+# Create dataset with information for estimation con cumulative incidence
+cat_cuminc_data = oncoth1$data %>% 
+  select(id, 
+         patient_group,
+         n_appointment_patient_became_case,
+         date_cancer_dx, 
+         date_dropout, 
+         date_death,
+         date_study_begins, 
+         date_study_ends, 
+         patient_status_at_end_study_simplified, 
+         follow_up_length_from_cancer_diagnosis_days, 
+         tu_1st_vte_all_from_cancer_diagnosis_days_corrected) %>%
+  # Patients that already suffered CAT at time 0 or prior must be excluded
+  filter(!n_appointment_patient_became_case == "Beginning of study")
+
+```
+
+A total of 30 patients are excluded in order to estimate CAT cumulative incidence, given that they already suffered CAT at time = 0.  
+
+```{r}
+# Now create variables of status (CAT, death w/o CAT or censored) and time until event (CAT or death w/o CAT)
+cat_cuminc_data %<>%
+  # Status (0 for censored, 1 for CAT, 2 for dead with no CAT)
+  mutate(event_status = case_when(
+    patient_group == "Control" & 
+      patient_status_at_end_study_simplified == "Dead" ~ 2, 
+    patient_group == "Case" ~ 1, 
+    TRUE ~ 0)) %>%
+  # Time until event
+  mutate(tu_event = case_when(
+    event_status == 0 ~ follow_up_length_from_cancer_diagnosis_days, # censored patients
+    event_status == 2 ~ follow_up_length_from_cancer_diagnosis_days, # patients dead w/o CAT
+    event_status == 1 ~ tu_1st_vte_all_from_cancer_diagnosis_days_corrected # patients with CAT
+  ))
+```
+
+
+```{r}
+# Estimate CAT and death cumulative incidence functions from competing risks data
+cat_cuminc = cuminc(
+  ftime = cat_cuminc_data$tu_event, 
+  fstatus = cat_cuminc_data$event_status, 
+  cencode = 0 # censored patients are encoded as zero
+  )
+
+# $est: cumulative incidence estimates at different time points for each type of event (days)
+# i is the group index and j is the event
+# $var: variances of the cumulative incidence estimates
+cat_cuminc
+```
+
+These are the cumulative incidence functions (CIFs) for developing CAT (1 1) and dying without CAT (1 2) and their respective variances. In spite of the notation, patients are not grouped. 
+
+```{r}
+# Estimate CAT and death cumulative estimates functions (CIFs) for group of patients with CAT and w/o CAT
+# Get Tests
+cat_cuminc_test = cuminc(
+  ftime = cat_cuminc_data$tu_event, 
+  fstatus = cat_cuminc_data$event_status, 
+  group = cat_cuminc_data$event_status, # patients with CAT vs patients dead w/o CAT
+  cencode = 0)[["Tests"]]
+
+# Show the test statistic value, the p-value and the degrees of freedom resulting from comparison of CIFs between groups
+cat_cuminc_test
+```
+
+Group 1 are patients with CAT and group 2 are patients that die w/o CAT. 
+
+```{r}
+# Show results in a more intelligible way
+cat_cuminc_customised = cat_cuminc %>% 
+  # Remove Tests from list
+  list_modify("Tests" = NULL) %>% 
+  # Apply a function to each element of list or atomic vector and show in a dataframe
+  # Subset "time" and "est" and add id column
+  map_df(`[`, c("time", "est"), .id = "id") %>% 
+  # Add name to groups
+  mutate(id = recode(
+    id, 
+    "1 1" = "CAT", 
+    "1 2" = "Death w/o CAT")) %>% 
+  # Select event of interest, in this case, CAT
+  filter(id == "CAT")  
+
+# All time points in CAT CIF estimation
+cat_cuminc_customised
+```
+
+
+```{r}
+# Estimation of cumulative incidence with competing risks
+# Similar information as above, but providing standard error and 95% CI
+tidycmprsk::cuminc(Surv(tu_event, as.factor(event_status)) ~ 1, cat_cuminc_data)
+```
+
+
+```{r}
+# Create survival curve for CAT in competing risks
+# Covariates are not being treated as time-dependent
+cat_fit <- survfit(
+  Surv(tu_event, event_status == 1) ~ 1 + cluster(id), 
+  data = cat_cuminc_data
+)
+
+# I can use this table to 
+cat_fit_summary = surv_summary(cat_fit)
+cat_fit_summary
+```
+
+
+```{r}
+# Count number of patients affected by CAT 
+n_cat_patients = sum(cat_fit_summary$n.event)
+
+print(paste("A total", n_cat_patients, "patients suffered CAT. Remind that VTE concomitant to cancer diagnosis is not accounted for in the cumulative incidence estimation."))
+
+# There is a total of 88 patients that suffered CAT in the ONCOTHROMB1 cohort.
+# Thirty patients are excluded for the cumulative incidence estimation
+# However, the rest must be accounted for
+stopifnot(n_cat_patients + sum(oncoth1$data$n_appointment_patient_became_case == "Beginning of study") == sum(oncoth1$data$patient_group == "Case"))
+```
+
+
+```{r}
+# jpeg("../graphs/paper/KM_cuminc_cat_ggsurplot.jpeg", width = 6, height = 4, units = 'in', res = 700)
+
+# Plot cumulative incidence curve
+cat_cuminc_with_table = ggsurvplot(
+  fit = cat_fit,
+  data = cat_cuminc_data,
+  fun = "event",
+  censor = FALSE,
+  conf.int = FALSE,
+  xscale = 30,
+  break.time.by = 60,
+  surv.plot.height = 1.5,
+  cumevents = TRUE,
+  cumevents.y.text = FALSE,
+  cumevents.height = 0.15,
+  #tables.col = "strata",
+  fontsize = 3.5,
+  tables.y.text = FALSE, # color rectangle instead of text with strata name
+  tables.theme = theme_cleantable(),
+  legend = "none",
+  xlab = "Time (months)",
+  ylab = "Cumulative incidence of CAT", 
+  title = "",
+  # Extend until month 20 so that all 59 VTE events can be seen in plot table
+  xlim = c(0, 600), # 540
+  ylim = c(0, 0.2),
+  ggtheme = theme_bw(),
+  palette = "red"
+  ) 
+
+# Add percentages in y axis
+cat_cuminc_with_table$plot = cat_cuminc_with_table$plot +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 0.2))
+
+# Customize risk table title 
+# Add new title to table
+cat_cuminc_with_table$cumevents$labels$title = "Cumulative number of patients affected by CAT"
+# Change table title font size
+cat_cuminc_with_table$cumevents = cat_cuminc_with_table$cumevents +
+  theme(plot.title = element_text(size = 10))
+
+cat_cuminc_with_table
+
+# dev.off()
+```
+
+
