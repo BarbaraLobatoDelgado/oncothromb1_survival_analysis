@@ -239,7 +239,8 @@ Filter(is.numeric, data_for_imputation) %>% # Get only numeric variables
 data_for_imputation %>% 
   select(-c(
     id, 
-    # patient_group, 
+    patient_group,
+    patient_status_at_end_study,
     bmi_category,
     oral_contraceptive_tx, 
     pregnancy,
