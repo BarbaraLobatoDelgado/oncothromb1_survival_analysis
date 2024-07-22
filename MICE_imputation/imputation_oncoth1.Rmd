@@ -1,0 +1,475 @@
+---
+title: 'Imputation of missing values in ONCOTHROMB12-01'
+author: "Bárbara Lobato Delgado"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r}
+# Deactivate scientific notation
+options(scipen=999)
+```
+
+
+```{r, message=FALSE}
+# Load libraries
+pacman::p_load(
+  an9elproject,
+  tidyverse,
+  lubridate,
+  magrittr,
+  naniar,
+  mice,
+  mctest,
+  install = FALSE, update = FALSE
+  )
+```
+
+
+```{r}
+# library(an9elproject)
+# library(an9elversions)
+# library(magrittr)
+# library(tidyverse)
+# library(naniar)
+# library(mice)
+# library(mctest)
+# library(lubridate)
+```
+
+
+# Load data 
+
+```{r}
+# Load cohort database
+oncoth1 = get_project("oncothr1", version = "0.0.8003")
+```
+
+
+```{r}
+# Get data slot
+oncoth1_data = oncoth1$data
+```
+
+
+```{r}
+# oncoth1_data %<>%
+#   mutate(across(c(diabetes_mellitus,
+#                   dyslipidemia,
+#                   arterial_hypertension, 
+#                   chronic_cardiac_insufficiency, 
+#                   copd, 
+#                   renal_insufficiency, 
+#                   oral_contraceptive_tx, 
+#                   pregnancy,
+#                   hormone_therapy), ~ factor(x = .x ,
+#                                              levels = c("No", "Yes"), 
+#                                              labels = c("No", "Yes"))))
+```
+
+
+# Looking at missing values throughout the data set
+
+```{r}
+# How many variables contain missing values?
+n_var_miss(oncoth1_data)
+```
+
+
+```{r, warning=FALSE, fig.height=8, fig.width=7}
+# Visualize % of missing values by variable
+oncoth1_data %>%
+  # Exclude these variables
+  select(!c(n_appointment_patient_became_case, 
+            patient_left_study, 
+            anticoag_tx_lmwh_dosage, 
+            anticoag_tx_vte_drugs, 
+            vte_before_entering_study)) %>%
+  # Exclude free text variables
+  select(!contains("reason")) %>%
+  # Exclude date variables
+  select(!contains("date")) %>%
+  # Exclude variables relative to VTE
+  select(!starts_with("type_")) %>% # VTE type
+  select(!starts_with("cancer_concomitant_")) %>% # VTE concomitant to cancer diagnosis
+  select(!starts_with("eval_")) %>% # VTE diagnosed during study
+  select(!starts_with("rec_")) %>% # VTE recurrences
+  # Exclude variables with time until event
+  select(!starts_with("tu_")) %>%
+  select(!contains("_study")) %>%
+  # select(!contains("recurrence")) %>%
+  select(!starts_with("rs")) %>%
+  # Exclude variables with no missing values
+  select_if( ~ any(is.na(.))) %>%
+  # Plot % of missing values
+  gg_miss_var(., show_pct = TRUE)
+```
+
+
+# Exploring missing values distribution
+
+```{r}
+# Function to check proportion of missing data per column/row
+#proportion_missing_values <- function(x) {sum(is.na(x))/length(x)*100}
+```
+
+
+```{r}
+# Missing data proportion by column
+#apply(oncoth1_data, 2, proportion_missing_values) # Remove columns related to VTE events
+```
+
+
+```{r}
+# Remove columns related to VTE events
+#apply(oncoth1_data, 1, proportion_missing_values)
+```
+
+```{r}
+md.pattern(
+  oncoth1_data %>% select(
+    albumin, 
+    aptt, 
+    aptt_ratio,
+    bilirubin, 
+    creatinine,
+    alkaline_phosphatase,
+    tobacco_use,
+    copd,
+    venous_insufficiency, 
+    catheter_device, 
+    creatinine, 
+    oral_contraceptive_tx
+  ), 
+rotate.names = TRUE)
+```
+
+
+# Subset for imputation
+
+Virtually every dataset contains some parts that could better be removed before imputation. This includes, but is not limited to, uninteresting variables with a high proportion of missing data, variables without a code for the missing data, administrative variables, constant variables, duplicated, recoded or standardized variables, and aggregates and indices of other information.
+
+
+```{r}
+data_for_imputation = oncoth1_data %>%
+  select(id, 
+         patient_group,
+         patient_status_at_end_study,
+         age_when_cancer_dx, 
+         gender, 
+         menopausal_status, 
+         pregnancy,
+         oral_contraceptive_tx, 
+         weight,
+         height,
+         body_surface_area, # collinear with bmi and somewhat with creatinine
+         bmi_value,
+         bmi_category, #
+         performance_status_category_corrected, 
+         albumin, 
+         aptt,
+         aptt_ratio, 
+         bilirubin, 
+         creatinine, 
+         alkaline_phosphatase, 
+         hemoglobin, 
+         inr, 
+         leukocytes, 
+         platelets,
+         leukocytosis, 
+         thrombocytosis, # quitar
+         low_hemoglobin, # quitar
+         tobacco_use,
+         copd,
+         venous_insufficiency,
+         primary_tumor_simplified,
+         progression_according_to_clinical_stage, 
+         tnm_stage,
+         t_stage, 
+         n_stage, 
+         histology_type, 
+         mucinous_histology, 
+         grade_histological_differentiation, 
+         metastasis_dx,
+         n_metastases,
+         catheter_device, 
+         khorana_risk_score, 
+         tic_onco
+)
+```
+
+
+```{r}
+data_for_imputation %<>%
+  mutate(patient_status_at_end_study = word(patient_status_at_end_study, 1)) %>%
+  mutate(patient_status_at_end_study = as.factor(patient_status_at_end_study))
+```
+
+
+```{r}
+# Collinear data 
+numeric_collinearity = cor(
+  Filter(is.numeric, data_for_imputation), 
+  use = "pairwise.complete.obs"
+  )
+```
+
+
+```{r}
+# Inspect multicollineatiry between variables
+#mixed_assoc_results_imp = mixed_assoc(df = whole_imputed_data[, -c(1)]) 
+```
+
+
+```{r}
+# Cramers V test
+#mixed_assoc_results = mixed_assoc(df = data_for_imputation[, -c(1)])
+```
+
+
+```{r}
+# One-hot encoding of categorical variables
+#correlation_all_vars = model.matrix(~0+., data=data_for_imputation[, -c(1:3)]) %>% 
+#  cor(use="pairwise.complete.obs")
+```
+
+
+```{r}
+# One-hot encoding of categorical variables and corrplot
+#model.matrix(~0+., data=data_for_imputation) %>% # one-hot encoding
+  #cor(use="pairwise.complete.obs") %>% 
+  #ggcorrplot(show.diag = F, type="lower", lab=TRUE, lab_size=2, tl.cex = 6)
+```
+
+
+```{r}
+dataset_flux = flux(data_for_imputation)
+```
+
+The influx of a variable quantifies how well its missing data connect to the observed data on other variables. The outflux of a variable quantifies how well its observed data connect to the missing data on other variables. Variables with higher outflux are (potentially) the more powerful predictors. Variables with higher influx depend strongly on the imputation model.    
+
+The group at the left-upper corner has (almost) complete information, so the number of missing data problems for this group is relatively small. The intermediate group has an outflux between 0.5 and 0.8, which is small. Missing data problems are more severe, but potentially this group could contain important variables. The third group has an outflux with 0.5 and lower, so its predictive power is limited.  
+
+Variables that might cause problems later on in the imputations are located in the lower-right corner.
+
+```{r}
+fluxplot(data_for_imputation, ylim = c(0, 1.05), cex = 0.7, eqscplot = TRUE)
+```
+
+All points are relatively close to the diagonal, which indicates that influx and outflux are balanced.  
+
+
+# Imputing missing values with MICE
+
+https://cran.r-project.org/web/packages/finalfit/vignettes/missing.html
+
+https://datascienceplus.com/handling-missing-data-with-mice-package-a-simple-approach/
+
+
+```{r}
+# Detects oral_contraceptive_tx as collinear and eliminates it from imputation
+init = mice(data_for_imputation, maxit = 0, seed = 2828) 
+meth = init$method
+predM = init$predictorMatrix
+```
+
+As a general rule, using every bit of available information yields multiple imputations that have minimal bias and maximal efficiency.  
+
+It is often beneficial to choose as large a number of predictors as possible. Including as many predictors as possible tends to make the MAR assumption more plausible, thus reducing the need to make special adjustments for MNAR mechanisms.  
+
+For imputation purposes, it is expedient to select a suitable subset of data that contains no more than 15 to 25 variables.  
+
+
+```{r}
+# Reintroduce variable to be imputed
+# meth["oral_contraceptive_tx"] = "logreg"
+# meth["pregnancy"] = "logreg"
+#meth["copd"] = "rf"
+```
+
+
+```{r}
+print(meth)
+```
+
+```{r}
+# Use of quickpred to obtain prediction matrix
+predM = quickpred(
+  data_for_imputation, 
+  mincor = 0.2,
+  minpuc = 0.5, 
+  include = c("patient_group", "patient_status_at_end_study")
+  )
+```
+
+
+```{r}
+# Tweak prediction matrix
+predM[, c("id",
+          #"gender", # Do not remove if you want post-imputation to work correctly
+          "albumin",
+          "inr",
+          "aptt",
+          "aptt_ratio", 
+          "oral_contraceptive_tx",
+          "grade_histological_differentiation",
+          "t_stage", 
+          "metastasis_dx", 
+          "n_metastases")] = 0
+```
+
+
+```{r}
+# Add certain variables as predictors of other variables
+#predM["menopausal_status", "age_when_cancer_dx"] = 1
+#predM["menopausal_status", "performance_status_category_corrected"] = 1
+#predM["leukocytosis", "leukocytes"] = 1
+```
+
+
+```{r}
+# Distribution of number of predictions
+table(rowSums(predM))
+```
+
+```{r}
+# The names of the predictors for any give variable can be obtained by
+names(data_for_imputation)[predM["copd", ] == 1]
+```
+
+
+```{r}
+visit = init$visitSequence
+# visit = append(visit, "menopausal_status")
+visit
+```
+
+
+```{r}
+# Post-imputation
+post <- init$post
+
+# Gender-specific variables
+post["menopausal_status"] <- "imp[[j]][data$gender[!r[, j]] == 'Male', i] <- 'Male'"
+post["pregnancy"] <- "imp[[j]][data$gender[!r[, j]] == 'Male', i] <- 'Male'"
+post["oral_contraceptive_tx"] <- "imp[[j]][data$gender[!r[, j]] == 'Male', i] <- 'Male'"
+
+# Leukocytes' levels
+post["leukocytes"] <- "imp[[j]][data$leukocytosis[!r[, j]] == 'Yes', i] <- 11000"
+post["leukocytosis"] <- "imp[[j]][data$leukocytes[!r[, j]] > 11000, i] <- 'Yes'"
+```
+
+
+```{r}
+imputed = mice(
+  data_for_imputation, 
+  method = meth, 
+  predictorMatrix = predM, 
+  visitSequence = visit,
+  post = post,
+  m = 10, 
+  seed = 2828
+  )
+```
+
+
+```{r}
+# plot(imputed, c(
+#   "menopausal_status", 
+#   "performance_status_category_corrected",  
+#   "albumin",  
+#   "aptt",  
+#   "aptt_ratio",  
+#   "bilirubin",  
+#   "creatinine",  
+#   "alkaline_phosphatase",  
+#   "inr", 
+#   "leukocytes",  
+#   "leukocytosis",  
+#   "pregnancy",  
+#   "oral_contraceptive_tx",
+#   "tobacco_use",  
+#   "venous_insufficiency",  
+#   "progression_according_to_clinical_stage",  
+#   "t_stage",  
+#   "n_stage",  
+#   "histology_type",  
+#   "mucinous_histology",  
+#   "grade_histological_differentiation",  
+#   "catheter_device",  
+#   "khorana_risk_score",  
+#   "tic_onco"
+#   ))
+```
+
+
+```{r}
+whole_imputed_data = complete(imputed)
+```
+
+
+```{r}
+md.pattern(whole_imputed_data, rotate.names = TRUE)
+```
+
+
+```{r}
+densityplot(imputed)
+```
+
+
+```{r}
+stripplot(imputed, pch = 20, cex = 1.2)
+```
+
+
+## Review all imputation results
+
+
+```{r}
+# Matrix with all imputed values
+#imputation_data_long = complete(imputed, "long")
+```
+
+
+## Save imputed variables in .RData object
+
+```{r}
+# Create columns with imputed data
+ whole_imputed_data %<>% 
+  mutate(across(c(menopausal_status, 
+         performance_status_category_corrected, 
+         albumin, 
+         aptt,
+         aptt_ratio, 
+         bilirubin, 
+         creatinine, 
+         alkaline_phosphatase, 
+         inr, 
+         leukocytes, 
+         leukocytosis,
+         tobacco_use,
+         copd,
+         venous_insufficiency,
+         progression_according_to_clinical_stage, 
+         t_stage, 
+         n_stage, 
+         histology_type, 
+         mucinous_histology, 
+         grade_histological_differentiation, 
+         metastasis_dx, 
+         catheter_device, 
+         khorana_risk_score, 
+         tic_onco), ~ .x, .names = "{col}_imp")) %>%
+  select(id | ends_with("_imp")) 
+```
+
+Save results in CSV file.
+
+```{r}
+save(whole_imputed_data, file = "oncoth1_whole_imputed_data.RData")
+```
+
+
