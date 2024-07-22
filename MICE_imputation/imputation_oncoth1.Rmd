@@ -7,6 +7,12 @@ output:
   pdf_document: default
 ---
 
+The imputation of missing values in clinical variables will be done using the MICE method. 
+
+The R package used to implement it is called 'mice'.
+
+https://www.rdocumentation.org/packages/mice/versions/3.16.0/topics/mice
+
 ```{r}
 # Deactivate scientific notation
 options(scipen=999)
@@ -28,18 +34,6 @@ pacman::p_load(
 ```
 
 
-```{r}
-# library(an9elproject)
-# library(an9elversions)
-# library(magrittr)
-# library(tidyverse)
-# library(naniar)
-# library(mice)
-# library(mctest)
-# library(lubridate)
-```
-
-
 # Load data 
 
 ```{r}
@@ -54,29 +48,14 @@ oncoth1_data = oncoth1$data
 ```
 
 
-```{r}
-# oncoth1_data %<>%
-#   mutate(across(c(diabetes_mellitus,
-#                   dyslipidemia,
-#                   arterial_hypertension, 
-#                   chronic_cardiac_insufficiency, 
-#                   copd, 
-#                   renal_insufficiency, 
-#                   oral_contraceptive_tx, 
-#                   pregnancy,
-#                   hormone_therapy), ~ factor(x = .x ,
-#                                              levels = c("No", "Yes"), 
-#                                              labels = c("No", "Yes"))))
-```
-
-
-# Looking at missing values throughout the data set
+# Inspecting missing values throughout the data set
 
 ```{r}
 # How many variables contain missing values?
 n_var_miss(oncoth1_data)
 ```
 
+Let's see which of the clinical variables have missing values and which should be imputed to gain statistical power.
 
 ```{r, warning=FALSE, fig.height=8, fig.width=7}
 # Visualize % of missing values by variable
@@ -114,17 +93,22 @@ oncoth1_data %>%
 ```
 
 
-# Exploring missing values distribution
+# Exploration of missing values distribution
 
 ```{r}
 # Function to check proportion of missing data per column/row
-#proportion_missing_values <- function(x) {sum(is.na(x))/length(x)*100}
+proportion_missing_values <- function(x) {sum(is.na(x))/length(x)*100}
 ```
 
 
 ```{r}
 # Missing data proportion by column
-#apply(oncoth1_data, 2, proportion_missing_values) # Remove columns related to VTE events
+percentage_missing_values_per_var = as.data.frame(apply(oncoth1_data, 2, proportion_missing_values))
+
+# Show only variables with missing values
+percentage_missing_values_per_var = percentage_missing_values_per_var[percentage_missing_values_per_var != 0]
+
+percentage_missing_values_per_var
 ```
 
 
