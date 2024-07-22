@@ -1,0 +1,5657 @@
+---
+title: 'Survival analysis of ONCOTHROMB12-01 cohort'
+author: "Bárbara Lobato Delgado"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r}
+# Deactivate scientific notation
+options(scipen = 999, max.print = 10000)
+```
+
+
+```{r}
+# knitr::knit_hooks$set(output = function(x, options) {
+#    max.lines <- options$max.lines
+#    x <- truncate_to_lines(x, max.lines)
+# 
+#    hook_output_default(x, options)
+# })
+```
+
+
+```{r}
+# Load libraries
+pacman::p_load(
+  an9elproject, 
+  tidyverse,
+  lubridate, 
+  magrittr,
+  survival,
+  survminer, 
+  install = FALSE, update = FALSE
+  )
+```
+
+
+
+```{r, message=FALSE}
+# library(an9elproject)
+# library(an9elversions)
+# library(tidyverse)
+# library(lubridate)
+# library(magrittr)
+# library(naniar)
+# library(survival)
+# library(pec)
+# library(survminer)
+# library(glmnet)
+
+
+# library(caret)
+# library(pcoxtime)
+# library(mctest)
+# library(ggcorrplot)
+# library(ggfortify)
+```
+
+
+```{r}
+###########################################
+## Customised ggplot for survfit objects ##
+###########################################
+
+survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, legend_labels, line_colours) {
+  
+  if (logrank_pval < 0.0001) {
+    logrank_pval = as.character("< 0.001")
+  }
+  
+  median_survival_days = surv_median(survfit_obj)[2, 2]
+  
+  p = autoplot(
+  survfit_obj, 
+  censor = FALSE, 
+  conf.int = FALSE) +
+  theme_bw() +
+  labs(
+    x = "Time (months)", 
+    y = "OS probability", 
+    title = title) +
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    legend.title = element_blank()) +
+  scale_x_continuous(
+    limits = c(0, 605), 
+    breaks = seq(from = 0, to = 600, by = 60), 
+    labels = seq(from = 0, to = 20, by = 2)) +
+  scale_color_manual(
+    labels = legend_labels, 
+    values = line_colours) + 
+  # Log-rank p-value
+  annotate(
+    geom = "text", 
+    x = 50,
+    y = 0.24,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 50, 
+    y = 0.19, 
+    label = logrank_pval) +
+  # n stratified by CAT
+  annotate(
+    geom = "text", 
+    x = 600,
+    y = 1,
+    label = paste0("n=", n_no_vte),
+    color = "black") +
+  annotate(
+    geom = "text", 
+    x = 600,
+    y = 0.95,
+    label = paste0("n=", n_vte),
+    color = "red") + 
+  # Median survival line
+  geom_segment(
+    aes(x = 0, y = 0.5, xend = median_survival_days, yend = 0.5), 
+    linetype = "dashed", 
+    size = 0.4) +
+  geom_segment(
+    aes(x = median_survival_days, y = 0, xend = median_survival_days, yend = 0.5), 
+    linetype = "dashed", 
+    size = 0.5)  
+  
+  return(p)
+}
+```
+
+
+# Load data
+
+```{r}
+# Load DB
+oncoth1 = get_project("oncothr1", version = "0.0.8001")
+```
+
+```{r}
+table(oncoth1$data$patient_group)
+```
+
+
+```{r}
+table(oncoth1$data$patient_group, oncoth1$data$vte_recurrence)
+```
+
+
+```{r}
+# Correct information for patient id = 118
+oncoth1$data %<>%
+  mutate(vte_recurrence = case_when(
+    id == 118 ~ "No VTE", 
+    TRUE ~ vte_recurrence
+    ))
+```
+
+
+```{r}
+# Number of comorbidities
+comorbidities_cols_index = which(colnames(oncoth1$data) %in% c(
+  "diabetes_mellitus", 
+  "dyslipidemia", 
+  # "tobacco_use_imp", # it is not considered an illness
+  "copd", 
+  "arterial_hypertension", 
+  "chronic_cardiac_insufficiency", 
+  "renal_insufficiency", 
+  "venous_insufficiency"))
+
+oncoth1$data$n_comorbidities <- rowSums(oncoth1$data[, comorbidities_cols_index] == "Yes")
+
+oncoth1$data %<>%
+  mutate(n_comorbidities = case_when(
+    n_comorbidities == 0 ~ "0",
+    n_comorbidities == 1 ~ "1",
+    n_comorbidities == 2 ~ "2+",
+    n_comorbidities == 3 ~ "2+",
+    n_comorbidities == 4 ~ "2+",
+    n_comorbidities == 5 ~ "2+",
+    n_comorbidities == 6 ~ "2+"), .after = venous_insufficiency) %>%
+  mutate(n_comorbidities = as.factor(n_comorbidities)) 
+
+oncoth1$data %<>%
+  mutate(tobacco_use_imp_grouped = case_when(
+    tobacco_use_imp == "Never has smoked" ~ "Never", 
+    tobacco_use_imp == "Former smoker" ~ "Former/current",
+    tobacco_use_imp == "Active smoker" ~ "Former/current"), 
+    .after = tobacco_use_imp)
+
+# Create quartiles for age 
+oncoth1$data %<>%
+  mutate(age_quartiles = case_when(
+    age_when_cancer_dx <= 60 ~ "33-60", 
+    age_when_cancer_dx > 60 & age_when_cancer_dx <= 69 ~ "61-69",
+    age_when_cancer_dx >= 70 ~ "70-93"
+  ), .after = age_when_cancer_dx) %>%
+  mutate(age_quartiles = as.factor(age_quartiles))
+```
+
+
+```{r}
+# Correct ties between death date and DVT date
+# THIS IS NOT NECESSARY IF TIES ARE BETWEEN EVENT AND TDC
+#oncoth1$data %<>%
+#  mutate(follow_up_length_from_cancer_diagnosis_days = case_when(
+#    id == 60 | 
+#      id == 246 | 
+#      id == 248 | 
+#      id == 286 |
+#      id == 296 |
+#      id == 363 |
+#      id == 441 ~ follow_up_length_from_cancer_diagnosis_days + 0.5, 
+#    TRUE ~ follow_up_length_from_cancer_diagnosis_days))
+```
+
+
+# Create survival data sets
+
+
+## Time-dependent data set
+
+```{r}
+covariates_df = oncoth1$data %>%
+  select(id, 
+         patient_group,
+         age_when_cancer_dx,
+         age_quartiles,
+         age_when_cancer_dx_50,
+         age_when_cancer_dx_65,
+         gender, 
+         ethnicity,
+         ethnicity_grouped,
+         menopausal_status_imp,
+         weight, 
+         height, 
+         body_surface_area,
+         bmi_value,
+         bmi_category, 
+         performance_status_category_corrected_imp,
+         hormone_therapy,
+         albumin_imp, 
+         albumin_imp_category,
+         aptt_imp, 
+         aptt_imp_category,
+         aptt_ratio_imp,
+         aptt_ratio_imp_category,
+         bilirubin_imp, 
+         bilirubin_imp_category,
+         creatinine_imp,
+         creatinine_imp_category,
+         alkaline_phosphatase_imp, 
+         alkaline_phosphatase_imp_category,
+         hemoglobin, 
+         hemoglobin_category,
+         inr_imp, 
+         inr_imp_category,
+         leukocytes_imp, 
+         leukocytes_imp_category,
+         platelets, 
+         platelets_category, 
+         leukocytosis_imp,
+         thrombocytosis, 
+         low_hemoglobin, 
+         personal_background, 
+         major_surgery_in_medical_history, 
+         pregnancy_imp, 
+         oral_contraceptive_tx, 
+         diabetes_mellitus, 
+         dyslipidemia, 
+         tobacco_use_imp, 
+         tobacco_use_imp_grouped,
+         copd_imp, 
+         arterial_hypertension, 
+         chronic_cardiac_insufficiency, 
+         renal_insufficiency, 
+         khorana_risk_score_imp,
+         krs_category, 
+         two_groups_krs, 
+         tic_onco_imp,
+         previous_onco_surgery, 
+         primary_tumor_simplified, 
+         tumor_surgically_removed, 
+         progression_according_to_clinical_stage_imp, 
+         tnm_stage, 
+         tnm_stage_detailed, 
+         tnm_stage_grouped, 
+         tnm_stage_two_groups,
+         t_stage_imp, 
+         t_stage_grouped,
+         n_stage_imp, 
+         n_stage_grouped,
+         m_stage, 
+         m_stage_grouped,
+         histology_type_imp, 
+         mucinous_histology_imp, 
+         grade_histological_differentiation_imp, 
+         n_metastases,
+         n_metastases_grouped,
+         metastasis_adrenal_glands, 
+         metastasis_bones,                             
+         metastasis_brain,                               
+         metastasis_liver,                               
+         metastasis_lung,                                
+         metastasis_lymph_nodes,                         
+         metastasis_peritoneum,                          
+         metastasis_pleura,                              
+         metastasis_skin,                                
+         metastasis_soft_tissues,                        
+         other_metastases,
+         catheter_device_imp,
+         venous_insufficiency_imp,
+         n_comorbidities,
+         family_background_vte,
+         family_background_vte_n,
+         family_background_vte_all_relatives,
+         family_background_VTE_father,    
+         family_background_VTE_mother,  
+         family_background_VTE_siblings, 
+         family_background_VTE_offspring, 
+         family_background_VTE_other_relatives, 
+         previous_vte, 
+         previous_ate,
+         n_previous_ate,
+         previous_ate_type,
+         cva_ate,
+         myocardial_infarction_ate, 
+         pad_ate, 
+         tia_ate, 
+         other_thromb_ate, 
+         anticoag_tx_vte,                                
+         anticoag_tx_vte_drugs,                          
+         anticoag_tx_cardiopathy,
+         anticoag_tx_other_causes, 
+         anticoag_tx_reason, 
+         anticoag_tx_apixaban,                           
+         anticoag_tx_dabigatran,                         
+         anticoag_tx_lmwh,                               
+         anticoag_tx_lmwh_dosage,                        
+         anticoag_tx_vit_k_antag,                        
+         anticoag_tx_other_drugs,                        
+         anticoag_tx_currently,
+         n_antiaggreg_tx, 
+         antiaggreg_tx_reason,
+         antiaggreg_tx_cardiopathy,                      
+         antiaggreg_tx_cva,                              
+         antiaggreg_tx_other_causes,
+         antiaggreg_tx_currently, 
+         tu_1st_blood_transfusion_from_cancer_diagnosis_days, 
+         tu_2nd_blood_transfusion_from_cancer_diagnosis_days, 
+         tu_3rd_blood_transfusion_from_cancer_diagnosis_days, 
+         tu_1st_major_trauma_from_cancer_diagnosis_days, 
+         tu_1st_immobilisation_from_cancer_diagnosis_days, 
+         tu_2nd_immobilisation_from_cancer_diagnosis_days, 
+         tu_3rd_immobilisation_from_cancer_diagnosis_days, 
+         tu_1st_recent_major_surgery_from_cancer_diagnosis_days, 
+         tu_2nd_recent_major_surgery_from_cancer_diagnosis_days, 
+         tu_3rd_recent_major_surgery_from_cancer_diagnosis_days, 
+         tu_1st_thromboprophylaxis_hospital_from_cancer_diagnosis_days, 
+         tu_1st_erythropoietin_tx_from_cancer_diagnosis_days, 
+         tu_2nd_erythropoietin_tx_from_cancer_diagnosis_days, 
+         tu_3rd_erythropoietin_tx_from_cancer_diagnosis_days, 
+         vte_recurrence)
+```
+
+
+```{r}
+survival_data = oncoth1$data %>%
+  select(id, 
+         patient_group, 
+         date_cancer_dx, 
+         date_study_begins, 
+         date_study_ends,
+         date_death,
+         patient_status_at_end_study, 
+         censored_patient, 
+         follow_up_length_from_cancer_diagnosis_days, 
+         follow_up_length_from_cancer_diagnosis_months,
+         tu_1st_vte_all_from_cancer_diagnosis_days_corrected,
+         tu_1st_vte_all_from_cancer_diagnosis_months_corrected, 
+         tu_2nd_vte_all_from_cancer_diagnosis_days_corrected, 
+         tu_2nd_vte_all_from_cancer_diagnosis_months_corrected, 
+         tu_3rd_vte_all_from_cancer_diagnosis_days_corrected, 
+         tu_3rd_vte_all_from_cancer_diagnosis_months_corrected, 
+         tu_4th_vte_all_from_cancer_diagnosis_days_corrected, 
+         tu_4th_vte_all_from_cancer_diagnosis_months_corrected, 
+         tu_5th_vte_all_from_cancer_diagnosis_days_corrected, 
+         tu_5th_vte_all_from_cancer_diagnosis_months_corrected)
+
+#survival_vte_tmerge %<>%
+#  mutate_at(vars(starts_with("tu_")), ~ as.numeric(.x))
+
+```
+
+
+```{r}
+# Create object tmerge for time-dependant covariate survival analysis
+# For interval censored data, the status indicator is 0=right censored, 1=event at time, 
+# 2=left censored, 3=interval censored.
+survival_vte_tmerge = tmerge(
+  data1 = covariates_df, 
+  data2 = survival_data, 
+  id = id, 
+  tstop = follow_up_length_from_cancer_diagnosis_days, 
+  # event() is the survival analysis event of interest (in our case, death)
+  death = event(follow_up_length_from_cancer_diagnosis_days, censored_patient), 
+  # tdc() are for time-dependent covariates (VTEs)
+  vte_event = tdc(tu_1st_vte_all_from_cancer_diagnosis_days_corrected),
+  vte_event = tdc(tu_2nd_vte_all_from_cancer_diagnosis_days_corrected),
+  vte_event = tdc(tu_3rd_vte_all_from_cancer_diagnosis_days_corrected), 
+  vte_event = tdc(tu_4th_vte_all_from_cancer_diagnosis_days_corrected),
+  vte_event = tdc(tu_5th_vte_all_from_cancer_diagnosis_days_corrected)
+  )
+```
+
+
+```{r}
+survival_vte_tmerge = tmerge(
+  survival_vte_tmerge, 
+  survival_vte_tmerge, 
+  id = id, 
+  blood_transfusion = tdc(tu_1st_blood_transfusion_from_cancer_diagnosis_days),
+  blood_transfusion = tdc(tu_2nd_blood_transfusion_from_cancer_diagnosis_days),
+  blood_transfusion = tdc(tu_3rd_blood_transfusion_from_cancer_diagnosis_days),
+  #major_trauma = tdc(tu_1st_major_trauma_from_cancer_diagnosis_days), 
+  immobilisation = tdc(tu_1st_immobilisation_from_cancer_diagnosis_days), 
+  immobilisation = tdc(tu_2nd_immobilisation_from_cancer_diagnosis_days), 
+  immobilisation = tdc(tu_3rd_immobilisation_from_cancer_diagnosis_days), 
+  recent_major_surgery = tdc(tu_1st_recent_major_surgery_from_cancer_diagnosis_days),
+  recent_major_surgery = tdc(tu_2nd_recent_major_surgery_from_cancer_diagnosis_days),
+  recent_major_surgery = tdc(tu_3rd_recent_major_surgery_from_cancer_diagnosis_days),
+  thromboprophylaxis_hospital = tdc(tu_1st_thromboprophylaxis_hospital_from_cancer_diagnosis_days), 
+  erythropoietin_tx = tdc(tu_1st_erythropoietin_tx_from_cancer_diagnosis_days),
+  erythropoietin_tx = tdc(tu_2nd_erythropoietin_tx_from_cancer_diagnosis_days),
+  erythropoietin_tx = tdc(tu_3rd_erythropoietin_tx_from_cancer_diagnosis_days)
+  )
+```
+
+
+```{r}
+#survival_vte_tmerge$vte_event = factor(x = survival_vte_tmerge$vte_event, 
+                                    #levels = c(0, 1), 
+                                    #labels = c("No", "Yes"))
+```
+
+
+## CPH regression data set
+
+```{r}
+#survival_dataset = merge(
+#  oncoth1$data %>% 
+#    select(id, follow_up_length_from_cancer_diagnosis_days, censored_patient),
+#  covariates_df, 
+#  by = "id"
+#)
+```
+
+
+# Bivariate survival analysis
+
+
+```{r}
+# Fit survival analysis model
+td_surv_fit = survfit(
+  Surv(time = tstart, time2 = tstop, event = death) ~ 
+    vte_event + 
+    cluster(id), 
+  data = survival_vte_tmerge)
+
+td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    vte_event + 
+    #strata(tnm_stage_grouped) + #test this primary_tumor_simplified
+    cluster(id),
+  data = survival_vte_tmerge)
+
+cph_tests_summary = summary(cph_fit)
+
+cph_tests_summary$robscore[["pvalue"]]
+
+```
+
+
+```{r}
+# jpeg("../graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+td_survival_km_plot = 
+  ggsurvplot(fit = td_surv_fit,
+           data = survival_vte_tmerge,
+           xscale = 30,
+           break.time.by = 60,
+           censor = FALSE,
+           #pval = TRUE, 
+           #pval.method = TRUE,
+           #pval.size = 4, 
+           conf.int = TRUE,
+           conf.int.alpha = 0.15,
+           xlim = c(0, 540),
+           surv.plot.height = 1.25, 
+           tables.height = 0.25,
+           legend.title = " ",
+           legend.labs = c("No VTE", "VTE"),
+           risk.table = "abs_pct", 
+           risk.table.height = 0.3, 
+           fontsize = 3,
+           risk.table.col = "strata", 
+           risk.table.y.text.col = TRUE,
+           #linetype = "strata", 
+           surv.median.line = "hv",
+           xlab = "Time to death (months)",
+           ylab = "Overall Survival Probability",
+           ggtheme = theme_bw(),
+           palette = c("black", "red")
+           )
+
+# Add p-value
+td_survival_km_plot$plot = td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      cph_tests_summary$robscore[["pvalue"]], 
+      scientific = TRUE, 
+      digits = 1)),
+    color = "black")
+
+# Customize risk table title 
+td_survival_km_plot$table = 
+  td_survival_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+td_survival_km_plot
+
+# dev.off()
+```
+
+
+### Stratified by TNM staging
+
+```{r}
+# Fit survival analysis model
+stratified_stage_td_surv_fit = survfit(
+  Surv(
+    time = tstart, 
+    time2 = tstop, 
+    event = death) ~ 
+    vte_event + 
+    tnm_stage_two_groups + #test this primary_tumor_simplified
+    cluster(id), 
+  data = survival_vte_tmerge)
+
+stratified_stage_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+stratified_stage_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    vte_event + 
+    tnm_stage_two_groups + #test this primary_tumor_simplified
+    cluster(id),
+  data = survival_vte_tmerge)
+
+stratified_stage_cph_tests_summary = summary(stratified_stage_cph_fit)
+
+stratified_stage_cph_tests_summary$robscore[["pvalue"]]
+
+```
+
+
+```{r}
+#jpeg("./graphs/paper/KM_cat_and_stage.jpeg", width = 8, height = 4, units = 'in', res = 700)
+
+# Custom KM 
+
+# Count n patients in each subgroup
+n_stages_i_ii_iii_no_vte = sum(
+  oncoth1$data$tnm_stage_two_groups == "I-II-III" & 
+    oncoth1$data$patient_group == "Control")
+
+n_stages_i_ii_iii_vte = sum(
+  oncoth1$data$tnm_stage_two_groups == "I-II-III" & 
+    oncoth1$data$patient_group == "Case")
+
+n_stages_iv_no_vte = sum(
+  oncoth1$data$tnm_stage_two_groups == "IV" & 
+    oncoth1$data$patient_group == "Control")
+
+n_stages_iv_vte = sum(
+  oncoth1$data$tnm_stage_two_groups == "IV" & 
+    oncoth1$data$patient_group == "Case")
+
+legend_labels_and_n = c(
+  paste0("Stages I-II-III w/o CAT (n=", n_stages_i_ii_iii_no_vte, ")"), 
+  paste0("Stage IV w/o CAT (n=", n_stages_iv_no_vte, ")"),
+  paste0("Stages I-II-III with CAT (n=", n_stages_i_ii_iii_vte, ")"), 
+  paste0("Stage IV with CAT (n=", n_stages_iv_vte, ")"))
+
+#median_survival_days = surv_median(stratified_stage_td_surv_fit)
+  
+# survplot_cat_stage = ggfortify::autoplot(
+#   stratified_stage_td_surv_fit, 
+#   censor = FALSE, 
+#   conf.int = FALSE, 
+#   surv.size = 0.5, 
+#   surv.linetype = "strata") +
+#   theme_bw() +
+#   labs(
+#     x = "Time (months)", 
+#     y = "OS probability", 
+#     title = "") +
+#   theme(
+#     plot.title = element_text(hjust = 0.5), 
+#     legend.title = element_text(hjust = 0.5, face = "bold"),
+#     legend.text = element_text(size = 11),
+#     legend.position = "right") +
+#   scale_x_continuous(
+#     limits = c(0, 605), 
+#     breaks = seq(from = 0, to = 600, by = 60), 
+#     labels = seq(from = 0, to = 20, by = 2)) +
+#   scale_colour_manual(
+#     name = "CAT and Stage",
+#     labels = legend_labels_and_n,
+#     values = c("black", "black", "red", "red")) +   
+#   scale_linetype_manual(
+#     name = "CAT and Stage",
+#     labels = legend_labels_and_n, 
+#     values = c("longdash", "dotted", "longdash", "dotted"))
+
+# Add log-rank p-value
+# survplot_cat_stage = survplot_cat_stage + 
+#   # Log-rank p-value
+#   annotate(
+#     geom = "text", 
+#     size = 4,
+#     x = 50,
+#     y = 0.2,
+#     label = "Log-rank",
+#     color = "black") + 
+#   annotate(
+#     geom = "text",
+#     size = 4,
+#     x = 50, 
+#     y = 0.15, 
+#     label = "<0.0001") 
+
+# Add median survival line
+# survplot_cat_stage = survplot_cat_stage +
+#   # Horizontal line
+#   geom_segment(
+#     aes(x = 0, y = 0.5, xend = 478, yend = 0.5), 
+#     linetype = "dashed", 
+#     size = 0.4) +
+#   # Vertical lines
+#   geom_segment(
+#     aes(x = 478, y = 0, xend = 478, yend = 0.5), 
+#     linetype = "dashed", 
+#     size = 0.4) +
+#   geom_segment(
+#     aes(x = 231, y = 0, xend = 231, yend = 0.5), 
+#     linetype = "dashed", 
+#     size = 0.4)
+
+# survplot_cat_stage
+
+#dev.off()
+```
+
+
+```{r}
+summary(stratified_stage_td_surv_fit, times = 18*30.25)
+```
+
+
+Stage IV heavily impacts the decrease in survival, more than having a VTE. Nevertheless, within the subgroups defined by these stages, having a VTE also significantly decreases survival.  
+
+
+### Stratified by primary tumor
+
+```{r}
+# Fit survival analysis model
+stratified_primary_tumor_td_surv_fit = survfit(
+  Surv(
+    time = tstart, 
+    time2 = tstop, 
+    event = death) ~ 
+    vte_event + 
+    primary_tumor_simplified +
+    cluster(id), 
+  data = survival_vte_tmerge)
+
+stratified_primary_tumor_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+stratified_primary_tumor_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    vte_event + 
+    age_when_cancer_dx +
+    gender + 
+    tnm_stage_grouped +
+    primary_tumor_simplified + #test this primary_tumor_simplified
+    cluster(id),
+  id = id, 
+  data = survival_vte_tmerge)
+
+stratified_primary_tumor_cph_tests_summary = summary(stratified_primary_tumor_cph_fit)
+
+stratified_primary_tumor_cph_tests_summary$robscore[["pvalue"]]
+```
+
+
+```{r}
+#jpeg("./graphs/time_dependent_covariate_analysis/stratified_primary_tumor_vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+stratified_primary_tumor_td_survival_km_plot = 
+  ggsurvplot(
+    fit = stratified_primary_tumor_td_surv_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    #surv.plot.height = 1.25, 
+    #tables.height = 0.25,
+    legend.title = " ",
+    legend.labs = c("No VTE - Colorectal",
+                    "No VTE - NSCLC",
+                    "No VTE - Oesophago-gastric",
+                    "No VTE - Pancreatic",
+                    "VTE - Colorectal", 
+                    "VTE - NSCLC", 
+                    "VTE - Oesophago-gastric",
+                    "VTE - Pancreatic"),
+    linetype = "vte_event", 
+    surv.median.line = "hv",
+    xlab = "Time to death (months)",
+    ylab = "Overall Survival Probability",
+    ggtheme = theme_bw(), 
+    palette = c("blue", "magenta", "orange", "steelblue", "blue", "magenta", "orange", "steelblue")
+    )
+
+# Add p-value
+stratified_primary_tumor_td_survival_km_plot$plot = 
+  stratified_primary_tumor_td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      stratified_primary_tumor_cph_tests_summary$robscore[["pvalue"]], 
+      scientific = TRUE, 
+      digits = 1)),
+    color = "black")
+
+# Customize risk table title 
+#stratified_stage_td_survival_km_plot$table = 
+#  stratified_stage_td_survival_km_plot$table +
+#  theme(plot.title = element_text(size = 10))
+
+stratified_primary_tumor_td_survival_km_plot
+
+#dev.off()
+```
+
+```{r}
+#jpeg("./graphs/paper/KM_cat_and_primary_tumor.jpeg", width = 8, height = 4, units = 'in', res = 700)
+
+# Custom KM 
+
+# Count n patients in each subgroup
+n_colorectal_no_vte = sum(
+  oncoth1$data$primary_tumor_simplified == "Colorectal" & 
+    oncoth1$data$patient_group == "Control")
+
+n_colorectal_vte = sum(
+  oncoth1$data$primary_tumor_simplified == "Colorectal" & 
+    oncoth1$data$patient_group == "Case")
+
+n_nsclc_no_vte = sum(
+  oncoth1$data$primary_tumor_simplified == "NSCLC" & 
+    oncoth1$data$patient_group == "Control")
+
+n_nsclc_vte = sum(
+  oncoth1$data$primary_tumor_simplified == "NSCLC" & 
+    oncoth1$data$patient_group == "Case")
+
+n_oesophagogastric_no_vte = sum(
+  oncoth1$data$primary_tumor_simplified == "Oesophago-gastric" & 
+    oncoth1$data$patient_group == "Control")
+
+n_oesophagogastric_vte = sum(
+  oncoth1$data$primary_tumor_simplified == "Oesophago-gastric" & 
+    oncoth1$data$patient_group == "Case")
+
+n_pancreatic_no_vte = sum(
+  oncoth1$data$primary_tumor_simplified == "Pancreatic" & 
+    oncoth1$data$patient_group == "Control")
+
+n_pancreatic_vte = sum(
+  oncoth1$data$primary_tumor_simplified == "Pancreatic" & 
+    oncoth1$data$patient_group == "Case")
+
+
+legend_labels_and_n = c(
+  paste0("Colorectal w/o CAT (n=", n_colorectal_no_vte, ")"), 
+  paste0("Colorectal with CAT (n=", n_colorectal_vte, ")"),
+  paste0("NSCLC w/o CAT (n=", n_nsclc_no_vte, ")"), 
+  paste0("NSCLC with CAT (n=", n_nsclc_vte, ")"),
+  paste0("Oesophago-gastric w/o CAT (n=", n_oesophagogastric_no_vte, ")"), 
+  paste0("Oesophago-gastric with CAT (n=", n_oesophagogastric_vte, ")"),
+  paste0("Pancreatic w/o CAT (n=", n_pancreatic_no_vte, ")"), 
+  paste0("Pancreatic with CAT (n=", n_pancreatic_vte, ")")
+  )
+
+#median_survival_days = surv_median(stratified_stage_td_surv_fit)
+  
+# survplot_cat_cancer_type = autoplot(
+#   stratified_primary_tumor_td_surv_fit, 
+#   censor = FALSE, 
+#   conf.int = FALSE, 
+#   surv.size = 0.5, 
+#   surv.linetype = "strata") +
+#   theme_bw() +
+#   labs(
+#     x = "Time (months)", 
+#     y = "OS probability", 
+#     title = "") +
+#   theme(
+#     plot.title = element_text(hjust = 0.5), 
+#     legend.title = element_text(hjust = 0.5, face = "bold"),
+#     legend.text = element_text(size = 11),
+#     legend.position = "right") +
+#   scale_x_continuous(
+#     limits = c(0, 605), 
+#     breaks = seq(from = 0, to = 600, by = 60), 
+#     labels = seq(from = 0, to = 20, by = 2)) +
+#   scale_colour_manual(
+#     name = "CAT and Cancer type",
+  #   labels = legend_labels_and_n,
+  #   values = c("#F8766D", "#F8766D", 
+  #              "#00BA42", "#00BA42",
+  #              "#00BBDD", "#00BBDD", 
+  #              "#FF62BC", "#FF62BC")) +   
+  # scale_linetype_manual(
+  #   name = "CAT and Cancer type",
+  #   labels = legend_labels_and_n, 
+  #   values = c("solid", "longdash", 
+  #              "solid", "longdash",
+  #              "solid", "longdash", 
+  #              "solid", "longdash"))
+
+# Add log-rank p-value
+# survplot_cat_cancer_type = survplot_cat_cancer_type + 
+#   # Log-rank p-value
+#   annotate(
+#     geom = "text", 
+#     size = 4,
+#     x = 50,
+#     y = 0.2,
+#     label = "Log-rank",
+#     color = "black") + 
+#   annotate(
+#     geom = "text",
+#     size = 4,
+#     x = 50, 
+#     y = 0.15, 
+#     label = "<0.0001") 
+
+# Add median survival line
+# survplot_cat_cancer_type = survplot_cat_cancer_type +
+#   # Horizontal line
+#   geom_segment(
+#     aes(x = 0, y = 0.5, xend = 478, yend = 0.5), 
+#     linetype = "dashed", 
+#     size = 0.4) +
+#   # Vertical lines
+#   geom_segment(
+#     aes(x = 478, y = 0, xend = 478, yend = 0.5), 
+#     linetype = "dashed", 
+#     size = 0.4) +
+#   geom_segment(
+#     aes(x = 231, y = 0, xend = 231, yend = 0.5), 
+#     linetype = "dashed", 
+#     size = 0.4)
+
+# survplot_cat_cancer_type
+
+#dev.off()
+```
+
+
+This plot is messy and I intend to transform it into something easier to understand. But we can see that for all 4 types of tumor, median survival is lower when patients have one or more VTEs than when they have none.  
+
+Among the subgroup of patients that suffer VTE, pancreatic patients are the ones that die sooner (median survival time of almost 6 months). It is followed by NSCLC patients (median survival of 10.5 months, approximately); colorectal (median survival of 15.5 months approximately) and oesophago-gastric patients (median survival time of almost 19 months).  
+
+However, in the non-VTE patient's subgroup, pancreatic, NSCLC and oesophago-gastric have similar median survival times; whilst colorectal cancer patients have the best prognostic among all of them. This could also be related to the fact that the majority of colorectal cancer patients are in stage III (45.7%) and a lesser percentage (36.4%) are in stage IV. In the previous section, we have seen that stage IV cancer patients, regardless of the type of tumor, are the ones with shorter survival times.    
+
+The p-value shows that having a VTE is significantly associated with a difference in survival between patients subgroups, regardless of the type of cancer.  
+
+
+## KM curves of other time-dependent covariates
+
+### Blood transfusions
+
+```{r}
+# Fit survival analysis model
+blood_transf_td_surv_fit = survfit(
+  Surv(
+    time = tstart, 
+    time2 = tstop, 
+    event = death) ~ 
+    blood_transfusion + 
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = survival_vte_tmerge)
+
+blood_transf_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+blood_transf_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    blood_transfusion + 
+    #strata(primary_tumor_simplified) + #test this primary_tumor_simplified
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
+
+blood_transf_cph_tests_summary = summary(blood_transf_cph_fit)
+
+blood_transf_cph_tests_summary$robscore[["pvalue"]]
+
+```
+
+
+```{r}
+blood_transf_td_survival_km_plot = ggsurvplot(
+    fit = blood_transf_td_surv_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    surv.plot.height = 1.25, 
+    tables.height = 0.25,
+    risk.table = "abs_pct", 
+    risk.table.height = 0.3, 
+    fontsize = 3,
+    risk.table.col = "strata", 
+    risk.table.y.text.col = TRUE,
+    legend.title = " ",
+    legend.labs = c("No blood transfusions", 
+                    "One or more blood transfusions"),
+    #linetype = "Stage IV", 
+    surv.median.line = "hv",
+    xlab = "Time to death (months)",
+    ylab = "Overall Survival Probability",
+    ggtheme = theme_bw(), 
+    #palette = c("black", "black", "red", "red")
+    )
+
+# Add p-value
+blood_transf_td_survival_km_plot$plot = 
+  blood_transf_td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      blood_transf_cph_tests_summary$robscore[["pvalue"]], 
+      scientific = TRUE, 
+      digits = 1)),
+    color = "black")
+
+blood_transf_td_survival_km_plot
+
+```
+
+
+```{r}
+coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    primary_tumor_simplified + 
+    tnm_stage_grouped +
+    blood_transfusion + 
+    #strata(primary_tumor_simplified, tnm_stage_two_groups) + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge) %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+```{r}
+cox.zph(coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    primary_tumor_simplified + 
+    tnm_stage_grouped +
+    blood_transfusion + 
+    #strata(primary_tumor_simplified, tnm_stage_two_groups) + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge))
+```
+
+
+
+### Immobilisation
+
+```{r}
+# Fit survival analysis model
+immobilisation_td_surv_fit = survfit(
+  Surv(
+    time = tstart, 
+    time2 = tstop, 
+    event = death) ~ 
+    immobilisation + 
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = survival_vte_tmerge)
+
+immobilisation_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+immobilisation_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    immobilisation + 
+    #strata(primary_tumor_simplified) + #test this primary_tumor_simplified
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
+
+immobilisation_cph_tests_summary = summary(immobilisation_cph_fit)
+
+immobilisation_cph_tests_summary$robscore[["pvalue"]]
+
+```
+
+
+```{r}
+immobilisation_td_survival_km_plot = ggsurvplot(
+    fit = immobilisation_td_surv_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    surv.plot.height = 1.25, 
+    tables.height = 0.25,
+    risk.table = "abs_pct", 
+    risk.table.height = 0.3, 
+    fontsize = 3,
+    risk.table.col = "strata", 
+    risk.table.y.text.col = TRUE,
+    legend.title = " ",
+    legend.labs = c("No immobilisation", 
+                    "Immobilised one or more times"),
+    #linetype = "Stage IV", 
+    surv.median.line = "hv",
+    xlab = "Time to death (months)",
+    ylab = "Overall Survival Probability",
+    ggtheme = theme_bw(), 
+    #palette = c("black", "black", "red", "red")
+    )
+
+# Add p-value
+immobilisation_td_survival_km_plot$plot = 
+  immobilisation_td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      immobilisation_cph_tests_summary$robscore[["pvalue"]], 
+      scientific = TRUE, 
+      digits = 1)),
+    color = "black")
+
+immobilisation_td_survival_km_plot
+
+```
+
+
+```{r}
+coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    primary_tumor_simplified +
+    tnm_stage_grouped + 
+    immobilisation + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge) %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+### Recent major surgeries
+
+```{r}
+# Fit survival analysis model
+recent_major_surgery_td_surv_fit = survfit(
+  Surv(
+    time = tstart, 
+    time2 = tstop, 
+    event = death) ~ 
+    recent_major_surgery + 
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = survival_vte_tmerge)
+
+recent_major_surgery_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+recent_major_surgery_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    recent_major_surgery + 
+    #strata(primary_tumor_simplified) + #test this primary_tumor_simplified
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
+
+recent_major_surgery_cph_tests_summary = summary(recent_major_surgery_cph_fit)
+
+recent_major_surgery_cph_tests_summary$robscore[["pvalue"]]
+
+recent_major_surgery_cph_fit 
+```
+
+
+```{r}
+recent_major_surgery_td_survival_km_plot = ggsurvplot(
+    fit = recent_major_surgery_td_surv_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    surv.plot.height = 1.25, 
+    tables.height = 0.25,
+    risk.table = "abs_pct", 
+    risk.table.height = 0.3, 
+    fontsize = 3,
+    risk.table.col = "strata", 
+    risk.table.y.text.col = TRUE,
+    legend.title = " ",
+    legend.labs = c("No major surgery", 
+                    "Major surgery"),
+    #linetype = "Stage IV", 
+    surv.median.line = "hv",
+    xlab = "Time to death (months)",
+    ylab = "Overall Survival Probability",
+    ggtheme = theme_bw(), 
+    #palette = c("black", "black", "red", "red")
+    )
+
+# Add p-value
+recent_major_surgery_td_survival_km_plot$plot = 
+  recent_major_surgery_td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      recent_major_surgery_cph_tests_summary$robscore[["pvalue"]], 
+      scientific = TRUE, 
+      digits = 1)),
+    color = "black")
+
+recent_major_surgery_td_survival_km_plot
+
+```
+
+
+```{r}
+coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    primary_tumor_simplified +
+    tnm_stage_grouped +
+    recent_major_surgery +
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge) %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+### Thromboprophylaxis received during hospitalization
+
+```{r}
+# Fit survival analysis model
+thromboprophylaxis_hospital_td_surv_fit = survfit(
+  Surv(
+    time = tstart, 
+    time2 = tstop, 
+    event = death) ~ 
+    thromboprophylaxis_hospital + 
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = survival_vte_tmerge)
+
+thromboprophylaxis_hospital_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+thromboprophylaxis_hospital_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    thromboprophylaxis_hospital + 
+    #strata(primary_tumor_simplified) + #test this primary_tumor_simplified
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
+
+thromboprophylaxis_hospital_cph_tests_summary = summary(thromboprophylaxis_hospital_cph_fit)
+
+thromboprophylaxis_hospital_cph_tests_summary$robscore[["pvalue"]]
+
+```
+
+
+```{r}
+thromboprophylaxis_hospital_td_survival_km_plot = 
+  ggsurvplot(
+    fit = thromboprophylaxis_hospital_td_surv_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    surv.plot.height = 1.25, 
+    tables.height = 0.25,
+    risk.table = "abs_pct", 
+    risk.table.height = 0.3, 
+    fontsize = 3,
+    risk.table.col = "strata", 
+    risk.table.y.text.col = TRUE,
+    legend.title = " ",
+    legend.labs = c("No thromboprophylaxis", 
+                    "Thromboprophylaxis"),
+    #linetype = "Stage IV", 
+    surv.median.line = "hv",
+    xlab = "Time to death (months)",
+    ylab = "Overall Survival Probability",
+    ggtheme = theme_bw(), 
+    #palette = c("black", "black", "red", "red")
+    )
+
+# Add p-value
+thromboprophylaxis_hospital_td_survival_km_plot$plot = 
+  thromboprophylaxis_hospital_td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      thromboprophylaxis_hospital_cph_tests_summary$robscore[["pvalue"]], 
+      scientific = TRUE, 
+      digits = 1)),
+    color = "black")
+
+thromboprophylaxis_hospital_td_survival_km_plot
+
+```
+
+
+```{r}
+coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    primary_tumor_simplified +
+    tnm_stage_grouped +
+    thromboprophylaxis_hospital + 
+    #strata(primary_tumor_simplified, tnm_stage_grouped) + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)  %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+### Erythropoietin treatment
+
+```{r}
+# Fit survival analysis model
+erythropoietin_tx_td_surv_fit = survfit(
+  Surv(
+    time = tstart, 
+    time2 = tstop, 
+    event = death) ~ 
+    erythropoietin_tx + 
+    #strata(tnm_stage_two_groups) +
+    cluster(id), 
+  id = id,
+  data = survival_vte_tmerge)
+
+erythropoietin_tx_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+erythropoietin_tx_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    erythropoietin_tx + 
+    #strata(tnm_stage_two_groups) + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
+
+erythropoietin_tx_cph_tests_summary = summary(erythropoietin_tx_cph_fit)
+
+erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]]
+
+```
+
+
+```{r}
+erythropoietin_tx_td_survival_km_plot = 
+  ggsurvplot(
+    fit = erythropoietin_tx_td_surv_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    surv.plot.height = 1.25, 
+    tables.height = 0.25,
+    risk.table = "abs_pct", 
+    risk.table.height = 0.3, 
+    fontsize = 3,
+    risk.table.col = "strata", 
+    risk.table.y.text.col = TRUE,
+    legend.title = " ",
+    legend.labs = c("No erythropoietin", 
+                    "Erythropoietin"),
+    #linetype = "Stage IV", 
+    surv.median.line = "hv",
+    xlab = "Time to death (months)",
+    ylab = "Overall Survival Probability",
+    ggtheme = theme_bw(), 
+    #palette = c("black", "black", "red", "red")
+    )
+
+# Add p-value
+erythropoietin_tx_td_survival_km_plot$plot = 
+  erythropoietin_tx_td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]], 
+      scientific = TRUE, 
+      digits = 1)),
+    color = "black")
+
+erythropoietin_tx_td_survival_km_plot
+
+```
+
+```{r}
+coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    primary_tumor_simplified +
+    tnm_stage_grouped +
+    erythropoietin_tx + 
+    #strata(primary_tumor_simplified, tnm_stage_grouped) + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)  %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    vte_event:erythropoietin_tx + 
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)  %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+#### Erythropoietin treatment stratified by stage
+
+
+```{r}
+# Fit survival analysis model
+stratified_stage_erythropoietin_tx_td_surv_fit = survfit(
+  Surv(
+    time = tstart, 
+    time2 = tstop, 
+    event = death) ~ 
+    erythropoietin_tx + 
+    strata(tnm_stage_two_groups) + 
+    cluster(id), 
+  id = id,
+  data = survival_vte_tmerge)
+
+stratified_stage_erythropoietin_tx_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+stratified_stage_erythropoietin_tx_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    erythropoietin_tx + 
+    strata(tnm_stage_two_groups) + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
+
+stratified_stage_erythropoietin_tx_cph_tests_summary = summary(stratified_stage_erythropoietin_tx_cph_fit)
+
+stratified_stage_erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]]
+
+```
+
+
+```{r}
+stratified_stage_erythropoietin_tx_td_survival_km_plot = 
+  ggsurvplot(
+    fit = stratified_stage_erythropoietin_tx_td_surv_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    #surv.plot.height = 1.25, 
+    #tables.height = 0.25,
+    #risk.table = "abs_pct", 
+    #risk.table.height = 0.3, 
+    #fontsize = 3,
+    #risk.table.col = "strata", 
+    #risk.table.y.text.col = TRUE,
+    legend.title = " ",
+    legend.labs = c("No erythropoietin - Stages I-III",
+                    "No erythropoietin - Stage IV",
+                    "Erythropoietin - Stages I-III", 
+                    "Erythropoietin - Stage IV"),
+    #linetype = "vte_event", 
+    surv.median.line = "hv",
+    xlab = "Time to death (months)",
+    ylab = "Overall Survival Probability",
+    ggtheme = theme_bw(), 
+    #palette = c("black", "black", "red", "red")
+    )
+
+# Add p-value
+stratified_stage_erythropoietin_tx_td_survival_km_plot$plot = 
+  stratified_stage_erythropoietin_tx_td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]], 
+      scientific = TRUE, 
+      digits = 1)),
+    color = "black")
+
+stratified_stage_erythropoietin_tx_td_survival_km_plot
+
+```
+
+Stage IV acts as a confounder variable, since it is the one responsible for the false statistical difference in survival between patients that had erythropoietin and those who did not. Actually, the treatment with erythropoietin does not affect survival. 
+
+
+```{r}
+coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    erythropoietin_tx + 
+    strata(tnm_stage_grouped) + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)  %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    vte_event:erythropoietin_tx + 
+    strata(tnm_stage_grouped) +
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)  %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+
+# Multivariate CPH regression
+
+
+## Exploratory CPH regression
+
+For example, in a Cox model, you generally should limit yourself to about 1 candidate predictor per 15 events in your data set.
+
+https://stats.stackexchange.com/questions/178944/precisely-how-does-rs-coxph-handle-repeated-measures  
+
+One approach to dealing with a violation of the proportional hazards assumption is to stratify by that variable. Including a strata() term will result in a separate baseline hazard function being fit for each level in the stratification variable. It will be no longer possible to make direct inference on the effect associated with that variable.  
+
+
+```{r}
+
+all_covariates_td_cph_reg = coxph(
+  Surv(time = tstart, time2 = tstop, event = death) ~ 
+    cluster(id) + 
+    vte_event + 
+    primary_tumor_simplified + # No significance along with       vte_event:tnm_stage_grouped
+    #vte_event:primary_tumor_simplified:tnm_stage_two_groups + # No significance
+    #vte_event:age_when_cancer_dx:menopausal_status_imp + 
+    age_when_cancer_dx + 
+    menopausal_status_imp +
+    #age_when_cancer_dx:menopausal_status_imp + # No significance
+    #age_when_cancer_dx:gender + # No significance
+    #gender + 
+    #gender:menopausal_status_imp +
+    #ethnicity_grouped + 
+    #weight + 
+    #height + 
+    #body_surface_area + 
+    #bmi_value +
+    #bmi_category + 
+    performance_status_category_corrected_imp + 
+    #strata(albumin_imp) + 
+    #aptt_imp + 
+    #aptt_ratio_imp + 
+    #bilirubin_imp + 
+    #alkaline_phosphatase_imp + 
+    #hemoglobin + 
+    #inr + # causes problems
+    #leukocytes_imp + 
+    #platelets + 
+    #leukocytosis_imp + 
+    #thrombocytosis + 
+    #low_hemoglobin + 
+    #personal_background + 
+    #major_surgery_in_medical_history + 
+    #hormone_therapy + 
+    #pregnancy + 
+    #oral_contraceptive_tx + 
+    #diabetes_mellitus + 
+    #dyslipidemia + 
+    #tobacco_use + 
+    #copd + 
+    #arterial_hypertension + 
+    #chronic_cardiac_insufficiency + 
+    #renal_insufficiency + 
+    #khorana_risk_score_imp + 
+    #two_groups_krs + 
+    #tic_onco_imp + 
+    #previous_onco_surgery + 
+    tumor_surgically_removed + 
+    #primary_tumor_simplified +
+    #progression_according_to_clinical_stage + 
+    #tnm_stage + 
+    #tnm_stage_detailed + 
+    tnm_stage_grouped + 
+    #strata(tnm_stage_grouped, vte_event) + 
+    #t_stage_grouped + 
+    #n_stage_grouped + 
+    #m_stage_grouped + 
+    #histology_type_imp + 
+    #mucinous_histology_imp + 
+    #grade_histological_differentiation_imp + 
+    #metastasis_dx + 
+    #n_metastases + 
+    #metastasis_adrenal_glands + 
+    #metastasis_bones +
+    #metastasis_brain + 
+    #metastasis_liver + 
+    #metastasis_lung + 
+    #metastasis_lymph_nodes + 
+    #metastasis_peritoneum + 
+    #metastasis_pleura + 
+    #metastasis_skin + 
+    #metastasis_soft_tissues + 
+    #other_metastases + 
+    #catheter_device_imp + 
+    #venous_insufficiency_imp + 
+    family_background_vte + 
+    #family_background_vte_n + 
+    #family_background_vte_all_relatives +
+    #family_background_VTE_father + 
+    #family_background_VTE_mother + 
+    #family_background_VTE_siblings + 
+    #family_background_VTE_offspring + 
+    #family_background_VTE_other_relatives +
+    previous_vte, # + 
+    ##n_previous_ate +
+    #previous_ate_type +
+    #previous_ate + 
+    #cva_ate + 
+    #myocardial_infarction_ate + 
+    #pad_ate + 
+    #tia_ate + 
+    #other_thromb_ate + 
+    #anticoag_tx_vte + 
+    #anticoag_tx_vte_drugs + 
+    #anticoag_tx_cardiopathy + 
+    #anticoag_tx_other_causes + 
+    #anticoag_tx_reason + 
+    #anticoag_tx_apixaban + 
+    #anticoag_tx_dabigatran + 
+    #anticoag_tx_lmwh + 
+    #anticoag_tx_lmwh_dosage + 
+    #anticoag_tx_vit_k_antag + 
+    #anticoag_tx_other_drugs + 
+    #anticoag_tx_currently + 
+    #n_antiaggreg_tx + 
+    #n_antiaggreg_tx,
+    #antiaggreg_tx_reason + 
+    #antiaggreg_tx_cardiopathy + 
+    #antiaggreg_tx_cva + 
+    #antiaggreg_tx_other_causes + 
+    #antiaggreg_tx_currently
+    #blood_transfusion + # Correlated with leukocytosis, low red cells, low hemoglobin, etc.
+    #immobilisation + # Correlated with PS
+    #recent_major_surgery + 
+    #thromboprophylaxis_hospital, # + 
+    #erythropoietin_tx, # Correlated with low red blood cells
+  #singular.ok = TRUE,
+  id = id,
+  data = survival_vte_tmerge)
+
+
+all_covariates_td_cph_reg %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+
+```
+
+
+```{r}
+cox.zph(all_covariates_td_cph_reg)
+```
+
+
+[Investigate primary_tumor:previous_onco_surgery y tnm_stage:previous_onco_surgery.]
+
+```{r}
+concordance(all_covariates_td_cph_reg)
+```
+
+
+
+```{r}
+#glm(death ~ ., family=binomial(link=logit), data=survival_vte_tmerge)
+```
+
+
+```{r}
+# Multicollinearity
+rms::vif(all_covariates_td_cph_reg)
+```
+
+
+```{r}
+cox.zph(all_covariates_td_cph_reg)
+```
+
+## Backward feature selection in CPH regression model
+
+```{r}
+# backward_fs_cph = riskRegression::selectCox(
+#   Surv(time = tstart, time2 = tstop, event = death) ~ 
+#     cluster(id) + 
+#     vte_event + 
+#     primary_tumor_simplified + 
+#     age_when_cancer_dx_65 + 
+#     #gender + # Multicollinear with menopausal status
+#     menopausal_status_imp +
+#     weight + 
+#     height + 
+#     body_surface_area + 
+#     bmi_value +
+#     bmi_category + 
+#     performance_status_category_corrected_imp + 
+#     #albumin_imp + 
+#     #albumin_imp_category + # High albumin is collinear with something
+#     #aptt_imp + 
+#     aptt_imp_category +
+#     #aptt_ratio_imp + 
+#     #bilirubin_imp + 
+#     #alkaline_phosphatase_imp + 
+#     #hemoglobin + 
+#     #inr_imp + # causes problems
+#     inr_imp_category +
+#     #leukocytes_imp + 
+#     #platelets + 
+#     leukocytosis_imp + 
+#     thrombocytosis + 
+#     low_hemoglobin + 
+#     #personal_background + 
+#     #major_surgery_in_medical_history + 
+#     #hormone_therapy + 
+#     #pregnancy + 
+#     #oral_contraceptive_tx + 
+#     diabetes_mellitus + 
+#     dyslipidemia + 
+#     tobacco_use_imp + 
+#     copd + 
+#     arterial_hypertension + 
+#     chronic_cardiac_insufficiency + 
+#     renal_insufficiency + 
+#     venous_insufficiency_imp +
+#     #khorana_risk_score_imp + 
+#     #two_groups_krs + 
+#     #tic_onco_imp + 
+#     previous_onco_surgery + 
+#     tumor_surgically_removed + 
+#     #progression_according_to_clinical_stage_imp + 
+#     #tnm_stage + 
+#     #tnm_stage_detailed + 
+#     tnm_stage_grouped + 
+#     #t_stage_grouped + 
+#     #n_stage_grouped + 
+#     #m_stage_grouped + 
+#     histology_type_imp + 
+#     mucinous_histology_imp + 
+#     grade_histological_differentiation_imp + 
+#     #n_metastases + 
+#     #metastasis_adrenal_glands + 
+#     #metastasis_bones +
+#     #metastasis_brain + 
+#     #metastasis_liver + 
+#     #metastasis_lung + 
+#     #metastasis_lymph_nodes + 
+#     #metastasis_peritoneum + 
+#     #metastasis_pleura + 
+#     #metastasis_skin + 
+#     ##metastasis_soft_tissues + 
+#     #other_metastases + 
+#     catheter_device_imp + 
+#     family_background_vte + 
+#     #family_background_vte_n + 
+#     #family_background_vte_all_relatives +
+#     #family_background_VTE_father + 
+#     #family_background_VTE_mother + 
+#     #family_background_VTE_siblings + 
+#     #family_background_VTE_offspring + 
+#     #family_background_VTE_other_relatives +
+#     previous_vte + 
+#     previous_ate + 
+#     #n_previous_ate +
+#     #previous_ate_type +
+#     #cva_ate + 
+#     #myocardial_infarction_ate + 
+#     #pad_ate + 
+#     #tia_ate + 
+#     #other_thromb_ate + 
+#     #anticoag_tx_vte + 
+#     #anticoag_tx_vte_drugs + 
+#     #anticoag_tx_cardiopathy + 
+#     #anticoag_tx_other_causes + 
+#     #anticoag_tx_reason + 
+#     #anticoag_tx_apixaban + 
+#     #anticoag_tx_dabigatran + 
+#     #anticoag_tx_lmwh + 
+#     #anticoag_tx_lmwh_dosage + 
+#     #anticoag_tx_vit_k_antag + 
+#     #anticoag_tx_other_drugs + 
+#     #anticoag_tx_currently + 
+#     #n_antiaggreg_tx +
+#     #antiaggreg_tx_reason + 
+#     #antiaggreg_tx_cardiopathy + 
+#     #antiaggreg_tx_cva + 
+#     #antiaggreg_tx_other_causes + 
+#     #antiaggreg_tx_currently
+#     blood_transfusion + # Correlated with low blood cells, low hemoglobin, etc.
+#     immobilisation + # Correlated with PS
+#     #recent_major_surgery + 
+#     thromboprophylaxis_hospital + 
+#     erythropoietin_tx, # Correlated with low red blood cells
+#   data = survival_vte_tmerge, 
+#   rule = "aic"
+# )
+# 
+# backward_fs_cph
+
+```
+
+```{r}
+# Replicate model obtained by backward feature selection to evaluate PH
+#cox.zph(coxph(
+#  Surv(time = tstart, time2 = tstop, event = death) ~
+#    cluster(id) + 
+#    vte_event + 
+#    primary_tumor_simplified + 
+#    performance_status_category_corrected_imp + 
+#    thrombocytosis + 
+#    tumor_surgically_removed + 
+#    tnm_stage_grouped + 
+#    grade_histological_differentiation_imp + 
+#    blood_transfusion + 
+#    immobilisation,
+#  id = id,
+#  data = survival_vte_tmerge), terms = FALSE)
+```
+
+
+## Stepwise feature selection CPH
+
+```{r}
+# Create dataset
+survival_vte_tmerge_stepwise = survival_vte_tmerge %>%
+  filter(!is.na(n_comorbidities))
+
+# Do one-hot encoding with primary tumour
+survival_vte_tmerge_stepwise = fastDummies::dummy_cols(survival_vte_tmerge_stepwise, select_columns = "primary_tumor_simplified")
+
+# Rename with proper format
+survival_vte_tmerge_stepwise %<>%
+  rename(primary_tumor_simplified_Oesophagogastric = `primary_tumor_simplified_Oesophago-gastric`)
+
+# Delete variables with time until event 
+# They contain NAs that throw an error when training model
+# This did not happen before
+# survival_vte_tmerge_stepwise %<>%
+#   select(-starts_with("tu_"))
+
+```
+
+
+### My.stepwise.coxph
+
+```{r}
+survival_vte_tmerge_dummies = fastDummies::dummy_cols(survival_vte_tmerge)
+```
+
+
+```{r}
+stepwise_var_list = list(
+  "vte_event", 
+  #"`age_when_cancer_dx_50_Younger than 50 years old`",
+  #"`age_when_cancer_dx_50_Older or 50 years old`",
+  "`age_when_cancer_dx_65_Younger than 65 years old`",
+  "`age_when_cancer_dx_65_Older or 65 years old`", 
+  #"gender_Male", 
+  #"gender_Female",                            
+  "menopausal_status_imp_Male", 
+  "`menopausal_status_imp_Pre-menopausal`",
+  "`menopausal_status_imp_Peri-menopausal`", 
+  "`menopausal_status_imp_Post-menopausal`",
+  #"weight", 
+  #"height", 
+  "body_surface_area", 
+  #"bmi_value",
+  "bmi_category_Underweight", 
+  "bmi_category_Normal", 
+  "bmi_category_Overweight", 
+  "bmi_category_Obese", 
+  "performance_status_category_corrected_imp_0",
+  "performance_status_category_corrected_imp_1", 
+  "performance_status_category_corrected_imp_2", 
+  "albumin_imp_category_Normal", 
+  "albumin_imp_category_Low", 
+  "albumin_imp_category_High",  
+  "aptt_imp_category_Normal", 
+  "aptt_imp_category_Low", 
+  "aptt_imp_category_High",
+  "aptt_ratio_imp_category_Normal", 
+  "aptt_ratio_imp_category_Low",
+  "aptt_ratio_imp_category_High", 
+  "bilirubin_imp_category_Normal",
+  "bilirubin_imp_category_Low", 
+  "bilirubin_imp_category_High", 
+  "creatinine_imp_category_Normal", 
+  "creatinine_imp_category_Low", 
+  "creatinine_imp_category_High",
+  "alkaline_phosphatase_imp_category_Normal", 
+  "alkaline_phosphatase_imp_category_Low", 
+  "alkaline_phosphatase_imp_category_High", 
+  "hemoglobin_category_Normal", 
+  "hemoglobin_category_Low",
+  "hemoglobin_category_High", 
+  "`inr_imp_category_Normal coagulation`", 
+  "`inr_imp_category_Fast coagulation`", 
+  "`inr_imp_category_Slow coagulation`",
+  "leukocytes_imp_category_Normal", 
+  "leukocytes_imp_category_Low",
+  "leukocytes_imp_category_High", 
+  #"platelets_category_Normal", 
+  #"platelets_category_Low", 
+  #"platelets_category_High", 
+  #"platelets_category_NA", 
+  "leukocytosis_imp_No",  
+  "leukocytosis_imp_Yes", 
+  "thrombocytosis_No",
+  "thrombocytosis_Yes", 
+  "low_hemoglobin_No", 
+  "low_hemoglobin_Yes", 
+  "personal_background_No",
+  "personal_background_Yes", 
+  "major_surgery_in_medical_history_No", 
+  "major_surgery_in_medical_history_Yes", 
+  #"hormone_therapy_imp_No", 
+  #"hormone_therapy_imp_Yes", 
+  #"pregnancy_imp_Male", 
+  #"pregnancy_imp_No", 
+  #"pregnancy_imp_Yes", 
+  #"oral_contraceptive_tx_Male", 
+  #"oral_contraceptive_tx_No", 
+  #"oral_contraceptive_tx_NA",
+  #"diabetes_mellitus_No", 
+  #"diabetes_mellitus_Yes", 
+  #"diabetes_mellitus_NA",
+  #"dyslipidemia_No", 
+  #"dyslipidemia_Yes",
+  #"dyslipidemia_NA",
+  "`tobacco_use_imp_Never has smoked`", 
+  "`tobacco_use_imp_Former smoker`", 
+  "`tobacco_use_imp_Active smoker`", 
+  #"copd_No", 
+  #"copd_Yes", 
+  #"copd_NA",
+  #"arterial_hypertension_No", 
+  #"arterial_hypertension_Yes", 
+  #"arterial_hypertension_NA",
+  #"chronic_cardiac_insufficiency_No", 
+  #"chronic_cardiac_insufficiency_Yes",
+  #"chronic_cardiac_insufficiency_NA",
+  #"renal_insufficiency_No", 
+  #"renal_insufficiency_Yes", 
+  #"renal_insufficiency_NA",
+  "venous_insufficiency_imp_No", 
+  "venous_insufficiency_imp_Yes",
+  #"khorana_risk_score_imp_0",
+  #"khorana_risk_score_imp_1",
+  #"khorana_risk_score_imp_2",
+  #"khorana_risk_score_imp_3", 
+  #"khorana_risk_score_imp_4", 
+  #"krs_category_Low risk", 
+  #"krs_category_Intermediate risk",
+  #"krs_category_High risk", 
+  #"two_groups_krs_Low risk",
+  #"two_groups_krs_High risk",
+  #"tic_onco_imp_Low risk",
+  #"tic_onco_imp_High risk", 
+  "previous_onco_surgery_No", 
+  "previous_onco_surgery_Yes", 
+  "tumor_surgically_removed_No", 
+  "tumor_surgically_removed_Yes", 
+  "primary_tumor_simplified_Colorectal", 
+  "primary_tumor_simplified_NSCLC", 
+  "`primary_tumor_simplified_Oesophago-gastric`",
+  "primary_tumor_simplified_Pancreatic",
+  #"progression_according_to_clinical_stage_imp_Surgically removed tumor/In complete remission",
+  #"progression_according_to_clinical_stage_imp_Locally advanced", 
+  #"progression_according_to_clinical_stage_imp_Metastatic", 
+  "`tnm_stage_grouped_I-II`", 
+  "tnm_stage_grouped_III", 
+  "tnm_stage_grouped_IV", 
+  "histology_type_imp_Other",
+  "histology_type_imp_Adenocarcinoma", 
+  "histology_type_imp_Epidermoid", 
+  "mucinous_histology_imp_No", 
+  "mucinous_histology_imp_Yes", 
+  "`grade_histological_differentiation_imp_Well differentiated`", 
+  "`grade_histological_differentiation_imp_Moderately differentiated`", 
+  "`grade_histological_differentiation_imp_Poorly differentiated`", 
+  #"n_metastases_0", 
+  #"n_metastases_1",
+  #"n_metastases_2", 
+  #"n_metastases_3",
+  #"n_metastases_4",  
+  #"n_metastases_5", 
+  #"metastasis_adrenal_glands_No",
+  #"metastasis_adrenal_glands_Yes", 
+  #"metastasis_bones_No",
+  #"metastasis_bones_Yes",
+  #"metastasis_brain_No", 
+  #"metastasis_brain_Yes", 
+  #"metastasis_liver_No", 
+  #"metastasis_liver_Yes", 
+  #"metastasis_lung_No",
+  #"metastasis_lung_Yes",
+  #"metastasis_lymph_nodes_No", 
+  #"metastasis_lymph_nodes_Yes", 
+  #"metastasis_peritoneum_No", 
+  #"metastasis_peritoneum_Yes",  
+  #"metastasis_pleura_No", 
+  #"metastasis_pleura_Yes", 
+  #"metastasis_skin_No",
+  #"metastasis_skin_Yes", 
+  #"metastasis_soft_tissues_No",
+  #"metastasis_soft_tissues_Yes", 
+  #"other_metastases_No", 
+  #"other_metastases_Yes", 
+  "catheter_device_imp_No",
+  "catheter_device_imp_Yes", 
+  "family_background_vte_No",
+  "family_background_vte_Yes", 
+  "previous_vte_No", 
+  "previous_vte_Yes", 
+  "previous_ate_No", 
+  "previous_ate_Yes", 
+  #anticoag_tx_vte , 
+  #anticoag_tx_vte_drugs , 
+  #anticoag_tx_cardiopathy , 
+  #anticoag_tx_other_causes , 
+  #anticoag_tx_reason , 
+  #anticoag_tx_apixaban , 
+  #anticoag_tx_dabigatran , 
+  #anticoag_tx_lmwh , 
+  #anticoag_tx_lmwh_dosage , 
+  #anticoag_tx_vit_k_antag , 
+  #anticoag_tx_other_drugs , 
+  #anticoag_tx_currently , 
+  #n_antiaggreg_tx ,
+  #antiaggreg_tx_reason , 
+  #antiaggreg_tx_cardiopathy , 
+  #antiaggreg_tx_cva , 
+  #antiaggreg_tx_other_causes , 
+  #antiaggreg_tx_currently
+  "blood_transfusion", # Correlated with low blood cells, low hemoglobin, etc.
+  "immobilisation", # Correlated with PS
+  #recent_major_surgery , 
+  "thromboprophylaxis_hospital", 
+  "erythropoietin_tx"
+  )
+```
+
+
+```{r}
+# Need to convert categorical variables to dummies
+# My.stepwise::My.stepwise.coxph(
+#   T1 = "tstart", 
+#   T2 = "tstop",
+#   Status = "death", 
+#   variable.list = stepwise_var_list,
+#   data = survival_vte_tmerge_dummies
+# )
+```
+
+
+```{r}
+# stepwise_cph_model
+```
+
+
+
+### StepReg packages
+
+Using `stepReg` package.  
+
+```{r}
+StepReg::stepwiseCox(
+  formula = Surv(time = tstart, time2 = tstop, event = death) ~ 
+    vte_event + 
+    age_when_cancer_dx + 
+    gender + # Multicollinear with menopausal status
+    #menopausal_status_imp + 
+    #weight + 
+    #height + 
+    #body_surface_area + 
+    # bmi_value +
+    bmi_category + 
+    # performance_status_category_corrected_imp + 
+    # albumin_imp + # Correlated with hemoglobin
+    #aptt_imp_category + # correlated with aptt_ratio
+    # aptt_ratio_imp + # it's best to use aptt ratio instead of aptt 
+    # bilirubin_imp + # correlated with INR and alkaline phosphatase
+    # creatinine_imp + 
+    # alkaline_phosphatase_imp + # correlated with bilirubin and INR
+    # low_hemoglobin + #_category + 
+    # inr_imp + #_category +
+    # leukocytes_imp + # correlated with platelets
+    # platelets + # correlated with leukocytes
+    # leukocytosis_imp + # correlated with leukocytes
+    # thrombocytosis + # correlated with platelet levels
+    # low_hemoglobin + # correlated with hemoglobin
+    #major_surgery_in_medical_history + 
+    #hormone_therapy + 
+    #pregnancy + 
+    #oral_contraceptive_tx + 
+    diabetes_mellitus +
+    dyslipidemia +
+    tobacco_use_imp +
+    # tobacco_use_imp_grouped +
+    copd_imp +
+    arterial_hypertension +
+    chronic_cardiac_insufficiency + # Very little variance
+    renal_insufficiency + # Very little variance
+    venous_insufficiency_imp +
+    n_comorbidities +
+    #khorana_risk_score_imp + 
+    #two_groups_krs + 
+    #tic_onco_imp + 
+    previous_onco_surgery + 
+    tumor_surgically_removed + 
+    primary_tumor_simplified +
+    #progression_according_to_clinical_stage_imp + 
+    #tnm_stage + 
+    #tnm_stage_detailed + 
+    tnm_stage_grouped + 
+    #tnm_stage_two_groups +
+    #t_stage_grouped + 
+    #n_stage_grouped + 
+    #m_stage_grouped + 
+    histology_type_imp +
+    mucinous_histology_imp +
+    # grade_histological_differentiation_imp + 
+    # n_metastases_grouped +
+    #metastasis_adrenal_glands + 
+    #metastasis_bones +
+    #metastasis_brain + 
+    #metastasis_liver + 
+    #metastasis_lung + 
+    #metastasis_lymph_nodes + 
+    #metastasis_peritoneum + 
+    #metastasis_pleura + 
+    #metastasis_skin + 
+    #metastasis_soft_tissues + 
+    #other_metastases + 
+    catheter_device_imp + 
+    family_background_vte +
+    #family_background_vte_n + 
+    #family_background_vte_all_relatives +
+    #family_background_VTE_father + 
+    #family_background_VTE_mother + 
+    #family_background_VTE_siblings + 
+    #family_background_VTE_offspring + 
+    #family_background_VTE_other_relatives +
+    previous_vte +
+    # previous_ate +
+    #n_previous_ate +
+    #previous_ate_type +
+    anticoag_tx_currently +  
+    antiaggreg_tx_currently +
+    # blood_transfusion + # Correlated with low blood cells, low hemoglobin, etc. CONFOUNDER
+    # immobilisation + # Correlated with PS. Also, CONFOUNDER
+    # recent_major_surgery + # few observations
+    # thromboprophylaxis_hospital + # CONFOUNDER
+    erythropoietin_tx,
+  data = survival_vte_tmerge_stepwise,
+  selection = "bidirection", 
+  select = "AIC", # either AIC, AICc or SBC
+  method = "efron"
+)
+```
+
+
+```{r}
+final_cph_model = coxph(
+  Surv(time = tstart, 
+       time2 = tstop, 
+       event = death) ~ 
+    cluster(id) + 
+    tnm_stage_grouped + 
+    primary_tumor_simplified +
+    vte_event +
+    tumor_surgically_removed +
+    catheter_device_imp +
+    family_background_vte +
+    previous_onco_surgery +    
+    n_comorbidities +
+    mucinous_histology_imp +
+    diabetes_mellitus +
+    erythropoietin_tx,
+  id = id,
+  data = survival_vte_tmerge_stepwise)
+
+cox.zph(final_cph_model)
+
+final_cph_model %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+summary(final_cph_model)
+```
+
+
+```{r}
+AIC(final_cph_model)
+```
+
+
+```{r}
+#AICcmodavg::aictab(final_cph_model)
+```
+
+
+#### Training/test set partition and CV
+
+See if there is consistency in variable selection and predictive capability of CV partitions, as well as with test set.
+
+```{r}
+# Set seed for reproducibility and consistency in results
+set.seed(2828)
+```
+
+
+```{r}
+# Target distribution when event of interest is death
+table(oncoth1$data$patient_status_at_end_study_simplified, useNA = "always")
+```
+
+
+```{r}
+# Partition data with repeated rows per patient into training and test set
+
+# Get unique IDs
+unique_ids <- unique(survival_vte_tmerge_stepwise$id)
+
+# Randomly assign each unique ID to either train or test
+train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids)))  # 80% for training
+test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
+
+# Partition the data into train and test sets based on the assigned IDs
+stepwise_training_set <- survival_vte_tmerge_stepwise %>% filter(id %in% train_ids)
+stepwise_testing_set <- survival_vte_tmerge_stepwise %>% filter(id %in% test_ids)
+
+# Check that IDs are not in training and test sets
+stopifnot(
+  identical(
+    sort(unique(stepwise_training_set$id)), sort(unique(stepwise_testing_set$id))) == FALSE)
+```
+
+
+```{r}
+# Create folds for 5-fold CV
+
+# Create a grouping variable for each ID
+group_var <- as.numeric(factor(stepwise_training_set$id))
+
+# Determine the unique IDs and shuffle them randomly to ensure a balanced distribution across the folds
+# Get unique IDs
+folds_unique_ids <- unique(group_var)
+
+# Shuffle the unique IDs randomly
+folds_shuffled_ids <- sample(folds_unique_ids)
+
+# Divide the shuffled IDs into five bins
+stepwise_folds <- cut(folds_shuffled_ids, breaks = 10, labels = FALSE)
+```
+
+
+```{r}
+# Initialize a vector to store the evaluation results
+stepwise_cv_vars_results <- vector("list", length = 10)
+stepwise_cv_cindex_results <- vector("list", length = 10)
+# stepwise_cv_vif_results <- vector("list", length = 10)
+
+for (i in 1:10) {
+  # Get the validation IDs
+  validation_ids <- unique_ids[stepwise_folds == i]
+  
+  # Get the validation fold
+  validation_fold <- stepwise_training_set[stepwise_training_set$id %in% validation_ids, ]
+  
+  # Get the training fold
+  training_fold <- stepwise_training_set[!(stepwise_training_set$id %in% validation_ids), ]
+  
+  # print("Training")
+  # print(head(training_fold, n = 10))
+  # 
+  # print("Validation")
+  # print(head(validation_fold, n = 10))
+  
+  # Check that IDs are not in training and test sets
+  stopifnot(
+    identical(
+      sort(unique(training_fold$id)), sort(unique(validation_fold$id))) == FALSE)
+  
+  # Train your model on the training fold
+  stepwise_model = StepReg::stepwiseCox(
+    formula = Surv(time = tstart, time2 = tstop, event = death) ~
+    vte_event +
+    # vte_recurrence +
+    # vte_event:vte_recurrence +
+    age_when_cancer_dx +
+    # age_quartiles + 
+    # age_when_cancer_dx_50 +
+    # age_when_cancer_dx_65 +
+    gender + # Collinear with menopausal status
+    # menopausal_status_imp +
+    # weight +
+    # height +
+    # body_surface_area +
+    bmi_value +
+    # bmi_category +
+    performance_status_category_corrected_imp +
+    # major_surgery_in_medical_history +
+    # hormone_therapy +
+    # pregnancy +
+    # oral_contraceptive_tx +
+    # diabetes_mellitus + # confounder
+    dyslipidemia +
+    tobacco_use_imp +
+    # tobacco_use_imp_grouped +
+    copd_imp +
+    arterial_hypertension +
+    # chronic_cardiac_insufficiency + # Very little variance
+    # renal_insufficiency + # Very little variance
+    venous_insufficiency_imp +
+    # n_comorbidities +
+    # khorana_risk_score_imp +
+    # two_groups_krs +
+    # tic_onco_imp +
+    # previous_onco_surgery +
+    tumor_surgically_removed + # uncomment
+    primary_tumor_simplified +
+    # primary_tumor_simplified_Colorectal +
+    # primary_tumor_simplified_NSCLC +
+    # primary_tumor_simplified_Oesophagogastric +
+    # primary_tumor_simplified_Pancreatic +
+    # progression_according_to_clinical_stage_imp + # too wide CI
+    #tnm_stage +
+    #tnm_stage_detailed +
+    # tnm_stage_grouped +
+    tnm_stage_two_groups +
+    # t_stage_grouped +
+    # n_stage_grouped +
+    # m_stage_grouped +
+    # histology_type_imp +
+    mucinous_histology_imp +
+    # grade_histological_differentiation_imp + # violates PH assumption
+    # n_metastases_grouped + # confounder, possibly correlated to pTNM stage
+    #metastasis_adrenal_glands +
+    #metastasis_bones +
+    #metastasis_brain +
+    #metastasis_liver +
+    #metastasis_lung +
+    #metastasis_lymph_nodes +
+    #metastasis_peritoneum +
+    #metastasis_pleura +
+    #metastasis_skin +
+    #metastasis_soft_tissues +
+    #other_metastases +
+    # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
+    family_background_vte +
+    #family_background_vte_n +
+    #family_background_vte_all_relatives +
+    #family_background_VTE_father +
+    #family_background_VTE_mother +
+    #family_background_VTE_siblings +
+    #family_background_VTE_offspring +
+    #family_background_VTE_other_relatives +
+    previous_vte +
+    previous_ate +
+    # n_previous_ate +
+    # previous_ate_type +
+    anticoag_tx_currently +
+    antiaggreg_tx_currently, # +
+    # blood_transfusion + # Correlated with low blood cells, low hemoglobin, etc. CONFOUNDER
+    # immobilisation + # Correlated with PS. Also, CONFOUNDER
+    # recent_major_surgery + # few observations
+    # thromboprophylaxis_hospital + # CONFOUNDER
+    # erythropoietin_tx,
+    data = training_fold,
+    include = "primary_tumor_simplified",
+    selection = "bidirection",
+    select = "AIC", # either AIC, AICc or SBC
+    method = "efron"
+    )
+  
+  # Save selected variables
+  selected_variables = as.vector(unlist(stepwise_model$`Selected Varaibles`))
+  # print(selected_variables)
+  
+  # Fit model with selected variables in this fold
+  # Create formula
+  fold_pcox_formula = as.formula(
+    sprintf('%s~%s', 'Surv(time = tstart, time2 = tstop, event = death)',
+            paste(selected_variables, collapse = "+ ")))
+  # Fit model
+  fold_cph_model = coxph(
+    formula = fold_pcox_formula, 
+    id = id,
+    data = validation_fold
+  )
+  
+  # VIF
+  # vif_results = car::vif(fold_cph_model)
+  # print(vif_results)
+  
+  # Make predictions on the validation fold
+  # The result is the hazard of suffering the event. It's difficult to interpret
+  predictions <- predict(fold_cph_model, newdata = validation_fold)
+  # print(predictions)
+  
+  # Evaluate the predictions
+  # C-index
+  fold_cindex <- concordance(fold_cph_model, newdata = validation_fold)
+  # print(fold_cindex$concordance)
+  
+  # Likelihood ratio test (LRT)
+  # fold_lrt <- anova(fold_cph_model)
+  # fold_lrt_p_value <- fold_lrt$`Pr(>Chisq)`[2]  # P-value for the model
+  # print(fold_lrt_p_value)
+  
+  # Store the evaluation result
+  stepwise_cv_vars_results[[i]] = selected_variables
+  stepwise_cv_cindex_results[[i]] = fold_cindex$concordance
+  # stepwise_cv_vif_results[[i]] = as.data.frame(vif_results)
+
+}
+```
+
+Age by itself is not considered relevant.
+
+Patients grouped by aged with 65 years old as threshold is not a very important variable. However, when the threshold is 50 years old, it is selected as important, with patients equal or older than 50 y.o. being protected against death. 
+
+This strange result may be due to the tumor type:
+
+                              Colorectal NSCLC Oesophago-gastric Pancreatic
+  Younger than 50 years old         11     5                 9          8
+  Older or 50 years old            151    82                60         64
+
+
+```{r}
+# Variable selection frequency across 10-fold CV
+stepwise_var_selection_freq = as.data.frame(table(unlist(stepwise_cv_vars_results)))
+stepwise_var_selection_freq %<>% arrange(desc(Freq))
+knitr::kable(stepwise_var_selection_freq)
+```
+
+
+```{r}
+# Mean C-index across 10-fold CV
+mean(unlist(stepwise_cv_cindex_results))
+```
+
+
+```{r}
+# Do correlation between CVC and tumor surgically removed with primary tumor
+oncoth1_corr_vars = oncoth1$data %>% 
+  select(id, primary_tumor_simplified, catheter_device, tumor_surgically_removed)
+
+# Calculate Cramér's V
+# Close to 0: Weak or no association.
+# Around 0.1: Small association.
+# Around 0.3: Moderate association.
+# Around 0.5: Strong association.
+# Close to 1: Very strong or perfect association.
+
+# Primary tumor and CVC
+contingency_table1 <- table(
+  oncoth1_corr_vars$primary_tumor_simplified,
+  oncoth1_corr_vars$catheter_device
+  )
+
+cramers_v1 <- round(sqrt(chisq.test(contingency_table1)$statistic / sum(contingency_table1)), digits = 4)
+print(paste("Cramer's V for cancer type and CVC =", cramers_v1))
+
+
+# Primary tumor and tumor surgically removed
+contingency_table2 <- table(
+  oncoth1_corr_vars$primary_tumor_simplified,
+  oncoth1_corr_vars$tumor_surgically_removed
+  )
+
+cramers_v2 <- round(sqrt(chisq.test(contingency_table2)$statistic / sum(contingency_table2)), digits = 4)
+print(paste("Cramer's V for cancer type and surgical resection of tumor =", cramers_v2))
+```
+
+
+
+```{r}
+# Convert variable from factor to binary
+# stepwise_training_set$mucinous_histology_imp = ifelse(stepwise_training_set$mucinous_histology_imp == "No", 0, 1)
+```
+
+
+```{r}
+# Relevel factor
+# stepwise_training_set$mucinous_histology_imp = relevel(stepwise_training_set$mucinous_histology_imp, ref = "Yes")
+```
+
+
+```{r}
+# Final model with most frequently selected variables
+stepwise_cv_cph_final_model = coxph(
+  Surv(time = tstart, 
+       time2 = tstop, 
+       event = death) ~ 
+    cluster(id) + 
+    vte_event + # :vte_recurrence + # 
+    performance_status_category_corrected_imp +
+    primary_tumor_simplified +
+    tnm_stage_two_groups +
+    tumor_surgically_removed +
+    venous_insufficiency_imp +
+    mucinous_histology_imp,
+  id = id,
+  data = stepwise_training_set
+  )
+
+# Check proportional hazards assumption for Cox model
+cox.zph(stepwise_cv_cph_final_model)
+
+# Show HR and 95% CI
+stepwise_cv_cph_final_model %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+# Does not work with models where there is interaction between variables
+vif_results = car::vif(stepwise_cv_cph_final_model)
+vif_results
+```
+
+
+From model 
+
+stepwise_cv_cph_final_model = coxph(
+  Surv(time = tstart, 
+       time2 = tstop, 
+       event = death) ~ 
+    cluster(id) + 
+    vte_event:vte_recurrence +
+    khorana_risk_score_imp +
+    performance_status_category_corrected_imp +
+    tnm_stage_two_groups +
+    tumor_surgically_removed +
+    mucinous_histology_imp +
+    primary_tumor_simplified,
+  id = id,
+  data = stepwise_training_set
+  )
+  
+we see that KRS and primary tumor are collinear
+
+GVIF Df GVIF^(1/(2*Df))
+khorana_risk_score_imp                    5.309121  4        1.232049
+performance_status_category_corrected_imp 1.305730  2        1.068965
+tnm_stage_two_groups                      1.140239  1        1.067820
+tumor_surgically_removed                  1.468709  1        1.211903
+mucinous_histology_imp                    1.063991  1        1.031500
+primary_tumor_simplified                  5.619393  3        1.333362
+vte_event:vte_recurrence                  1.271319  3        1.040820
+
+
+
+
+
+Results of this model are reasonable:
+
+stepwise_cv_cph_final_model = coxph(
+  Surv(time = tstart, 
+       time2 = tstop, 
+       event = death) ~ 
+    cluster(id) + 
+    vte_event + # :vte_recurrence + # 
+    performance_status_category_corrected_imp +
+    primary_tumor_simplified +
+    tnm_stage_two_groups +
+    tumor_surgically_removed +
+    mucinous_histology_imp + 
+    venous_insufficiency_imp,
+  id = id,
+  data = stepwise_training_set
+  )
+  
+  
+
+```{r}
+# C-index in testing set
+concordance(stepwise_cv_cph_final_model, newdata = stepwise_testing_set)
+```
+
+
+```{r}
+# # Predict survival probabilities for different groups
+# # Does not work with models where there is interaction between variables
+# stepwise_model_predicted_survival = survfit(stepwise_cv_cph_final_model)
+# 
+# # Plot survival curves
+# # It cannot be done because I cannot apply survfit() to model with variable's interacions
+# ggsurvplot(
+#   stepwise_model_predicted_survival,
+#   data = stepwise_training_set,
+#   title = "Survival Curves with Interaction",
+#   xlab = "Time",
+#   ylab = "Survival Probability",
+#   risk.table = TRUE,
+#   risk.table.title = "Group Comparison"
+#   )
+```
+
+
+```{r}
+# https://stat.ethz.ch/R-manual/R-devel/library/survival/html/predict.coxph.html
+# Choices are the linear predictor ("lp"), the risk score exp(lp) ("risk"), the expected number of events given the covariates and follow-up time ("expected"), and the terms of the linear predictor ("terms"). The survival probability for a subject is equal to exp(-expected)
+# stepwise_pred = predict(
+#   object = stepwise_cv_cph_final_model, 
+#   newdata = stepwise_testing_set, 
+#   se.fit = TRUE,
+#   type = "survival"
+#   )
+# 
+# # Get probabilities and SE
+# stepwise_testing_set$prob = stepwise_pred$fit
+# stepwise_testing_set$lcl = stepwise_pred$fit - 1.96 * stepwise_pred$se.fit
+# stepwise_testing_set$ucl = stepwise_pred$fit + 1.96 * stepwise_pred$se.fit
+```
+
+
+```{r}
+yhat <- predict(
+  stepwise_cv_cph_final_model,
+  newdata = stepwise_testing_set,
+  se.fit = TRUE,
+  reference = "zero"
+  )
+
+yy <- yhat$fit + outer(yhat$se.fit, c(0, -1.96, 1.96), '*')
+yy
+```
+
+
+## Lasso CPH models
+
+### glmnet package
+
+https://glmnet.stanford.edu/articles/Coxnet.html
+
+
+```{r}
+# Covariates vector
+cv_cph_covariates = c(
+  "vte_event",  
+  "age_when_cancer_dx", 
+  # "menopausal_status_imp",
+  "gender", 
+  # "ethnicity_grouped", 
+  # "weight",
+  # "height",
+  # "body_surface_area",
+  # "bmi_value",
+  "bmi_category",
+  # "performance_status_category_corrected_imp", 
+  # "hemoglobin",
+  #aptt_imp, 
+  # "aptt_ratio_imp",
+  # "bilirubin_imp", 
+  # "alkaline_phosphatase_imp", 
+  # "inr_imp", # causes problems
+  # "leukocytes_imp",  
+  # "platelets", 
+  #leukocytosis_imp + 
+  #thrombocytosis + 
+  # "low_hemoglobin", 
+  # "major_surgery_in_medical_history", 
+  # "oral_contraceptive_tx", 
+  "diabetes_mellitus", 
+  "dyslipidemia", 
+  "tobacco_use_imp_grouped" , 
+  "copd", 
+  "arterial_hypertension", 
+  "chronic_cardiac_insufficiency", 
+  "renal_insufficiency",
+  "venous_insufficiency_imp", 
+  "n_comorbidities",
+  #khorana_risk_score_imp + 
+  #two_groups_krs + 
+  #tic_onco_imp + 
+  "previous_onco_surgery", 
+  "tumor_surgically_removed", 
+  "primary_tumor_simplified",
+  # "progression_according_to_clinical_stage_imp", 
+  "tnm_stage_grouped", 
+  # "t_stage_grouped", 
+  # "n_stage_grouped", 
+  # "m_stage_grouped", 
+  "histology_type_imp",
+  "mucinous_histology_imp", 
+  # "grade_histological_differentiation_imp", # does not hold PH assumption
+  # "n_metastases",
+  # "n_metastases_grouped",
+  # "metastasis_adrenal_glands",
+  # "metastasis_bones",
+  # "metastasis_brain",
+  # "metastasis_liver",
+  # "metastasis_lung",
+  # "metastasis_lymph_nodes",
+  # "metastasis_peritoneum",
+  # "metastasis_pleura",
+  # "metastasis_skin",
+  # "metastasis_soft_tissues",
+  # "other_metastases",
+  "catheter_device_imp", 
+  "family_background_vte", 
+  # "family_background_vte_n", 
+  #family_background_vte_all_relatives +
+  #family_background_VTE_father + 
+  #family_background_VTE_mother + 
+  #family_background_VTE_siblings + 
+  #family_background_VTE_offspring + 
+  #family_background_VTE_other_relatives +
+  "previous_vte",
+  # "previous_ate",
+  #n_previous_ate +
+  #previous_ate_type +
+    #anticoag_tx_vte + 
+    #anticoag_tx_vte_drugs + 
+    #anticoag_tx_cardiopathy + 
+    #anticoag_tx_other_causes + 
+    #anticoag_tx_reason + 
+  "anticoag_tx_currently",  
+  "antiaggreg_tx_currently", #,
+  # "blood_transfusion",
+  # "immobilisation", # Correlated with the poor health of a patient -- somewhat redundant
+  # "recent_major_surgery", 
+  # "thromboprophylaxis_hospital", 
+  "erythropoietin_tx"
+  )
+```
+
+
+```{r}
+# A matrix with dummies has to be created in order to do lasso Cox regression
+# Missing values cause erros
+
+# Select relevant features and ID
+x_pcox = survival_vte_tmerge_stepwise[, c("id", cv_cph_covariates)]
+
+# Transform categorical variables into numeric
+x_matrix = model.matrix(
+  object =  ~ . -1, 
+  data = x_pcox
+  )
+```
+
+
+```{r}
+# y (Surv object)
+yss <- Surv(
+  time = survival_vte_tmerge_stepwise$tstart, 
+  time2 = survival_vte_tmerge_stepwise$tstop, 
+  event = survival_vte_tmerge_stepwise$death
+  )
+```
+
+
+
+```{r}
+set.seed(2828)
+
+# glmnet 
+cv.fit <- cv.glmnet(
+  x = x_matrix, 
+  y = yss, 
+  family = "cox", 
+  nfolds = 5, 
+  alpha = 1
+  )
+
+plot(cv.fit)
+```
+
+```{r}
+cv.fit$lambda.min
+```
+
+
+```{r}
+# Sanity check
+# Check that fitting start-stop responses using glmnet with lambda = 0 matches up with coxph's result
+glmnet_fit <- glmnet(x_matrix, yss, family = "cox", lambda = 0)
+coxph_fit <- coxph(yss ~ x_matrix)
+plot(coef(glmnet_fit), coef(coxph_fit))
+abline(0, 1)
+```
+
+
+
+
+```{r}
+glmnet_fit = glmnet(
+  x = x_matrix, 
+  y = yss, 
+  family = "cox", 
+  alpha = 1,
+  lambda = cv.fit$lambda.min
+  )
+```
+
+
+
+```{r}
+# Get regression coefficients
+# Same as coef(glmnet_fit)
+hrs_cox_glmnet = data.frame(
+  "Variables" = rownames(glmnet_fit$beta), 
+  "Coefficients" = as.numeric(glmnet_fit$beta[, 1])) %>% 
+  filter(Coefficients != 0) %>% 
+  mutate(HRs = exp(Coefficients)) %>%
+  arrange(desc(HRs))
+
+hrs_cox_glmnet
+```
+
+```{r}
+print(hrs_cox_glmnet$Variables)
+```
+
+
+
+```{r}
+# Train CPH model with selected variables
+glmnet_l1_selected_features_cph = coxph(
+  Surv(time = tstart, time2 = tstop, event = death) ~
+    cluster(id) +
+    tnm_stage_grouped +  
+    vte_event +   
+    primary_tumor_simplified +  
+    n_comorbidities + 
+    histology_type_imp +
+    mucinous_histology_imp + 
+    family_background_vte +
+    previous_onco_surgery +
+    catheter_device_imp +
+    tumor_surgically_removed,
+    id = id,
+  data = survival_vte_tmerge_stepwise)
+
+
+glmnet_l1_selected_features_cph %>%
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+Why mucinous CRC is risk factor?
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6440160/
+
+
+```{r}
+cox.zph(glmnet_l1_selected_features_cph)
+```
+
+
+```{r}
+# summary(glmnet_l1_selected_features_cph)
+```
+
+
+
+### pcoxtime package
+
+Guide: https://cran.r-project.org/web/packages/pcoxtime/pcoxtime.pdf
+
+
+```{r}
+# CV for pcoxtime
+
+# Build formula with all covariates
+# pcox_formula = as.formula(
+#     sprintf('%s~%s', 'Surv(time = tstart, time2 = tstop, event = death)',
+#             paste(cv_cph_covariates, collapse = "+ ")))
+
+# Find optimal lambda value
+# cv_cph_mortality <- pcoxtimecv(
+#   formula = pcox_formula,
+#   data = survival_vte_tmerge_stepwise,
+#   alphas = 1, # 1 for Lasso (L1) penalty, 0 for Ridge (L2) penalty
+#   lamfract = 1, # If 1, complete regularisation path is considered
+#   nfolds = 3,
+#   refit = TRUE,
+#   quietly = TRUE,
+#   seed = 2828,
+#   nclusters = 8
+# )
+```
+
+
+```{r}
+# str(cv_cph_mortality)
+```
+
+
+
+```{r}
+# print(cv_cph_mortality)
+```
+
+
+
+```{r}
+# summary(cv_cph_mortality)
+```
+
+
+
+```{r}
+# coef(cv_cph_mortality)
+```
+
+
+```{r}
+# Plot solution path depending on lambda value
+# plot(cv_cph_mortality, type = "fit", xvar = "lambda", show_min_cve = TRUE)
+```
+
+
+```{r}
+# Mean cross-validation error for various lambda-alpha combination
+# extractoptimal(cv_cph_mortality, what = "cvm")
+```
+
+The chosen lambda is the one that results in the smaller mean CV error.
+
+
+```{r}
+# l1_penalised_cox = pcoxtime(
+#   formula = pcox_formula,
+#   alpha = 1,
+#   lambda = cv_cph_mortality$lambda.min, # 0.01603357
+#   data = survival_vte_tmerge_stepwise
+# )
+```
+
+
+
+```{r}
+# summary(l1_penalised_cox)
+```
+
+
+```{r}
+# str(l1_penalised_cox)
+```
+
+
+```{r}
+# print(l1_penalised_cox)
+```
+
+
+Si sus niveles de INR están demasiado bajos puede significar que está en riesgo de tener coágulos sanguíneos peligrosos
+Si sus niveles de INR están demasiado altos, puede significar que está en riesgo de tener un sangrado peligroso
+
+INR measures extrinsic coagulation pathway, while aPTT ratio measures the intrinsic coagulation pathway
+
+
+```{r}
+# Get HRs of Lasso Cox regression
+# sort(exp(coef(l1_penalised_cox)[coef(l1_penalised_cox) != 0]), decreasing = TRUE)
+```
+
+
+```{r}
+# pcoxsurvfit(l1_penalised_cox)
+```
+
+
+```{r}
+# concordScore(l1_penalised_cox, stats = TRUE)
+```
+
+
+```{r}
+# coef = coef(l1_penalised_cox, s = "lambda.min")
+# pvalues = 2 * pnorm(-abs(coef/ l1_penalised_cox$se))
+```
+
+
+
+```{r}
+# plot(varimp(l1_penalised_cox))
+```
+
+
+```{r}
+# Train CPH model with selected variables
+# l1_selected_features_cph = coxph(
+#   Surv(time = tstart, time2 = tstop, event = death) ~
+#     cluster(id) +
+#     performance_status_category_corrected_imp + 
+#     tnm_stage_grouped + 
+#     vte_event + 
+#     primary_tumor_simplified + 
+#     grade_histological_differentiation_imp + 
+#     mucinous_histology_imp + 
+#     venous_insufficiency_imp + 
+#     n_comorbidities + 
+#     diabetes_mellitus + 
+#     hemoglobin + 
+#     family_background_vte + 
+#     histology_type_imp + 
+#     catheter_device_imp + 
+#     previous_onco_surgery + 
+#     tumor_surgically_removed,
+#     id = id,
+#   data = survival_vte_tmerge_stepwise)
+
+# summary(l1_selected_features_cph)
+
+# l1_selected_features_cph %>%
+#   gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+# cox.zph(l1_selected_features_cph)
+```
+
+
+## RandomForest (randomForestSRC package)
+
+It returns an error and I don't know why.
+
+```{r}
+# Build formula with all covariates
+# rf_survival_formula = as.formula(
+#     sprintf('%s~%s', 'Surv(time = tstart, time2 = tstop, event = death)',
+#             paste(cv_cph_covariates, collapse = "+ ")))
+```
+
+
+```{r}
+# rf_survival = randomForestSRC::rfsrc(
+#   formula = rf_survival_formula, 
+#   data = survival_vte_tmerge 
+# )
+```
+
+
+## Adjusted survival curves to account for confounder covariates
+
+### VTE event
+
+```{r}
+ggadjustedcurves(
+  fit = all_covariates_td_cph_reg, 
+  variable = "vte_event",
+  data = survival_vte_tmerge, 
+  method = "conditional", 
+  #xscale = 30,
+  #break.time.by = 60,
+  xlim = c(0, 540), 
+  surv.median.line = "hv",
+  ggtheme = theme_bw()
+  )
+```
+
+
+### Primary tumor
+
+```{r}
+# Primary tumor
+ggadjustedcurves(
+  fit = all_covariates_td_cph_reg, 
+  data = survival_vte_tmerge, 
+  variable = "primary_tumor_simplified",
+  #individual.curves = TRUE,
+  method = "conditional",
+  #xscale = 30,
+  #break.time.by = 60,
+  #censor = FALSE,
+  #conf.int = FALSE,
+  #conf.int.alpha = 0.15,
+  xlim = c(0, 540),
+  legend.title = "Cancer type",
+  #legend.labs = c("No VTE", "VTE"),
+  #linetype = "strata", 
+  #surv.median.line = "hv",
+  xlab = "Time (days)",
+  ylab = "Overall Survival Probability",
+  ggtheme = theme_bw(),
+  #palette = c("black", "red")
+  )
+
+```
+
+
+### TNM stage
+
+```{r}
+# Stage
+ggadjustedcurves(
+  fit = all_covariates_td_cph_reg, 
+  data = survival_vte_tmerge, 
+  variable = "tnm_stage_grouped",
+  #individual.curves = TRUE,
+  method = "conditional",
+  #xscale = 30,
+  #break.time.by = 60,
+  #censor = FALSE,
+  #conf.int = FALSE,
+  #conf.int.alpha = 0.15,
+  xlim = c(0, 540),
+  legend.title = "Stage",
+  #legend.labs = c("No VTE", "VTE"),
+  #linetype = "strata", 
+  #surv.median.line = "hv",
+  xlab = "Time (days)",
+  ylab = "Overall Survival Probability",
+  ggtheme = theme_bw(),
+  #palette = c("black", "red")
+  )
+
+```
+
+
+```{r}
+# Table of times from ggadjustedcurves()
+# I can extract the median survival time
+surv_adjustedcurves(
+  fit = all_covariates_td_cph_reg, 
+  data = survival_vte_tmerge, 
+  variable = "tnm_stage_grouped",
+  method = "conditional", 
+  ggtheme = theme_bw()
+)
+```
+
+
+# Univariate CPH regression
+
+First, we perform univariate CPH regression on all the covariates of the data set in order to see which ones are correlated with survival.  
+
+```{r}
+# I need to define manually the covariates to do univariate CPH
+covariates_names = c(
+  "vte_event",
+  "age_when_cancer_dx",
+  "age_when_cancer_dx_50",
+  "age_when_cancer_dx_65",
+  "gender", 
+  "ethnicity",
+  "ethnicity_grouped",
+  "menopausal_status_imp",
+  "weight", 
+  "height", 
+  "body_surface_area",
+  "bmi_value",
+  "bmi_category", 
+  "performance_status_category_corrected_imp",
+  # "albumin_imp_category", 
+  # "aptt_imp_category", 
+  # "aptt_ratio", 
+  # "bilirubin_imp",
+  # "creatinine_imp",
+  # "alkaline_phosphatase_imp", 
+  # "hemoglobin", 
+  # "inr_imp", 
+  # "leukocytes_imp", 
+  # "platelets", 
+  # "leukocytosis_imp", 
+  # "thrombocytosis", 
+  # "low_hemoglobin", 
+  "major_surgery_in_medical_history", 
+  "hormone_therapy", 
+  "pregnancy_imp", 
+  #"oral_contraceptive_tx", 
+  "diabetes_mellitus", 
+  "dyslipidemia", 
+  "tobacco_use_imp", 
+  "copd", 
+  "arterial_hypertension", 
+  "chronic_cardiac_insufficiency", 
+  "renal_insufficiency", 
+  "n_comorbidities",
+  "khorana_risk_score_imp",
+  "krs_category", 
+  "two_groups_krs", 
+  "tic_onco_imp",
+  "previous_onco_surgery", 
+  "primary_tumor_simplified", 
+  "tumor_surgically_removed", 
+  "progression_according_to_clinical_stage_imp", 
+  "tnm_stage", 
+  "tnm_stage_detailed", 
+  "tnm_stage_grouped", 
+  "t_stage_imp", 
+  "t_stage_grouped",
+  "n_stage_imp", 
+  "n_stage_grouped",
+  "m_stage", 
+  "m_stage_grouped",
+  "histology_type_imp", 
+  "mucinous_histology_imp", 
+  "grade_histological_differentiation_imp", 
+  "n_metastases",
+  "metastasis_adrenal_glands", 
+  "metastasis_bones", 
+  "metastasis_brain", 
+  "metastasis_liver",  
+  "metastasis_lung",   
+  "metastasis_lymph_nodes", 
+  "metastasis_peritoneum",  
+  "metastasis_pleura", 
+  "metastasis_skin", 
+  "metastasis_soft_tissues",  
+  "other_metastases",
+  "catheter_device_imp",
+  "venous_insufficiency_imp",
+  "family_background_vte",
+  "family_background_vte_n",
+  "family_background_vte_all_relatives",
+  "family_background_VTE_father",
+  "family_background_VTE_mother", 
+  "family_background_VTE_siblings", 
+  "family_background_VTE_offspring", 
+  "family_background_VTE_other_relatives", 
+  "previous_vte", 
+  "previous_ate",
+  "n_previous_ate",
+  "previous_ate_type",
+  "cva_ate",
+  "myocardial_infarction_ate", 
+  "pad_ate", 
+  "tia_ate", 
+  "other_thromb_ate", 
+  "anticoag_tx_vte", 
+  "anticoag_tx_vte_drugs", 
+  "anticoag_tx_cardiopathy",
+  "anticoag_tx_other_causes", 
+  "anticoag_tx_reason", 
+  #"anticoag_tx_apixaban",  
+  #"anticoag_tx_dabigatran",     
+  #"anticoag_tx_lmwh",     
+  #"anticoag_tx_lmwh_dosage",  
+  #"anticoag_tx_vit_k_antag",  
+  #"anticoag_tx_other_drugs", 
+  #"anticoag_tx_currently",
+  "n_antiaggreg_tx", 
+  "antiaggreg_tx_reason",
+  "antiaggreg_tx_cardiopathy", 
+  "antiaggreg_tx_cva", 
+  "antiaggreg_tx_other_causes",
+  "antiaggreg_tx_currently", 
+  "blood_transfusion", 
+  #"major_trauma", 
+  "immobilisation",
+  "recent_major_surgery",
+  "thromboprophylaxis_hospital",
+  "erythropoietin_tx"
+  )
+
+```
+
+
+```{r}
+univariate_cph_reg_results = list()
+
+for (covariate in covariates_names) {
+  i_formula <- as.formula(
+        # Returns a character vector containing a formatted combination of text and
+        # variable values
+        sprintf("Surv(time = tstart, time2 = tstop, event = death) ~ %s ", covariate))
+  
+  i_cph <- coxph(i_formula, data = survival_vte_tmerge, na.action = na.omit)
+  
+  print(covariate)
+  
+  univariate_cph_reg_results[[covariate]] <- summary(i_cph)
+  
+  i_coxzph = cox.zph(i_cph)
+  
+  pval_coxzph = i_coxzph$table[1, 3]
+  
+  univariate_cph_reg_results[[covariate]]["pval_ph_check"] <- pval_coxzph
+
+  print(summary(i_cph))
+  cat("\n")
+  
+  print("P-value of proportional hazards testing for each covariate: ")
+  print(covariate)
+  print(pval_coxzph)
+  cat("\n")
+  
+  if (pval_coxzph < 0.05) {
+    print(ggcoxzph(cox.zph(i_cph)))
+    cat("\n")
+    cat("\n")
+  }
+}
+
+```
+
+
+
+# Impact of VTE by location on survival
+
+```{r}
+# Load latest version of oncoth1
+oncoth1 = get_project("oncothr1", version = "0.0.8003")
+```
+
+
+```{r}
+covariates_df = oncoth1$data %>%
+  select(id, 
+         patient_group,
+         age_when_cancer_dx,
+         age_when_cancer_dx_50, 
+         age_when_cancer_dx_65,
+         gender, 
+         ethnicity_grouped,
+         menopausal_status_imp,
+         bmi_category, 
+         performance_status_category_corrected_imp,
+         khorana_risk_score_imp,
+         krs_category, 
+         two_groups_krs, 
+         tic_onco_imp,
+         previous_onco_surgery, 
+         primary_tumor_simplified, 
+         tumor_surgically_removed, 
+         tnm_stage_grouped, 
+         tnm_stage_two_groups,
+         n_metastases,
+         catheter_device_imp,
+         family_background_vte,
+         previous_vte, 
+         previous_ate, 
+         vte_recurrence
+         )
+```
+
+
+```{r}
+# Get events and time until events for VTE according to locations
+all_vte_types_survival_data = oncoth1$data %>%
+  select(id, 
+         patient_group, 
+         date_cancer_dx, 
+         date_study_begins, 
+         date_study_ends,
+         date_death,
+         patient_status_at_end_study, 
+         censored_patient, 
+         follow_up_length_from_cancer_diagnosis_days, 
+         follow_up_length_from_cancer_diagnosis_months,
+         # CRT
+         starts_with("tu_1st_crt_"),
+         # DVT
+         starts_with("tu_1st_dvt_"),
+         starts_with("tu_2nd_dvt_"),
+         # PTE
+         starts_with("tu_1st_pte_"),
+         starts_with("tu_2nd_pte_"),
+         # Visceral thrombosis
+         starts_with("tu_1st_visceral_thromb_"),
+         starts_with("tu_2nd_visceral_thromb_")
+         # SVT
+         # tu_1st_svt...
+         # faltan variables
+         # Others
+         # These features should be erased
+         # tu_1st_other_thromb_grouped_days_corrected,
+         # tu_2nd_other_thromb_grouped_days, 
+         # tu_1st_other_thromb_grouped_months_corrected,
+         # tu_2nd_other_thromb_grouped_months, 
+         # tu_1st_other_thromb_grouped_from_cancer_diagnosis_days_corrected,
+         # tu_2nd_other_thromb_grouped_from_cancer_diagnosis_days,  
+         # tu_1st_other_thromb_grouped_from_cancer_diagnosis_months_corrected,
+         # tu_2nd_other_thromb_grouped_from_cancer_diagnosis_months
+         )
+
+```
+
+
+```{r}
+# Create object tmerge for time-dependant covariate survival analysis
+# For interval censored data, the status indicator is 0=right censored, 1=event at time, 
+# 2=left censored, 3=interval censored.
+all_types_vte_tmerge = tmerge(
+  data1 = covariates_df, 
+  data2 = all_vte_types_survival_data, 
+  id = id, 
+  tstop = follow_up_length_from_cancer_diagnosis_days, 
+  # event() is the survival analysis event of interest (in our case, death)
+  death = event(follow_up_length_from_cancer_diagnosis_days, censored_patient), 
+  # CRTs
+  crt_event = tdc(tu_1st_crt_from_cancer_diagnosis_days_corrected), 
+  # DVTs
+  dvt_event = tdc(tu_1st_dvt_from_cancer_diagnosis_days_corrected),
+  dvt_event = tdc(tu_2nd_dvt_from_cancer_diagnosis_days), 
+  # PTEs
+  pte_event = tdc(tu_1st_pte_from_cancer_diagnosis_days_corrected), 
+  pte_event = tdc(tu_2nd_pte_from_cancer_diagnosis_days), 
+  # Visceral thrombosis
+  visceral_thromb_event = 
+    tdc(tu_1st_visceral_thromb_from_cancer_diagnosis_days_corrected), 
+  visceral_thromb_event = 
+    tdc(tu_2nd_visceral_thromb_from_cancer_diagnosis_days) # ,
+  # Other thromboses grouped
+  # There is still information about other events
+  # other_thromb_grouped_event = 
+  #   tdc(tu_1st_other_thromb_grouped_from_cancer_diagnosis_days_corrected),
+  # other_thromb_grouped_event =
+  #   tdc(tu_2nd_other_thromb_grouped_from_cancer_diagnosis_days)
+  )
+```
+
+
+```{r}
+# Get patient's ids for each type of VTE types and combinations
+# Also patients with no VTE 
+
+# Temporal df
+tmp_id_types_vte = oncoth1$data %>%
+  select(id, 
+         any_crt,
+         any_dvt, 
+         any_pte, 
+         any_svt,
+         any_visceral_thromb)
+
+# Only CRT
+id_only_crt = tmp_id_types_vte %>%
+  filter(!any_pte == "Yes" & 
+           any_crt == "Yes" &
+           !any_svt == "Yes" &
+           !any_visceral_thromb == "Yes" &
+           !any_dvt == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+# Only DVT
+id_only_dvt = tmp_id_types_vte %>%
+  filter(!any_pte == "Yes" & 
+           !any_crt == "Yes" &
+           !any_svt == "Yes" &
+           !any_visceral_thromb == "Yes" &
+           any_dvt == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+# Only PTE
+id_only_pte = tmp_id_types_vte %>%
+  filter(!any_dvt == "Yes" &
+           !any_crt == "Yes" &
+           !any_svt == "Yes" &
+           !any_visceral_thromb == "Yes" &
+           any_pte == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+# Only VT
+id_only_visceral_thromb = tmp_id_types_vte %>%
+  filter(!any_pte == "Yes" & 
+           !any_crt == "Yes" &
+           !any_svt == "Yes" &
+           !any_dvt == "Yes" & 
+           any_visceral_thromb == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+# Only SVT
+id_only_svt = tmp_id_types_vte %>%
+  filter(!any_pte == "Yes" & 
+           !any_crt == "Yes" &
+           any_svt == "Yes" &
+           !any_dvt == "Yes" & 
+           !any_visceral_thromb == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+
+# DVT + PTE
+id_dvt_and_pte = tmp_id_types_vte %>%
+  filter(!any_visceral_thromb == "Yes" & 
+           !any_crt == "Yes" &
+           !any_svt == "Yes" &
+           any_dvt == "Yes" & 
+           any_pte == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+# DVT + visceral thrombosis
+id_dvt_and_visceral_thromb = tmp_id_types_vte %>%
+  filter(!any_pte == "Yes" & 
+           !any_crt == "Yes" &
+           !any_svt == "Yes" &
+           any_dvt == "Yes" & 
+           any_visceral_thromb == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+
+# PTE + VT
+id_pte_and_visceral_thromb = tmp_id_types_vte %>%
+  filter(
+    !any_dvt == "Yes" & 
+      !any_crt == "Yes" &
+           !any_svt == "Yes" &
+      any_pte == "Yes" & 
+      any_visceral_thromb == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+
+# DVT + PTE + VT (there no patients)
+id_dvt_and_pte_and_vt = tmp_id_types_vte %>%
+  filter(
+      any_dvt == "Yes" & 
+      any_pte == "Yes" & 
+      any_visceral_thromb == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+
+# All types
+id_all_types_vte = tmp_id_types_vte %>%
+  filter(
+    any_dvt == "Yes" & 
+      any_visceral_thromb == "Yes" & 
+      any_pte == "Yes") %>%
+  distinct(id) %>%
+  unlist()
+
+
+# No VTEs
+id_no_vte = tmp_id_types_vte %>%
+  filter(
+    any_dvt == "No" & 
+      any_visceral_thromb == "No" & 
+      any_pte == "No") %>%
+  distinct(id) %>%
+  unlist()
+
+```
+
+
+# DVT vs no VTE
+
+```{r}
+multivariate_km_log_rank_test = function(tu1_var, tu2_var, event_var, covariates, dataset, plot_curve = TRUE) {
+  
+  # Define survival object
+  surv_object = Surv(
+    time = dataset[[tu1_var]], 
+    time2 = dataset[[tu2_var]], 
+    event = as.numeric(dataset[[event_var]])
+    )
+  
+  # Build formula
+  # formula = reformulate(covariate, response = "Surv(tu1_var, event_var)")
+  
+  # Returns a character vector containing a formatted combination of text and variable values
+  formula = as.formula(sprintf("surv_object ~ %s ", paste(covariates, collapse = "+")))
+  print(formula)
+  
+  # Create survfit object
+  # It estimates the survival function (probability of survival) over time for censored data
+  survfit_object = survfit(formula = formula, data = dataset)
+  
+  # Show summary of survival function
+  cat("Median OS from KM fitted survival curve:")
+  print(summary(survfit_object)$table/30.25)
+  cat("\n")
+  
+  # Overall survival at 18 months
+  cat("OS rate at 18 months:")
+  cat("\n")
+  print(summary(survfit_object, times = 18*30.25))
+  cat("\n")
+  
+  # In the case of interval censored data, log-rank test cannot be computed
+  # Instead, we fit a Cox model and extract the score test, which indicates 
+  # whether there are significant differences in survival between the groups
+  # Cox model 
+  cph_model = coxph(
+    formula = formula,
+    # id = id,
+    data = dataset
+    )
+  
+  # Get summary of results
+  cph_model_summary = summary(cph_model)
+  print(cph_model_summary)
+  
+  # Get score test p-value
+  score_test_pval = format(
+    unname(cph_model_summary$sctest["pvalue"])
+  )
+  
+  print(score_test_pval)
+  
+  # Do log-rank test to compare two or more survival curves
+  # logrank_test = survdiff(formula = formula, data = dataset) # survdiff
+  # Get log-rank test p-value
+  # lrtest_pval = logrank_test$pvalue
+  # pvalue = surv_pvalue(fit = survfit_object, data = dataset, method = "1")
+  
+  
+  # Print p-value
+  if (score_test_pval > 0.05) {
+    pval = "p-value is NS"
+    print(paste("Cox score test (approximation of log-rank test) p-value is NS"))
+  } else if (score_test_pval < 0.05 & score_test_pval > 0.01) {
+    pval = "p-value < 0.05"
+    print(paste("Cox score test (approximation of log-rank test) p-value < 0.05"))
+  } else if (score_test_pval < 0.01 & score_test_pval > 0.001) {
+    pval = "p-value < 0.01"
+    print(paste("Cox score test (approximation of log-rank test) p-value < 0.01"))
+  } else if (score_test_pval < 0.001 & score_test_pval > 0.0001) {
+    pval = "p-value < 0.001"
+    print(paste("Cox score test (approximation of log-rank test) p-value < 0.001"))
+  } else if (score_test_pval < 0.0001) {
+    pval = "p-value < 0.0001"
+    print(paste("Cox score test (approximation of log-rank test) p-value < 0.0001"))
+  }
+  
+  # Return survfit object, needed to plot the survival curve
+  if (plot_curve) {
+
+    km_plot = ggsurvplot(
+      fit = surv_fit(formula = formula, data = dataset),
+      data = dataset,
+      break.time.by = 60,
+      censor = FALSE,
+      # color = "black",
+      conf.int = TRUE,
+      conf.int.alpha = 0.5,
+      xscale = 30,
+      xlim = c(0, 540),
+      surv.plot.height = 1.25,
+      legend.title = " ",
+      legend.labs = c("No CAT", "CAT"),
+      risk.table = "abs_pct",
+      risk.table.height = 0.3,
+      risk.table.col = "strata", 
+      risk.table.y.text.col = TRUE,
+      fontsize = 2.75,
+      surv.median.line = "hv",
+      xlab = "Time (months)",
+      ylab = "OS Probability",
+      ggtheme = theme_bw(),
+      palette = c("black", "red")
+      )
+    
+    # Add p-value
+    km_plot$plot = km_plot$plot + 
+      annotate(
+        geom = "text", 
+        x = 26,
+        y = 0.3,
+        label = "",
+        color = "black") + 
+      annotate(
+        geom = "text", 
+        x = 50,
+        y = 0.2,
+        label = pval,
+        color = "black")
+    
+    # Customize risk table title 
+    km_plot$table = 
+      km_plot$table +
+      theme(plot.title = element_text(size = 10))
+    
+    return(km_plot)
+  }
+
+}
+```
+
+
+```{r}
+print(paste("There are", length(id_only_dvt), "patients that suffered only DVT."))
+```
+
+
+```{r}
+# Obtain median survival and 18 month overall survival rate
+# Plot survival curves VTE vs no VTE
+surv_curve_vte = multivariate_km_log_rank_test(
+  tu1_var = "tstart", 
+  tu2_var = "tstop", 
+  event_var = "death", 
+  covariates = c("dvt_event"), 
+  dataset = all_types_vte_tmerge, 
+  plot_curve = TRUE
+  )
+```
+
+First, we need to exclude the patients that have more than one type of VTE, because having multiple types of VTE probably decreases survival and the effect of one type of VTE ends up being overestimated.  
+
+
+```{r}
+dvt_no_vte_tmerge = all_types_vte_tmerge %>%
+  group_by(id) %>%
+  filter(id %in% c(id_only_dvt, id_no_vte)) 
+```
+
+
+```{r}
+dvt_no_vte_survfit = survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ dvt_event + cluster(id), 
+    id = id,
+  data = dvt_no_vte_tmerge)
+
+dvt_no_vte_survfit
+```
+
+
+```{r}
+# Cox regression
+dvt_no_vte_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    dvt_event + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    primary_tumor_simplified +
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = dvt_no_vte_tmerge)
+
+cox.zph(dvt_no_vte_cph_fit)
+
+# Log-rank p-value
+dvt_no_vte_cph_tests_summary = summary(dvt_no_vte_cph_fit)
+
+dvt_no_vte_pval_robust = format(
+  dvt_no_vte_cph_tests_summary$robscore[["pvalue"]], 
+  digits = 1)
+
+dvt_no_vte_pval_robust
+
+```
+
+
+```{r}
+#jpeg("./graphs/paper/dvt_no_vte_surv_analysis_KM_curve.jpeg", width = 7, height = 4, units = 'in', res = 700)
+dvt_no_vte_km_plot = 
+  ggsurvplot(fit = dvt_no_vte_survfit,
+           data = dvt_no_vte_tmerge,
+           xscale = 30,
+           break.time.by = 60,
+           censor = FALSE,
+           conf.int = FALSE,
+           #conf.int.alpha = 0.15,
+           xlim = c(0, 540),
+           surv.plot.height = 1.25, 
+           tables.height = 0.25,
+           legend.title = " ",
+           legend.labs = c("No VTE", "DVT"),
+           risk.table = "abs_pct", 
+           risk.table.height = 0.35, 
+           fontsize = 3,
+           risk.table.col = "strata", 
+           risk.table.y.text.col = TRUE,
+           #linetype = "strata", 
+           surv.median.line = "hv",
+           xlab = "Time (months)",
+           ylab = "OS Probability",
+           ggtheme = theme_bw(),
+           palette = c("black", "red"))
+
+# Add p-value and n of patient subgroups
+dvt_no_vte_km_plot$plot = dvt_no_vte_km_plot$plot + 
+  # Log-rank and p-value
+  annotate(
+    geom = "text", 
+    size = 3.5,
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    size = 3.5,
+    x = 28,
+    y = 0.2,
+    label = "<0.0001",
+    color = "black") + 
+  # N subgroups
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.95, 
+    label = paste0("n=", length(id_no_vte)), 
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.85, 
+    label = paste0("n=", length(id_only_dvt)), 
+    color = "red")
+
+# Customize risk table title 
+dvt_no_vte_km_plot$table = 
+  dvt_no_vte_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+dvt_no_vte_km_plot 
+
+#dev.off()
+```
+
+
+```{r}
+dvt_no_vte_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+```{r}
+summary(survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ dvt_event + cluster(id), 
+    id = id,
+  data = dvt_no_vte_tmerge), times = 18*30.25)
+```
+
+
+
+## DVT interactions
+
+```{r}
+# DVT effect per cancer type
+dvt_interaction_primary_tumor = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    dvt_event:primary_tumor_simplified + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = dvt_no_vte_tmerge) 
+
+dvt_interaction_primary_tumor %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+```{r}
+cox.zph(dvt_interaction_primary_tumor, terms = FALSE)
+```
+
+```{r}
+#ggcoxzph(cox.zph(dvt_interaction_primary_tumor, terms = FALSE))[5]
+```
+
+
+```{r}
+# DVT effect per stage
+dvt_interaction_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    dvt_event:tnm_stage_grouped + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    primary_tumor_simplified +
+    #tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = dvt_no_vte_tmerge) 
+
+dvt_interaction_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+```{r}
+cox.zph(dvt_interaction_stage, terms = FALSE)
+```
+
+
+```{r}
+# DVT effect per stage
+dvt_interaction_primary_tumor_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    dvt_event:primary_tumor_simplified:tnm_stage_grouped + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    #tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = dvt_no_vte_tmerge) 
+
+dvt_interaction_primary_tumor_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+cox.zph(dvt_interaction_primary_tumor_stage, terms = FALSE)
+```
+
+```{r}
+table(dvt_no_vte_tmerge$primary_tumor_simplified, dvt_no_vte_tmerge$dvt_event)
+table(dvt_no_vte_tmerge$tnm_stage_grouped, dvt_no_vte_tmerge$dvt_event)
+```
+
+No DVT events happened in patients with oesophago-gastric cancer. Similarly, no DVT events happened in patients with stages I-II.  
+
+Only 1 DVT happened in a patient with pancreatic cancer, so HR cannot be computed.  
+
+
+# PTE vs no VTE
+
+```{r}
+pte_no_vte_tmerge = all_types_vte_tmerge %>%
+  group_by(id) %>%
+  filter(id %in% c(id_only_pte, id_no_vte)) 
+```
+
+
+```{r}
+pte_no_vte_survfit = survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ pte_event + cluster(id), 
+    id = id,
+  data = pte_no_vte_tmerge)
+
+pte_no_vte_survfit
+```
+
+
+```{r}
+# Cox regression
+pte_no_vte_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    pte_event + 
+    age_when_cancer_dx + # Adjust by age and gender
+    gender + 
+    primary_tumor_simplified +
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = pte_no_vte_tmerge)
+
+cox.zph(pte_no_vte_cph_fit)
+
+# Log-rank p-value
+pte_no_vte_cph_tests_summary = summary(pte_no_vte_cph_fit)
+
+pte_no_vte_pval_robust = format(
+  pte_no_vte_cph_tests_summary$robscore[["pvalue"]], 
+  digits = 1)
+
+pte_no_vte_pval_robust
+```
+
+
+```{r}
+#jpeg("../graphs/paper/pte_no_vte_td_surv_analysis_KM_curve.jpeg", width = 7, height = 4, units = 'in', res = 700)
+pte_no_vte_km_plot = 
+  ggsurvplot(fit = pte_no_vte_survfit,
+           data = pte_no_vte_tmerge,
+           xscale = 30,
+           break.time.by = 60,
+           censor = FALSE,
+           conf.int = FALSE,
+           #conf.int.alpha = 0.15,
+           xlim = c(0, 540),
+           surv.plot.height = 1.25, 
+           tables.height = 0.25,
+           legend.title = " ",
+           legend.labs = c("No VTE", "PE"),
+           risk.table = "abs_pct", 
+           risk.table.height = 0.3, 
+           fontsize = 3,
+           risk.table.col = "strata", 
+           risk.table.y.text.col = TRUE,
+           surv.median.line = "hv",
+           xlab = "Time (months)",
+           ylab = "OS Probability",
+           ggtheme = theme_bw(),
+           palette = c("black", "red"))
+
+# Add p-value
+pte_no_vte_km_plot$plot = 
+  pte_no_vte_km_plot$plot + 
+  # Log-rank and p-value
+  annotate(
+    geom = "text", 
+    size = 3.5, 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    size = 3.5,
+    x = 28,
+    y = 0.2,
+    label = "<0.0001",
+    color = "black") + 
+  # N subgroups
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.95, 
+    label = paste0("n=", length(id_no_vte)), 
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.85, 
+    label = paste0("n=", length(id_only_pte)), 
+    color = "red")
+
+# Customize risk table title 
+pte_no_vte_km_plot$table = 
+  pte_no_vte_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+pte_no_vte_km_plot 
+
+#dev.off()
+```
+
+```{r}
+pte_no_vte_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+summary(survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ pte_event + cluster(id), 
+    id = id,
+  data = pte_no_vte_tmerge), times = 18*30.25)
+```
+
+## PTE interactions
+
+```{r}
+# PTE effect per cancer type
+pte_interaction_primary_tumor = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    pte_event:primary_tumor_simplified + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = pte_no_vte_tmerge) 
+
+pte_interaction_primary_tumor %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+cox.zph(pte_interaction_primary_tumor, terms = FALSE)
+```
+
+```{r}
+# This is why HR for PTE and pancreatic cancer cannot be computed
+# There is only one event
+table(pte_no_vte_tmerge$primary_tumor_simplified, pte_no_vte_tmerge$pte_event)
+```
+
+
+
+```{r}
+#ggcoxzph(cox.zph(dvt_interaction_primary_tumor, terms = FALSE))[5]
+```
+
+
+```{r}
+# PTE effect per stage
+pte_interaction_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    pte_event:tnm_stage_grouped + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    primary_tumor_simplified +
+    #tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = pte_no_vte_tmerge) 
+
+pte_interaction_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+Suffering a PTE in stage IV increases 10-fold the probability of dying. 
+
+
+```{r}
+cox.zph(pte_interaction_stage, terms = FALSE)
+```
+
+```{r}
+# PTE effect per cancer and stage
+pte_interaction_primary_tumor_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    pte_event:primary_tumor_simplified:tnm_stage_grouped + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    #tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = pte_no_vte_tmerge) 
+
+pte_interaction_primary_tumor_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+There is multicollinearity in this analysis.  
+
+```{r}
+cox.zph(pte_interaction_primary_tumor_stage)
+```
+
+
+# Visceral thromboses vs no VTE
+
+```{r}
+visceral_thromb_no_vte_tmerge = all_types_vte_tmerge %>%
+  group_by(id) %>%
+  filter(id %in% c(id_only_visceral_thromb, id_no_vte)) 
+```
+
+
+```{r}
+visceral_thromb_no_vte_survfit = survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ visceral_thromb_event + cluster(id), 
+    id = id,
+  data = visceral_thromb_no_vte_tmerge)
+
+visceral_thromb_no_vte_survfit
+```
+
+
+```{r}
+# Cox regression
+visceral_thromb_no_vte_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    visceral_thromb_event +
+    age_when_cancer_dx + # Adjust 
+    gender + 
+    primary_tumor_simplified +
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = visceral_thromb_no_vte_tmerge)
+
+cox.zph(visceral_thromb_no_vte_cph_fit)
+
+# Log-rank p-value
+visceral_thromb_no_vte_cph_tests_summary = summary(visceral_thromb_no_vte_cph_fit)
+
+visceral_thromb_no_vte_pval_robust = format(
+  visceral_thromb_no_vte_cph_tests_summary$robscore[["pvalue"]], 
+  digits = 1)
+
+visceral_thromb_no_vte_pval_robust
+
+```
+
+
+```{r}
+#jpeg("./graphs/paper/visceral_thromb_no_vte_td_surv_analysis_KM_curve.jpeg", width = 7, height = 4, units = 'in', res = 700)
+
+visceral_thromb_no_vte_km_plot = 
+  ggsurvplot(fit = visceral_thromb_no_vte_survfit,
+           data = visceral_thromb_no_vte_tmerge,
+           xscale = 30,
+           break.time.by = 60,
+           censor = FALSE,
+           conf.int = FALSE,
+           xlim = c(0, 540),
+           surv.plot.height = 1.25, 
+           tables.height = 0.25,
+           legend.title = " ",
+           legend.labs = c("No VTE", "VT"),
+           risk.table = "abs_pct", 
+           risk.table.height = 0.3, 
+           fontsize = 3,
+           risk.table.col = "strata", 
+           risk.table.y.text.col = TRUE,
+           surv.median.line = "hv",
+           xlab = "Time (months)",
+           ylab = "OS Probability",
+           ggtheme = theme_bw(),
+           palette = c("black", "red")
+           )
+
+# Add p-value
+visceral_thromb_no_vte_km_plot$plot = 
+  visceral_thromb_no_vte_km_plot$plot + 
+  # Log-rank and p-value
+  annotate(
+    geom = "text", 
+    size = 3.5,
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text",
+    size = 3.5,
+    x = 28,
+    y = 0.2,
+    label = "<0.0001",
+    color = "black") + 
+  # N subgroups
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.95, 
+    label = paste0("n=", length(id_no_vte)), 
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.85, 
+    label = paste0("n=", length(id_only_visceral_thromb)), 
+    color = "red")
+
+# Customize risk table title 
+visceral_thromb_no_vte_km_plot$table = 
+  visceral_thromb_no_vte_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+visceral_thromb_no_vte_km_plot 
+
+#dev.off()
+```
+
+```{r}
+visceral_thromb_no_vte_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+VT is not proven to be a risk factor.  
+
+```{r}
+summary(survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ visceral_thromb_event + cluster(id), 
+    id = id,
+  data = visceral_thromb_no_vte_tmerge), times = 18*30.25)
+```
+
+
+## VT interactions
+
+```{r}
+# VT effect per cancer type
+visceral_thromb_interaction_primary_tumor = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    visceral_thromb_event:primary_tumor_simplified + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = visceral_thromb_no_vte_tmerge) 
+
+visceral_thromb_interaction_primary_tumor %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+cox.zph(visceral_thromb_interaction_primary_tumor, terms = FALSE)
+```
+
+There is only 1 visceral thrombosis in NSCLC patients and 2 in oesophago-gastric patients.  
+
+```{r}
+# VT effect per stage
+visceral_thromb_interaction_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    visceral_thromb_event:tnm_stage_grouped + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    primary_tumor_simplified +
+    #tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = visceral_thromb_no_vte_tmerge) 
+
+visceral_thromb_interaction_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+```{r}
+cox.zph(visceral_thromb_interaction_stage, terms = FALSE)
+```
+
+
+There are 2 visceral thrombosis in stages I-II, so the corresponding results are not very reliable.  
+
+```{r}
+# VT effect per stage
+visceral_thromb_interaction_primary_tumor_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    visceral_thromb_event:primary_tumor_simplified:tnm_stage_grouped + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    #tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = visceral_thromb_no_vte_tmerge) 
+
+visceral_thromb_interaction_primary_tumor_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+```{r}
+cox.zph(visceral_thromb_interaction_primary_tumor_stage, terms = FALSE)
+```
+
+
+```{r}
+table(visceral_thromb_no_vte_tmerge$primary_tumor_simplified, visceral_thromb_no_vte_tmerge$visceral_thromb_event)
+
+table(visceral_thromb_no_vte_tmerge$tnm_stage_grouped, visceral_thromb_no_vte_tmerge$visceral_thromb_event)
+```
+
+There are only 1 VT in a NSCLC patient and 2 VT in oesophago-gastric patients. Again, only 2 VT in stages I-III.  
+
+
+# Other thromboses vs no VTE
+
+```{r}
+other_thromb_grouped_no_vte_tmerge = all_types_vte_tmerge %>%
+  group_by(id) %>%
+  filter(id %in% c(id_only_other_thromb_grouped, id_no_vte)) 
+```
+
+
+```{r}
+other_thromb_grouped_no_vte_survfit = survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ other_thromb_grouped_event + cluster(id), 
+    id = id,
+  data = other_thromb_grouped_no_vte_tmerge)
+
+other_thromb_grouped_no_vte_survfit
+```
+
+
+```{r}
+# Cox regression
+other_thromb_grouped_no_vte_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    other_thromb_grouped_event + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    primary_tumor_simplified + 
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = other_thromb_grouped_no_vte_tmerge)
+
+cox.zph(other_thromb_grouped_no_vte_cph_fit)
+
+# Log-rank p-value
+other_thromb_grouped_no_vte_cph_tests_summary = summary(other_thromb_grouped_no_vte_cph_fit)
+
+other_thromb_grouped_no_vte_pval_robust = format(
+  other_thromb_grouped_no_vte_cph_tests_summary$robscore[["pvalue"]], 
+  digits = 1)
+
+other_thromb_grouped_no_vte_pval_robust
+```
+
+
+```{r}
+#jpeg("./graphs/paper/other_thromb_grouped_no_vte_td_surv_analysis_KM_curve.jpeg", width = 7, height = 4, units = 'in', res = 700)
+other_thromb_grouped_no_vte_km_plot = 
+  ggsurvplot(fit = other_thromb_grouped_no_vte_survfit,
+           data = other_thromb_grouped_no_vte_tmerge,
+           xscale = 30,
+           break.time.by = 60,
+           censor = FALSE,
+           conf.int = FALSE,
+           #conf.int.alpha = 0.15,
+           xlim = c(0, 540),
+           surv.plot.height = 1.25, 
+           tables.height = 0.25,
+           legend.title = " ",
+           legend.labs = c("No VTE", "Other VTEs"),
+           risk.table = "abs_pct", 
+           risk.table.height = 0.3, 
+           fontsize = 3,
+           risk.table.col = "strata", 
+           risk.table.y.text.col = TRUE,
+           surv.median.line = "hv",
+           xlab = "Time (months)",
+           ylab = "OS Probability",
+           ggtheme = theme_bw(),
+           palette = c("black", "red"))
+
+# Count n by subgroups
+n_no_vte = 301
+n_only_other_thromb_grouped = length(unique(other_thromb_grouped_no_vte_tmerge$id)) - n_no_vte
+
+# Add p-value
+other_thromb_grouped_no_vte_km_plot$plot = other_thromb_grouped_no_vte_km_plot$plot + 
+  annotate(
+    geom = "text",
+    size = 3.5,
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    size = 3.5,
+    x = 28,
+    y = 0.2,
+    label = "<0.0001",
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.95, 
+    label = paste0("n=", length(id_no_vte)), 
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.85, 
+    label = paste0("n=", length(id_only_other_thromb_grouped)), 
+    color = "red")
+
+# Customize risk table title 
+other_thromb_grouped_no_vte_km_plot$table = 
+  other_thromb_grouped_no_vte_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+other_thromb_grouped_no_vte_km_plot 
+
+#dev.off()
+```
+
+
+```{r}
+other_thromb_grouped_no_vte_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+Other types of VTE (CRT, SVT, etc.) are not proven to be risk factors.  
+
+```{r}
+summary(survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ other_thromb_grouped_event + cluster(id), 
+    id = id,
+  data = other_thromb_grouped_no_vte_tmerge), times = 18*30.25)
+```
+
+
+## Other thromboses interactions
+
+## PTE interactions
+
+```{r}
+# PTE effect per cancer type
+other_thromb_grouped_interaction_primary_tumor = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    other_thromb_grouped_event:primary_tumor_simplified + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = other_thromb_grouped_no_vte_tmerge) 
+
+other_thromb_grouped_interaction_primary_tumor %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+cox.zph(other_thromb_grouped_interaction_primary_tumor, terms = FALSE)
+```
+
+
+```{r}
+# This is why HR for PTE and pancreatic cancer cannot be computed
+# There is only one event
+table(other_thromb_grouped_no_vte_tmerge$primary_tumor_simplified, other_thromb_grouped_no_vte_tmerge$other_thromb_grouped_event)
+```
+
+
+
+```{r}
+# PTE effect per stage
+other_thromb_grouped_interaction_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    other_thromb_grouped_event:tnm_stage_grouped + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    primary_tumor_simplified +
+    #tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = other_thromb_grouped_no_vte_tmerge) 
+
+other_thromb_grouped_interaction_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+cox.zph(other_thromb_grouped_interaction_stage, terms = FALSE)
+```
+
+```{r}
+# PTE effect per cancer and stage
+other_thromb_grouped_interaction_primary_tumor_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    other_thromb_grouped_event:primary_tumor_simplified:tnm_stage_grouped + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    #tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = other_thromb_grouped_no_vte_tmerge) 
+
+other_thromb_grouped_interaction_primary_tumor_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+There is multicollinearity in this analysis.  
+
+```{r}
+cox.zph(other_thromb_grouped_interaction_primary_tumor_stage)
+```
+
+# All single-type VTEs vs no VTE
+
+```{r}
+single_type_vte_tmerge = all_types_vte_tmerge %>%
+  group_by(id) %>%
+  filter(id %in% c(id_no_vte, 
+                   id_only_dvt, 
+                   id_only_pte, 
+                   id_only_visceral_thromb, 
+                   id_only_other_thromb_grouped))
+```
+
+
+```{r}
+single_type_vte_no_vte_survfit = survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ dvt_event +
+    pte_event + 
+    visceral_thromb_event + 
+    other_thromb_grouped_event +
+    cluster(id), 
+    id = id,
+  data = single_type_vte_tmerge)
+
+#single_type_vte_no_vte_survfit
+```
+
+
+```{r}
+# Cox regression
+single_type_vte_no_vte_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    dvt_event + 
+    pte_event + 
+    visceral_thromb_event + 
+    other_thromb_grouped_event +
+    age_when_cancer_dx + # Adjust
+    gender + 
+    #primary_tumor_simplified +
+    #tnm_stage_grouped +
+    strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = single_type_vte_tmerge)
+
+cox.zph(single_type_vte_no_vte_cph_fit)
+
+# Log-rank p-value
+single_type_vte_no_vte_cph_tests_summary = summary(single_type_vte_no_vte_cph_fit)
+
+single_type_vte_no_vte_pval_robust = format(
+  single_type_vte_no_vte_cph_tests_summary$robscore[["pvalue"]], 
+  digits = 1)
+
+single_type_vte_no_vte_pval_robust
+
+```
+
+
+```{r}
+#jpeg("./graphs/time_dependent_covariate_analysis/single_type_vte_no_vte_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+single_type_vte_no_vte_km_plot = 
+  ggsurvplot(
+    fit = single_type_vte_no_vte_survfit,
+    data = single_type_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    surv.plot.height = 1.25, 
+    tables.height = 0.25,
+    legend.title = " ",
+    legend.labs = c("No VTE", "Other", "VT", "PTE", "DVT"),
+    risk.table = "abs_pct", 
+    risk.table.height = 0.35, 
+    fontsize = 3.5,
+    risk.table.col = "strata", 
+    risk.table.y.text.col = TRUE,
+    #linetype = "strata", 
+    surv.median.line = "hv",
+    xlab = "Time (months)",
+    ylab = "OS Probability",
+    ggtheme = theme_bw(),
+    palette = c("black", "red", "orange", "pink", "blue")
+    )
+
+# Add p-value and n of patient subgroups
+single_type_vte_no_vte_km_plot$plot = 
+  single_type_vte_no_vte_km_plot$plot + 
+  # Log-rank and p-value
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = "0.003",
+    color = "black") 
+
+# Customize risk table title 
+single_type_vte_no_vte_km_plot$table = 
+  single_type_vte_no_vte_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+single_type_vte_no_vte_km_plot 
+
+#dev.off()
+```
+
+```{r}
+single_type_vte_no_vte_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+
+# Multiple types of VTE vs no VTE
+
+
+```{r}
+vte_combinations_no_vte_tmerge = survival_vte_tmerge %>%
+  group_by(id) %>%
+  filter(id %in% c(id_no_vte, 
+                   id_dvt_and_pte, 
+                   id_dvt_and_visceral_thromb, 
+                   id_dvt_and_other_thromb_grouped, 
+                   id_pte_and_visceral_thromb, 
+                   id_vt_and_other_thromb_grouped, 
+                   id_dvt_and_pte_and_other_thromb_grouped, 
+                   id_all_types_vte)) 
+```
+
+
+```{r}
+vte_combinations_no_vte_survfit = survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ vte_event +
+    cluster(id), 
+    id = id,
+  data = vte_combinations_no_vte_tmerge)
+
+vte_combinations_no_vte_survfit
+```
+
+
+```{r}
+# Cox regression
+vte_combinations_no_vte_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    vte_event + 
+    age_when_cancer_dx + # Adjust
+    gender + 
+    primary_tumor_simplified + 
+    tnm_stage_grouped +
+    #strata(primary_tumor_simplified, tnm_stage_grouped) +
+    cluster(id), 
+  id = id,
+  data = vte_combinations_no_vte_tmerge)
+
+cox.zph(vte_combinations_no_vte_cph_fit)
+
+# Log-rank p-value
+vte_combinations_no_vte_cph_tests_summary = summary(vte_combinations_no_vte_cph_fit)
+
+vte_combinations_no_vte_pval_robust = format(
+  vte_combinations_no_vte_cph_tests_summary$robscore[["pvalue"]], 
+  digits = 1)
+
+vte_combinations_no_vte_pval_robust
+```
+
+
+```{r}
+#jpeg("./graphs/paper/multiple_vte_types_no_vte_td_surv_analysis_KM_curve.jpeg", width = 7, height = 4, units = 'in', res = 700)
+vte_combinations_no_vte_km_plot = 
+  ggsurvplot(fit = vte_combinations_no_vte_survfit,
+           data = vte_combinations_no_vte_tmerge,
+           xscale = 30,
+           break.time.by = 60,
+           censor = FALSE,
+           conf.int = FALSE,
+           #conf.int.alpha = 0.15,
+           xlim = c(0, 540),
+           surv.plot.height = 1.25, 
+           tables.height = 0.25,
+           legend.title = " ",
+           legend.labs = c("No VTE", "Multiple VTEs"),
+           risk.table = "abs_pct", 
+           risk.table.height = 0.3, 
+           fontsize = 3,
+           risk.table.col = "strata", 
+           risk.table.y.text.col = TRUE,
+           surv.median.line = "hv",
+           xlab = "Time (months)",
+           ylab = "OS Probability",
+           ggtheme = theme_bw(),
+           palette = c("black", "red"))
+
+# Count n by subgroups
+n_no_vte = 301
+n_only_vte_combinations = length(unique(vte_combinations_no_vte_tmerge$id)) - n_no_vte
+
+# Add p-value
+vte_combinations_no_vte_km_plot$plot = 
+  vte_combinations_no_vte_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    size = 3.5,
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    size = 3.5,
+    x = 28,
+    y = 0.2,
+    label = "<0.0001",
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.95, 
+    label = paste0("n=", length(id_no_vte)), 
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 540, 
+    y = 0.85, 
+    label = "n=23", 
+    color = "red")
+
+# Customize risk table title 
+vte_combinations_no_vte_km_plot$table = 
+  vte_combinations_no_vte_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+vte_combinations_no_vte_km_plot 
+
+#dev.off()
+```
+
+```{r}
+vte_combinations_no_vte_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+summary(survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ vte_event +
+    cluster(id), 
+    id = id,
+  data = vte_combinations_no_vte_tmerge), times = 18*30.25)
+```
+
+# KM plot with single and multiple VTE types, all together
+
+
+```{r}
+# marrangeGrob(list(dvt_no_vte_km_plot$plot, 
+#   pte_no_vte_km_plot$plot, 
+#   visceral_thromb_no_vte_km_plot$plot, 
+#   other_thromb_grouped_no_vte_km_plot$plot,
+#   vte_combinations_no_vte_km_plot$plot), nrow = 5, ncol = 1)
+```
+
+
+
+---
+
+```{r}
+dvt_primary_tumor_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    age_when_cancer_dx +
+    gender +
+    #primary_tumor_simplified + 
+    #tnm_stage_grouped +
+    #strata(tnm_stage_grouped) + 
+    dvt_event:primary_tumor_simplified:tnm_stage_two_groups + 
+    #pte_event + 
+    #visceral_thromb_event + 
+    #other_thromb_grouped_event + 
+    cluster(id), 
+  id = id,
+  data = all_types_vte_tmerge)
+
+dvt_primary_tumor_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+
+```
+
+We can draw some conclusions from here for patients in stage IV. But the data is fishy.  
+
+
+```{r}
+cox.zph(dvt_primary_tumor_cph_fit)
+```
+
+
+```{r}
+concordance(dvt_primary_tumor_cph_fit)
+```
+
+
+```{r}
+pte_primary_tumor_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    age_when_cancer_dx +
+    gender +
+    #primary_tumor_simplified + 
+    #strata(tnm_stage_grouped) + 
+    #dvt_event + 
+    pte_event:primary_tumor_simplified:tnm_stage_two_groups + 
+    #visceral_thromb_event + 
+    #other_thromb_grouped_event + 
+    cluster(id), 
+  id = id,
+  data = all_types_vte_tmerge)
+ 
+pte_primary_tumor_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+
+```
+
+We can draw interesting information from stage IV tumors and its correlation with PTE and death.  
+
+```{r}
+cox.zph(pte_primary_tumor_cph_fit)
+```
+
+
+```{r}
+table(all_types_vte_tmerge$primary_tumor_simplified, all_types_vte_tmerge$pte_event, useNA = "always")
+```
+
+```{r}
+table(all_types_vte_tmerge$tnm_stage_grouped, all_types_vte_tmerge$pte_event, useNA = "always")
+```
+
+
+```{r}
+visceral_thromb_primary_tumor_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    age_when_cancer_dx +
+    gender +
+    #primary_tumor_simplified + 
+    #strata(tnm_stage_grouped) + 
+    #dvt_event + 
+    #pte_event + 
+    visceral_thromb_event:primary_tumor_simplified:tnm_stage_two_groups + 
+    #other_thromb_grouped_event + 
+    cluster(id), 
+  id = id,
+  data = all_types_vte_tmerge)
+ 
+visceral_thromb_primary_tumor_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+
+```
+
+
+```{r}
+cox.zph(visceral_thromb_primary_tumor_cph_fit)
+```
+
+
+```{r}
+other_thromb_grouped_primary_tumor_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ 
+    age_when_cancer_dx +
+    gender +
+    #primary_tumor_simplified + 
+    #strata(tnm_stage_grouped) + 
+    #dvt_event + 
+    #pte_event + 
+    #visceral_thromb_event + 
+    other_thromb_grouped_event:primary_tumor_simplified:tnm_stage_two_groups + 
+    cluster(id), 
+  id = id,
+  data = all_types_vte_tmerge) 
+
+other_thromb_grouped_primary_tumor_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+
+```
+
+
+```{r}
+cox.zph(other_thromb_grouped_primary_tumor_cph_fit)
+```
+
+
+Best to do Fisher test to find correlation between cancer type and type of VTE; and do the same with stage.  
+
+
+# KM incidental vs symptomatic
+
+```{r}
+# %<>%
+id_no_vte_only_one_type_vte = oncoth1$data %>%
+  filter(n_all_vte == 0 | n_all_vte == 1) %>%
+  select(id) %>%
+  unlist()
+```
+
+
+```{r}
+covariates_df_inc_sympt = oncoth1$data %>%
+  filter(id %in% id_no_vte_only_one_type_vte) %>%
+  select(id, 
+         age_when_cancer_dx_65, 
+         gender, 
+         primary_tumor_simplified, 
+         tnm_stage_grouped, 
+         tnm_stage_two_groups, 
+         contains("_type_"),
+         n_all_vte,
+         tu_1st_vte_all_from_cancer_diagnosis_days_corrected, 
+         tu_1st_vte_all_from_cancer_diagnosis_months_corrected, 
+         censored_patient,
+         follow_up_length_days_from_cancer_diagnosis, 
+         follow_up_length_months_from_cancer_diagnosis) %>%
+  mutate(first_vte_inc_symp = coalesce(
+    cancer_associated_ledvt_type_vte, 
+    cancer_associated_uedvt_type_vte, 
+    cancer_associated_pte_type_vte, 
+    cancer_associated_visceral_thromb_type_vte, 
+    eval_crt_type_vte_along_study,
+    eval_ledvt_type_vte_along_study, 
+    eval_uedvt_type_vte_along_study, 
+    eval_pte_type_vte_along_study,
+    eval_svt_type_vte_along_study, 
+    eval_visceral_thromb_type_vte_along_study, 
+    eval_other_thromb_type_vte_along_study), 
+    .after = n_all_vte) %>%
+  filter(!c(n_all_vte == 1 & is.na(first_vte_inc_symp))) %>%
+  mutate(first_vte_inc_symp = case_when(
+    n_all_vte == 0 ~ "No CAT", 
+    TRUE ~ first_vte_inc_symp)) %>%
+  mutate(first_vte_inc_symp = factor(
+    x = first_vte_inc_symp, 
+    levels = c("No CAT", "Incidental", "Symptomatic"), 
+    labels = c("No CAT", "Incidental", "Symptomatic")))
+```
+
+
+```{r}
+survival_vte_tmerge_inc_sympt = tmerge(
+  data1 = covariates_df_inc_sympt, 
+  data2 = covariates_df_inc_sympt, 
+  id = id, 
+  tstop = follow_up_length_days_from_cancer_diagnosis, 
+  # event() is the survival analysis event of interest (in our case, death)
+  death = event(follow_up_length_days_from_cancer_diagnosis, censored_patient), 
+  # tdc() are for time-dependent covariates (VTEs)
+  vte_event = tdc(tu_1st_vte_all_from_cancer_diagnosis_days_corrected)
+  )
+```
+
+
+```{r}
+inc_symp_td_surv_fit = survfit(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    first_vte_inc_symp + 
+    cluster(id), 
+  id = id,
+  data = survival_vte_tmerge_inc_sympt)
+
+inc_symp_td_surv_fit
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+inc_symp_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    first_vte_inc_symp + 
+    #strata(tnm_stage_grouped) + #test this primary_tumor_simplified
+    cluster(id),
+  data = survival_vte_tmerge_inc_sympt)
+
+inc_symp_cph_tests_summary = summary(inc_symp_cph_fit)
+
+inc_symp_cph_tests_summary$robscore[["pvalue"]]
+
+```
+
+
+```{r}
+#jpeg("./graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+inc_symp_td_survival_km_plot = 
+  ggsurvplot(
+    fit = inc_symp_td_surv_fit,
+    data = survival_vte_tmerge_inc_sympt,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE, 
+    conf.int = FALSE,
+    #conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    surv.plot.height = 1.25, 
+    tables.height = 0.25,
+    legend.title = " ",
+    legend.labs = c("No CAT", "Incidental", "Symptomatic"),
+    risk.table = "abs_pct", 
+    risk.table.height = 0.3, 
+    fontsize = 3,
+    risk.table.col = "strata", 
+    risk.table.y.text.col = TRUE,
+    #linetype = "strata", 
+    surv.median.line = "hv",
+    xlab = "Time (months)",
+    ylab = "OS Probability",
+    ggtheme = theme_bw(),
+    palette = c("black", "magenta", "blue"))
+
+# Add p-value
+inc_symp_td_survival_km_plot$plot = inc_symp_td_survival_km_plot$plot + 
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = as.character(format(
+      inc_symp_cph_tests_summary$robscore[["pvalue"]], 
+      scientific = FALSE, 
+      digits = 1)),
+    color = "black")
+
+# Customize risk table title 
+inc_symp_td_survival_km_plot$table = 
+  inc_symp_td_survival_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+inc_symp_td_survival_km_plot
+
+#dev.off()
+```
+
+
+```{r}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+adj_inc_symp_cph_fit = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    first_vte_inc_symp:vte_event + 
+    age_when_cancer_dx_65 +
+    gender + 
+    # create stratified model -- different cancer types and stages have different impact on OS
+    strata(primary_tumor_simplified, tnm_stage_grouped) + 
+    cluster(id),
+  data = survival_vte_tmerge_inc_sympt)
+
+cox.zph(adj_inc_symp_cph_fit)
+
+adj_inc_symp_cph_fit %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+
+```
+
+
+---
+
+
+# Survival analysis for patients with no VTE *vs* patients with VTE but no recurrence *vs* patients with VTE recurrence
+
+Show three survival lines in the same KM plot.  
+
+Recurrence is also a time-dependent covariate. 
+
+```{r}
+no_vte_vs_vte_vs_recurrence_fit = survfit(Surv(
+  time = tstart, 
+  time2 = tstop,
+  event = death) ~ vte_recurrence + cluster(id), 
+    id = id,
+  data = survival_vte_tmerge)
+
+no_vte_vs_vte_vs_recurrence_fit
+```
+
+
+```{r}
+no_vte_vs_vte_vs_recurrence_cph_reg = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ vte_event:vte_recurrence + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
+
+no_vte_vs_vte_vs_recurrence_cph_test_summary = summary(no_vte_vs_vte_vs_recurrence_cph_reg)
+
+no_vte_vs_vte_vs_recurrence_pval_robust = format(
+  no_vte_vs_vte_vs_recurrence_cph_test_summary$robscore[["pvalue"]], 
+  digits = 1)
+
+no_vte_vs_vte_vs_recurrence_pval_robust
+```
+
+
+```{r}
+# jpeg("../graphs/paper/KM_cat_recurrence.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+
+no_vte_vs_vte_vs_recurrence_km_plot = 
+  ggsurvplot(
+    fit = no_vte_vs_vte_vs_recurrence_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    conf.int = FALSE,
+    xlim = c(0, 540),
+    #surv.plot.height = 1.25, 
+    #tables.height = 0.25,
+    legend.title = " ",
+    legend.labs = c("No CAT", "CAT w/o recurrence", "CAT recurrence"),
+    risk.table = "abs_pct", 
+    risk.table.height = 0.3, 
+    fontsize = 3,
+    risk.table.col = "strata", 
+    tables.y.text = FALSE,
+    #tables.y.text.col = TRUE,
+    risk.table.y.text.col = TRUE,
+    #linetype = "strata", 
+    surv.median.line = "hv",
+    xlab = "Time (months)",
+    ylab = "OS Probability",
+    ggtheme = theme_bw(),
+    palette = c("black", "red", "#FF6600")
+    )
+
+# Count number of patients of each category
+n_vte_no_recurrence = sum(oncoth1$data$vte_recurrence == "No VTE recurrence")
+n_vte_recurrence = sum(oncoth1$data$vte_recurrence == "VTE recurrence")
+
+
+# Customize risk table title 
+no_vte_vs_vte_vs_recurrence_km_plot$table = 
+  no_vte_vs_vte_vs_recurrence_km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+# Add p-value and n of patient subgroups
+no_vte_vs_vte_vs_recurrence_km_plot$plot = 
+  no_vte_vs_vte_vs_recurrence_km_plot$plot + 
+  # Log-rank p-value
+  annotate(
+    geom = "text", 
+    x = 26,
+    y = 0.3,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text", 
+    x = 28,
+    y = 0.2,
+    label = "<0.001",
+    color = "black") + 
+  # n subgroups
+  annotate(
+    geom = "text",
+    size = 3.5,
+    x = 530, 
+    y = 0.99, 
+    label = "n=302", 
+    color = "black") + 
+  annotate(
+    geom = "text",
+    size = 3.5,
+    x = 530, 
+    y = 0.91, 
+    label = paste0("n=", n_vte_no_recurrence), 
+    color = "red") +
+  annotate(
+    geom = "text",
+    size = 3.5,
+    x = 530, 
+    y = 0.83, 
+    label = paste0("n=", n_vte_recurrence), 
+    color = "#FF6600")
+
+no_vte_vs_vte_vs_recurrence_km_plot
+
+# dev.off()
+```
+
+
+```{r}
+cph_recurrence = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    gender +
+    primary_tumor_simplified +
+    tnm_stage_grouped +
+    vte_event:vte_recurrence + # VTE recurrence only makes sense if there is VTE
+    #strata(primary_tumor_simplified) +
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge) 
+
+cph_recurrence %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+#cph_recurrence_test = coxph(Surv(
+#  time = tstart, 
+#  time2 = tstop, 
+#  event = death) ~ 
+#    age_when_cancer_dx + 
+#    gender +
+#    primary_tumor_simplified +
+#    tnm_stage_grouped +
+#    vte_event:vte_recurrence + # VTE recurrence only makes sense if there is VTE
+#    tt(vte_recurrence) +
+#    cluster(id),
+#    id = id,
+#    data = survival_vte_tmerge, 
+#    tt = function(x, t, ...) {
+#        mtrx <- model.matrix(~x)[,-1]
+#        mtrx * (t)
+#        }) 
+
+#cph_recurrence_test %>% 
+#  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+cox.zph(cph_recurrence, terms = FALSE)
+```
+
+
+```{r}
+#ggcoxzph(cox.zph(cph_recurrence, terms = FALSE))[[9]]
+```
+
+
+```{r}
+concordance(cph_recurrence)
+```
+
+
+```{r}
+# 18-month OS rate
+summary(survfit(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ vte_recurrence + cluster(id), 
+  id = id, 
+  data = survival_vte_tmerge), times = 18*30.25)
+```
+
+## Interactions
+
+Not enough data to compute HR that make sense.  
+
+```{r}
+# Age group
+cph_recurrence_age = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    #age_when_cancer_dx + 
+    #gender +
+    #primary_tumor_simplified +
+    #tnm_stage_grouped +
+    strata(gender, primary_tumor_simplified, tnm_stage_grouped) + 
+    vte_event:vte_recurrence:age_when_cancer_dx_65 + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge) 
+
+cph_recurrence_age %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+
+```{r}
+cox.zph(cph_recurrence_age, terms = FALSE)
+```
+
+
+```{r}
+table(oncoth1$data$vte_recurrence, oncoth1$data$age_when_cancer_dx_65, useNA = "always")
+```
+
+
+```{r}
+# Gender
+cph_recurrence_gender = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    #age_when_cancer_dx + 
+    #gender +
+    strata(age_when_cancer_dx, primary_tumor_simplified, tnm_stage_grouped) +
+    #tnm_stage_grouped +
+    vte_event:vte_recurrence:gender + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge) 
+
+cph_recurrence_gender %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+```{r}
+cox.zph(cph_recurrence_gender, terms = FALSE)
+```
+
+
+
+```{r}
+table(oncoth1$data$vte_recurrence, oncoth1$data$gender, useNA = "always")
+```
+
+
+```{r}
+# Primary tumor
+cph_recurrence_primary_tumor = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    #age_when_cancer_dx + 
+    #gender +
+    #primary_tumor_simplified +
+    #tnm_stage_grouped +
+    strata(age_when_cancer_dx, gender, tnm_stage_grouped) +
+    vte_event:vte_recurrence:primary_tumor_simplified + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge) 
+
+cph_recurrence_primary_tumor %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+```{r}
+cox.zph(cph_recurrence_primary_tumor, terms = FALSE)
+```
+
+NSCLC presents no CAT recurrence. Only the results from pancreatic cancer seem to make some sense, but the calculation of HR is not very reliable due to the low number of recurrences in this subgroup. 
+
+
+```{r}
+table(oncoth1$data$primary_tumor_simplified, oncoth1$data$vte_recurrence, useNA = "always")
+```
+  
+
+
+```{r}
+# Primary tumor
+cph_recurrence_stage = coxph(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ 
+    age_when_cancer_dx + 
+    #gender +
+    #primary_tumor_simplified +
+    strata(gender, primary_tumor_simplified) +
+    #tnm_stage_grouped +
+    vte_event:vte_recurrence:tnm_stage_two_groups + 
+    cluster(id),
+  id = id,
+  data = survival_vte_tmerge) 
+
+cph_recurrence_stage %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
+
+There is multicollinearity between VTE recurrence and stage.  
+
+```{r}
+cox.zph(cph_recurrence_stage, terms = FALSE)
+```
+
+```{r}
+#ggcoxzph(cox.zph(cph_recurrence_stage, terms = FALSE))
+```
+
+
+
+
