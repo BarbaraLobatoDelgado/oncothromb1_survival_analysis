@@ -95,12 +95,18 @@ oncoth1_data %>%
   select(!starts_with("type_")) %>% # VTE type
   select(!starts_with("cancer_concomitant_")) %>% # VTE concomitant to cancer diagnosis
   select(!starts_with("eval_")) %>% # VTE diagnosed during study
+  select(!contains("vte_dx_during_cancer_follow_up")) %>%
   select(!starts_with("rec_")) %>% # VTE recurrences
+  select(!ends_with("_type_recurrence")) %>%
   # Exclude variables with time until event
   select(!starts_with("tu_")) %>%
   select(!contains("_study")) %>%
-  # select(!contains("recurrence")) %>%
+  # Exclude genetic variables
   select(!starts_with("rs")) %>%
+  # Exclude variables related to TiC-Onco score
+  select(!"tic_onco") %>%
+  # Exclude variables related to ONCOTHROMB score
+  select(!c(starts_with("ONCOTHROMB"), "GRS")) %>%
   # Exclude variables with no missing values
   select_if( ~ any(is.na(.))) %>%
   # Plot % of missing values
