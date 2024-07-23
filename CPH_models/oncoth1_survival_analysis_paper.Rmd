@@ -410,13 +410,13 @@ We will fit several survival curves using the Kaplan-Meier estimator.
 
 ```{r}
 # Fit Kaplan-Meier estimator 
-km_estimator_fit = survfit(
+km_fit_vte = survfit(
   Surv(time = tstart, time2 = tstop, event = death) ~ 
     vte_event + 
     cluster(id), # ensures that the survival estimates account for the correlation within individuals, providing more robust results in the presence of repeated measurements
   data = survival_vte_tmerge)
 
-km_estimator_fit
+km_fit_vte
 ```
 
 This output contains several items:
@@ -430,7 +430,7 @@ This output contains several items:
 
 
 ```{r}
-km_estimator_summary = function(km_survfit) {
+km_summary = function(km_survfit) {
   
   # Obtain summary from KM estimator
   summary_fit = summary(km_survfit)
@@ -457,7 +457,7 @@ km_estimator_summary = function(km_survfit) {
 
 ```{r}
 # Show table with summary with all time points from Kaplan-Meier estimation
-km_estimator_summary(km_estimator_fit)
+km_summary(km_fit_vte)
 ```
 
 
@@ -495,7 +495,7 @@ get_robscore_pval = function(data, covariates, tstart = "tstart", tstop = "tstop
 ```{r}
 # We perform the log-rank test separately, using coxph(), because it can handle left- and right-censored data
 # Later, we need to manually add the p-value into the KM curves
-km_estimator_pval = get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_event"))
+km_pval = get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_event"))
 ```
 
 
@@ -503,7 +503,7 @@ km_estimator_pval = get_robscore_pval(data = survival_vte_tmerge, covariates = c
 # jpeg("../graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
 km_plot_vte = 
   ggsurvplot(
-    fit = km_estimator_fit,
+    fit = km_fit_vte,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -544,7 +544,7 @@ km_plot_vte$plot = km_plot_vte$plot +
     x = 28,
     y = 0.2,
     label = as.character(format(
-      km_estimator_pval, 
+      km_pval, 
       scientific = TRUE, 
       digits = 1)),
     color = "black")
@@ -563,7 +563,7 @@ km_plot_vte
 
 ```{r}
 # Fit survival analysis model
-km_estimator_fit_stage = survfit(
+km_fit_vte_stage = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -573,12 +573,12 @@ km_estimator_fit_stage = survfit(
     cluster(id), 
   data = survival_vte_tmerge)
 
-km_estimator_fit_stage
+km_fit_vte_stage
 ```
 
 ```{r}
 # Get p-value
-km_estimator_pval_vte_stage = get_robscore_pval(survival_vte_tmerge, covariates = c("vte_event", "tnm_stage_two_groups")) 
+km_pval_vte_stage = get_robscore_pval(survival_vte_tmerge, covariates = c("vte_event", "tnm_stage_two_groups")) 
 ```
 
 
@@ -586,6 +586,9 @@ km_estimator_pval_vte_stage = get_robscore_pval(survival_vte_tmerge, covariates 
 #jpeg("./graphs/paper/KM_cat_and_stage.jpeg", width = 8, height = 4, units = 'in', res = 700)
 
 # Custom KM 
+# tt <- oncoth1_data %>%
+#   group_by(tnm_stage_two_groups, patient_group) %>%
+#   summarize(count = n(), .groups = 'drop')
 
 # Count n patients in each subgroup
 n_stages_i_ii_iii_no_vte = sum(
@@ -610,10 +613,10 @@ legend_labels_and_n = c(
   paste0("Stages I-II-III with CAT (n=", n_stages_i_ii_iii_vte, ")"), 
   paste0("Stage IV with CAT (n=", n_stages_iv_vte, ")"))
 
-#median_survival_days = surv_median(km_estimator_fit_stage)
+#median_survival_days = surv_median(km_fit_vte_stage)
   
 survplot_cat_stage = ggplot2::autoplot(
-  km_estimator_fit_stage,
+  km_fit_vte_stage,
   censor = FALSE,
   conf.int = FALSE,
   surv.size = 0.5,
@@ -657,7 +660,7 @@ survplot_cat_stage = survplot_cat_stage +
     x = 50,
     y = 0.15,
     label = as.character(format(
-      km_estimator_pval_v, 
+      km_pval_vte_stage, 
       scientific = TRUE, 
       digits = 1))
     )
@@ -686,9 +689,9 @@ survplot_cat_stage
 
 
 ```{r}
-summary(km_estimator_fit_stage, times = 18*30.25)
+# Get summary of KM estimator at 18 months
+summary(km_fit_vte_stage, times = 18 * 30.25)
 ```
-
 
 Stage IV heavily impacts the decrease in survival, more than having a VTE. Nevertheless, within the subgroups defined by these stages, having a VTE also significantly decreases survival.  
 
@@ -697,7 +700,7 @@ Stage IV heavily impacts the decrease in survival, more than having a VTE. Never
 
 ```{r}
 # Fit survival analysis model
-stratified_primary_tumor_km_estimator_fit = survfit(
+km_fit_vte_vte_cancer_type = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -707,37 +710,43 @@ stratified_primary_tumor_km_estimator_fit = survfit(
     cluster(id), 
   data = survival_vte_tmerge)
 
-stratified_primary_tumor_km_estimator_fit
+km_fit_vte_vte_cancer_type
+```
+
+```{r}
+# Get robust score test p-value
+km_pval_vte_cancer_type = get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_event", "primary_tumor_simplified"))
 ```
 
 
 ```{r}
-# We perform the log-rank test separately, because we need to manually insert the
-# p-value into the KM plot
-stratified_primary_tumor_cph_fit = coxph(Surv(
-  time = tstart, 
-  time2 = tstop, 
-  event = death) ~ 
-    vte_event + 
-    age_when_cancer_dx +
-    gender + 
-    tnm_stage_grouped +
-    primary_tumor_simplified + #test this primary_tumor_simplified
-    cluster(id),
-  id = id, 
-  data = survival_vte_tmerge)
-
-stratified_primary_tumor_cph_tests_summary = summary(stratified_primary_tumor_cph_fit)
-
-stratified_primary_tumor_cph_tests_summary$robscore[["pvalue"]]
+# # We perform the log-rank test separately, because we need to manually insert the
+# # p-value into the KM plot
+# stratified_primary_tumor_cph_fit = coxph(Surv(
+#   time = tstart, 
+#   time2 = tstop, 
+#   event = death) ~ 
+#     vte_event + 
+#     age_when_cancer_dx +
+#     gender + 
+#     tnm_stage_grouped +
+#     primary_tumor_simplified + #test this primary_tumor_simplified
+#     cluster(id),
+#   id = id, 
+#   data = survival_vte_tmerge)
+# 
+# stratified_primary_tumor_cph_tests_summary = summary(stratified_primary_tumor_cph_fit)
+# 
+# stratified_primary_tumor_cph_tests_summary$robscore[["pvalue"]]
 ```
 
 
 ```{r}
 #jpeg("./graphs/time_dependent_covariate_analysis/stratified_primary_tumor_vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-stratified_primary_tumor_km_plot_vte = 
+
+survplot_cat_cancer_type = 
   ggsurvplot(
-    fit = stratified_primary_tumor_km_estimator_fit,
+    fit = km_fit_vte_vte_cancer_type,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -765,8 +774,8 @@ stratified_primary_tumor_km_plot_vte =
     )
 
 # Add p-value
-stratified_primary_tumor_km_plot_vte$plot = 
-  stratified_primary_tumor_km_plot_vte$plot + 
+survplot_cat_cancer_type$plot = 
+  survplot_cat_cancer_type$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -778,7 +787,7 @@ stratified_primary_tumor_km_plot_vte$plot =
     x = 28,
     y = 0.2,
     label = as.character(format(
-      stratified_primary_tumor_cph_tests_summary$robscore[["pvalue"]], 
+      km_pval_vte_cancer_type, 
       scientific = TRUE, 
       digits = 1)),
     color = "black")
@@ -788,7 +797,7 @@ stratified_primary_tumor_km_plot_vte$plot =
 #  stratified_stage_km_plot_vte$table +
 #  theme(plot.title = element_text(size = 10))
 
-stratified_primary_tumor_km_plot_vte
+survplot_cat_cancer_type
 
 #dev.off()
 ```
@@ -843,99 +852,99 @@ legend_labels_and_n = c(
   paste0("Pancreatic with CAT (n=", n_pancreatic_vte, ")")
   )
 
-#median_survival_days = surv_median(km_estimator_fit_stage)
+#median_survival_days = surv_median(km_fit_vte_stage)
   
-# survplot_cat_cancer_type = autoplot(
-#   stratified_primary_tumor_km_estimator_fit, 
-#   censor = FALSE, 
-#   conf.int = FALSE, 
-#   surv.size = 0.5, 
-#   surv.linetype = "strata") +
-#   theme_bw() +
-#   labs(
-#     x = "Time (months)", 
-#     y = "OS probability", 
-#     title = "") +
-#   theme(
-#     plot.title = element_text(hjust = 0.5), 
-#     legend.title = element_text(hjust = 0.5, face = "bold"),
-#     legend.text = element_text(size = 11),
-#     legend.position = "right") +
-#   scale_x_continuous(
-#     limits = c(0, 605), 
-#     breaks = seq(from = 0, to = 600, by = 60), 
-#     labels = seq(from = 0, to = 20, by = 2)) +
-#   scale_colour_manual(
-#     name = "CAT and Cancer type",
-  #   labels = legend_labels_and_n,
-  #   values = c("#F8766D", "#F8766D", 
-  #              "#00BA42", "#00BA42",
-  #              "#00BBDD", "#00BBDD", 
-  #              "#FF62BC", "#FF62BC")) +   
-  # scale_linetype_manual(
-  #   name = "CAT and Cancer type",
-  #   labels = legend_labels_and_n, 
-  #   values = c("solid", "longdash", 
-  #              "solid", "longdash",
-  #              "solid", "longdash", 
-  #              "solid", "longdash"))
+survplot_cat_cancer_type = autoplot(
+  km_fit_vte_vte_cancer_type,
+  censor = FALSE,
+  conf.int = FALSE,
+  surv.size = 0.5,
+  surv.linetype = "strata") +
+  theme_bw() +
+  labs(
+    x = "Time (months)",
+    y = "OS probability",
+    title = "") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.title = element_text(hjust = 0.5, face = "bold"),
+    legend.text = element_text(size = 11),
+    legend.position = "right") +
+  scale_x_continuous(
+    limits = c(0, 605),
+    breaks = seq(from = 0, to = 600, by = 60),
+    labels = seq(from = 0, to = 20, by = 2)) +
+  scale_colour_manual(
+    name = "CAT and Cancer type",
+  labels = legend_labels_and_n,
+    values = c("#F8766D", "#F8766D",
+               "#00BA42", "#00BA42",
+               "#00BBDD", "#00BBDD",
+               "#FF62BC", "#FF62BC")) +
+  scale_linetype_manual(
+    name = "CAT and Cancer type",
+    labels = legend_labels_and_n,
+    values = c("solid", "longdash",
+               "solid", "longdash",
+               "solid", "longdash",
+               "solid", "longdash"))
 
 # Add log-rank p-value
-# survplot_cat_cancer_type = survplot_cat_cancer_type + 
-#   # Log-rank p-value
-#   annotate(
-#     geom = "text", 
-#     size = 4,
-#     x = 50,
-#     y = 0.2,
-#     label = "Log-rank",
-#     color = "black") + 
-#   annotate(
-#     geom = "text",
-#     size = 4,
-#     x = 50, 
-#     y = 0.15, 
-#     label = "<0.0001") 
+survplot_cat_cancer_type = survplot_cat_cancer_type +
+  # Log-rank p-value
+  annotate(
+    geom = "text",
+    size = 4,
+    x = 50,
+    y = 0.2,
+    label = "Log-rank",
+    color = "black") +
+  annotate(
+    geom = "text",
+    size = 4,
+    x = 50,
+    y = 0.15,
+    label = "<0.0001")
 
 # Add median survival line
-# survplot_cat_cancer_type = survplot_cat_cancer_type +
-#   # Horizontal line
-#   geom_segment(
-#     aes(x = 0, y = 0.5, xend = 478, yend = 0.5), 
-#     linetype = "dashed", 
-#     size = 0.4) +
-#   # Vertical lines
-#   geom_segment(
-#     aes(x = 478, y = 0, xend = 478, yend = 0.5), 
-#     linetype = "dashed", 
-#     size = 0.4) +
-#   geom_segment(
-#     aes(x = 231, y = 0, xend = 231, yend = 0.5), 
-#     linetype = "dashed", 
-#     size = 0.4)
+survplot_cat_cancer_type = survplot_cat_cancer_type +
+  # Horizontal line
+  geom_segment(
+    aes(x = 0, y = 0.5, xend = 478, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4) +
+  # Vertical lines
+  geom_segment(
+    aes(x = 478, y = 0, xend = 478, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4) +
+  geom_segment(
+    aes(x = 231, y = 0, xend = 231, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4)
 
-# survplot_cat_cancer_type
+survplot_cat_cancer_type
 
 #dev.off()
 ```
 
 
-This plot is messy and I intend to transform it into something easier to understand. But we can see that for all 4 types of tumor, median survival is lower when patients have one or more VTEs than when they have none.  
+This plot is quite messy, but we can see that for all 4 types of tumor median survival is lower when patients have one or more VTEs than when they have none.  
 
-Among the subgroup of patients that suffer VTE, pancreatic patients are the ones that die sooner (median survival time of almost 6 months). It is followed by NSCLC patients (median survival of 10.5 months, approximately); colorectal (median survival of 15.5 months approximately) and oesophago-gastric patients (median survival time of almost 19 months).  
+[CORREGIR]
+
+Among the subgroup of patients that suffer VTE, pancreatic cancer patients are the ones that die sooner (median survival time of almost 6 months). It is followed by NSCLC patients (median survival of 10.5 months, approximately); colorectal (median survival of 15.5 months approximately) and oesophago-gastric patients (median survival time of almost 19 months).  
 
 However, in the non-VTE patient's subgroup, pancreatic, NSCLC and oesophago-gastric have similar median survival times; whilst colorectal cancer patients have the best prognostic among all of them. This could also be related to the fact that the majority of colorectal cancer patients are in stage III (45.7%) and a lesser percentage (36.4%) are in stage IV. In the previous section, we have seen that stage IV cancer patients, regardless of the type of tumor, are the ones with shorter survival times.    
 
 The p-value shows that having a VTE is significantly associated with a difference in survival between patients subgroups, regardless of the type of cancer.  
 
 
-## KM curves of other time-dependent covariates
-
-### Blood transfusions
+## Blood transfusions
 
 ```{r}
 # Fit survival analysis model
-blood_transf_km_estimator_fit = survfit(
+km_fit_blood_transfusion = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -946,8 +955,15 @@ blood_transf_km_estimator_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-blood_transf_km_estimator_fit
+km_fit_blood_transfusion
 ```
+
+
+```{r}
+# ...
+km_pval_blood_transfusion = get_robscore_pval(survival_vte_tmerge, covariates = c("blood_transfusion"))
+```
+
 
 
 ```{r}
@@ -972,7 +988,7 @@ blood_transf_cph_tests_summary$robscore[["pvalue"]]
 
 ```{r}
 blood_transf_km_plot_vte = ggsurvplot(
-    fit = blood_transf_km_estimator_fit,
+    fit = km_fit_blood_transfusion,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1057,11 +1073,11 @@ cox.zph(coxph(Surv(
 
 
 
-### Immobilisation
+## Immobilisation
 
 ```{r}
 # Fit survival analysis model
-immobilisation_km_estimator_fit = survfit(
+immobilisation_km_fit_vte = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1072,7 +1088,7 @@ immobilisation_km_estimator_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-immobilisation_km_estimator_fit
+immobilisation_km_fit_vte
 ```
 
 
@@ -1098,7 +1114,7 @@ immobilisation_cph_tests_summary$robscore[["pvalue"]]
 
 ```{r}
 immobilisation_km_plot_vte = ggsurvplot(
-    fit = immobilisation_km_estimator_fit,
+    fit = immobilisation_km_fit_vte,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1165,11 +1181,11 @@ coxph(Surv(
 ```
 
 
-### Recent major surgeries
+## Recent major surgeries
 
 ```{r}
 # Fit survival analysis model
-recent_major_surgery_km_estimator_fit = survfit(
+recent_major_surgery_km_fit_vte = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1180,7 +1196,7 @@ recent_major_surgery_km_estimator_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-recent_major_surgery_km_estimator_fit
+recent_major_surgery_km_fit_vte
 ```
 
 
@@ -1207,7 +1223,7 @@ recent_major_surgery_cph_fit
 
 ```{r}
 recent_major_surgery_km_plot_vte = ggsurvplot(
-    fit = recent_major_surgery_km_estimator_fit,
+    fit = recent_major_surgery_km_fit_vte,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1274,11 +1290,11 @@ coxph(Surv(
 ```
 
 
-### Thromboprophylaxis received during hospitalization
+## Thromboprophylaxis received during hospitalization
 
 ```{r}
 # Fit survival analysis model
-thromboprophylaxis_hospital_km_estimator_fit = survfit(
+thromboprophylaxis_hospital_km_fit_vte = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1289,7 +1305,7 @@ thromboprophylaxis_hospital_km_estimator_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-thromboprophylaxis_hospital_km_estimator_fit
+thromboprophylaxis_hospital_km_fit_vte
 ```
 
 
@@ -1316,7 +1332,7 @@ thromboprophylaxis_hospital_cph_tests_summary$robscore[["pvalue"]]
 ```{r}
 thromboprophylaxis_hospital_km_plot_vte = 
   ggsurvplot(
-    fit = thromboprophylaxis_hospital_km_estimator_fit,
+    fit = thromboprophylaxis_hospital_km_fit_vte,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1384,11 +1400,11 @@ coxph(Surv(
 ```
 
 
-### Erythropoietin treatment
+## Erythropoietin treatment
 
 ```{r}
 # Fit survival analysis model
-erythropoietin_tx_km_estimator_fit = survfit(
+erythropoietin_tx_km_fit_vte = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1399,7 +1415,7 @@ erythropoietin_tx_km_estimator_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-erythropoietin_tx_km_estimator_fit
+erythropoietin_tx_km_fit_vte
 ```
 
 
@@ -1426,7 +1442,7 @@ erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]]
 ```{r}
 erythropoietin_tx_km_plot_vte = 
   ggsurvplot(
-    fit = erythropoietin_tx_km_estimator_fit,
+    fit = erythropoietin_tx_km_fit_vte,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1508,12 +1524,12 @@ coxph(Surv(
   gtsummary::tbl_regression(exp = TRUE)
 ```
 
-#### Erythropoietin treatment stratified by stage
+### Erythropoietin treatment stratified by stage
 
 
 ```{r}
 # Fit survival analysis model
-stratified_stage_erythropoietin_tx_km_estimator_fit = survfit(
+stratified_stage_erythropoietin_tx_km_fit_vte = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1524,7 +1540,7 @@ stratified_stage_erythropoietin_tx_km_estimator_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-stratified_stage_erythropoietin_tx_km_estimator_fit
+stratified_stage_erythropoietin_tx_km_fit_vte
 ```
 
 
@@ -1551,7 +1567,7 @@ stratified_stage_erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]]
 ```{r}
 stratified_stage_erythropoietin_tx_km_plot_vte = 
   ggsurvplot(
-    fit = stratified_stage_erythropoietin_tx_km_estimator_fit,
+    fit = stratified_stage_erythropoietin_tx_km_fit_vte,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1643,7 +1659,7 @@ coxph(Surv(
 
 ## Exploratory CPH regression
 
-For example, in a Cox model, you generally should limit yourself to about 1 candidate predictor per 15 events in your data set.
+In a linear model (like the Cox regression), you generally should limit yourself to about 1 candidate predictor per 15 events in your dataset.
 
 https://stats.stackexchange.com/questions/178944/precisely-how-does-rs-coxph-handle-repeated-measures  
 
@@ -4394,7 +4410,7 @@ survival_vte_tmerge_inc_sympt = tmerge(
 
 
 ```{r}
-inc_symp_km_estimator_fit = survfit(Surv(
+inc_symp_km_fit_vte = survfit(Surv(
   time = tstart, 
   time2 = tstop, 
   event = death) ~ 
@@ -4403,7 +4419,7 @@ inc_symp_km_estimator_fit = survfit(Surv(
   id = id,
   data = survival_vte_tmerge_inc_sympt)
 
-inc_symp_km_estimator_fit
+inc_symp_km_fit_vte
 ```
 
 
@@ -4430,7 +4446,7 @@ inc_symp_cph_tests_summary$robscore[["pvalue"]]
 #jpeg("./graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
 inc_symp_km_plot_vte = 
   ggsurvplot(
-    fit = inc_symp_km_estimator_fit,
+    fit = inc_symp_km_fit_vte,
     data = survival_vte_tmerge_inc_sympt,
     xscale = 30,
     break.time.by = 60,
