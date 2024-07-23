@@ -452,7 +452,6 @@ formatted_summary %>%
 
 
 ```{r}
-
 # Fit the Cox Proportional-Hazards Model
 cox_model <- coxph(Surv(time = tstart, 
   time2 = tstop, 
@@ -548,6 +547,9 @@ td_survival_km_plot$table =
 td_survival_km_plot
 
 # dev.off()
+```
+```{r}
+aa
 ```
 
 
