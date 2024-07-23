@@ -350,9 +350,7 @@ survival_data = oncoth1_data %>%
          tu_3rd_vte_all_from_cancer_diagnosis_days_corrected, 
          tu_3rd_vte_all_from_cancer_diagnosis_months_corrected, 
          tu_4th_vte_all_from_cancer_diagnosis_days_corrected, 
-         tu_4th_vte_all_from_cancer_diagnosis_months_corrected, 
-         tu_5th_vte_all_from_cancer_diagnosis_days_corrected, 
-         tu_5th_vte_all_from_cancer_diagnosis_months_corrected
+         tu_4th_vte_all_from_cancer_diagnosis_months_corrected
          )
 ```
 
