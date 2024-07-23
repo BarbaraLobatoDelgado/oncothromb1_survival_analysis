@@ -37,28 +37,6 @@ pacman::p_load(
 ```
 
 
-
-```{r, message=FALSE}
-# library(an9elproject)
-# library(an9elversions)
-# library(tidyverse)
-# library(lubridate)
-# library(magrittr)
-# library(naniar)
-# library(survival)
-# library(pec)
-# library(survminer)
-# library(glmnet)
-
-
-# library(caret)
-# library(pcoxtime)
-# library(mctest)
-# library(ggcorrplot)
-# library(ggfortify)
-```
-
-
 ```{r}
 ###########################################
 ## Customised ggplot for survfit objects ##
@@ -135,7 +113,7 @@ survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, le
 
 ```{r}
 # Load DB
-oncoth1 = get_project("oncothr1", version = "0.0.8003") # 0.0.8001
+oncoth1 = get_project("oncothr1", version = "0.0.8003") # 0.0.8004
 ```
 
 
@@ -156,7 +134,7 @@ table(oncoth1_data$patient_group, oncoth1_data$vte_recurrence)
 
 
 ```{r}
-UPDATE an9leproject!!!
+# UPDATE an9leproject!!!
 # Correct information for patient id = 118
 oncoth1_data %<>%
   mutate(vte_recurrence = case_when(
@@ -167,30 +145,7 @@ oncoth1_data %<>%
 
 
 ```{r}
-# Number of comorbidities
-comorbidities_cols_index = which(colnames(oncoth1_data) %in% c(
-  "diabetes_mellitus", 
-  "dyslipidemia", 
-  # "tobacco_use_imp", # it is not considered an illness
-  "copd", 
-  "arterial_hypertension", 
-  "chronic_cardiac_insufficiency", 
-  "renal_insufficiency", 
-  "venous_insufficiency"))
-
-oncoth1_data$n_comorbidities <- rowSums(oncoth1_data[, comorbidities_cols_index] == "Yes")
-
-oncoth1_data %<>%
-  mutate(n_comorbidities = case_when(
-    n_comorbidities == 0 ~ "0",
-    n_comorbidities == 1 ~ "1",
-    n_comorbidities == 2 ~ "2+",
-    n_comorbidities == 3 ~ "2+",
-    n_comorbidities == 4 ~ "2+",
-    n_comorbidities == 5 ~ "2+",
-    n_comorbidities == 6 ~ "2+"), .after = venous_insufficiency) %>%
-  mutate(n_comorbidities = as.factor(n_comorbidities)) 
-
+# Group tobacco use into 'Never smoked' vs 'Former/current'
 oncoth1_data %<>%
   mutate(tobacco_use_imp_grouped = case_when(
     tobacco_use_imp == "Never has smoked" ~ "Never", 
@@ -225,12 +180,12 @@ oncoth1_data %<>%
 ```
 
 
-# Create survival data sets
+# Create data sets for survival analysis
 
-
-## Time-dependent data set
+This dataset must be in the right format to deal with time-dependent covariates and left- and right-censoring.
 
 ```{r}
+# Get subset of covariates for survival analysis
 covariates_df = oncoth1_data %>%
   select(id, 
          patient_group,
@@ -249,33 +204,33 @@ covariates_df = oncoth1_data %>%
          bmi_category, 
          performance_status_category_corrected_imp,
          hormone_therapy,
-         albumin_imp, 
-         albumin_imp_category,
-         aptt_imp, 
-         aptt_imp_category,
-         aptt_ratio_imp,
-         aptt_ratio_imp_category,
-         bilirubin_imp, 
-         bilirubin_imp_category,
-         creatinine_imp,
-         creatinine_imp_category,
-         alkaline_phosphatase_imp, 
-         alkaline_phosphatase_imp_category,
-         hemoglobin, 
-         hemoglobin_category,
-         inr_imp, 
-         inr_imp_category,
-         leukocytes_imp, 
-         leukocytes_imp_category,
-         platelets, 
-         platelets_category, 
-         leukocytosis_imp,
-         thrombocytosis, 
-         low_hemoglobin, 
-         personal_background, 
+         # albumin_imp, 
+         # albumin_imp_category,
+         # aptt_imp, 
+         # aptt_imp_category,
+         # aptt_ratio_imp,
+         # aptt_ratio_imp_category,
+         # bilirubin_imp, 
+         # bilirubin_imp_category,
+         # creatinine_imp,
+         # creatinine_imp_category,
+         # alkaline_phosphatase_imp, 
+         # alkaline_phosphatase_imp_category,
+         # hemoglobin, 
+         # hemoglobin_category,
+         # inr_imp, 
+         # inr_imp_category,
+         # leukocytes_imp, 
+         # leukocytes_imp_category,
+         # platelets, 
+         # platelets_category, 
+         # leukocytosis_imp,
+         # thrombocytosis, 
+         # low_hemoglobin, 
+         # personal_background, 
          major_surgery_in_medical_history, 
-         pregnancy_imp, 
-         oral_contraceptive_tx, 
+         pregnancy_imp, # constant
+         oral_contraceptive_tx, # constant
          diabetes_mellitus, 
          dyslipidemia, 
          tobacco_use_imp, 
@@ -375,6 +330,7 @@ covariates_df = oncoth1_data %>%
 
 
 ```{r}
+# Get subset of variables containing information about patient status and time until events
 survival_data = oncoth1_data %>%
   select(id, 
          patient_group, 
@@ -395,18 +351,19 @@ survival_data = oncoth1_data %>%
          tu_4th_vte_all_from_cancer_diagnosis_days_corrected, 
          tu_4th_vte_all_from_cancer_diagnosis_months_corrected, 
          tu_5th_vte_all_from_cancer_diagnosis_days_corrected, 
-         tu_5th_vte_all_from_cancer_diagnosis_months_corrected)
-
-#survival_vte_tmerge %<>%
-#  mutate_at(vars(starts_with("tu_")), ~ as.numeric(.x))
-
+         tu_5th_vte_all_from_cancer_diagnosis_months_corrected
+         )
 ```
 
 
 ```{r}
-# Create object tmerge for time-dependant covariate survival analysis
-# For interval censored data, the status indicator is 0=right censored, 1=event at time, 
-# 2=left censored, 3=interval censored.
+# Create object tmerge for managing time-dependant covariates 
+# Add time until death/censoring and time until VTE
+# For interval censored data, the status indicator is 
+# 0=right censored
+# 1=event at time 
+# 2=left censored
+# 3=interval censored
 survival_vte_tmerge = tmerge(
   data1 = covariates_df, 
   data2 = survival_data, 
@@ -414,17 +371,17 @@ survival_vte_tmerge = tmerge(
   tstop = follow_up_length_from_cancer_diagnosis_days, 
   # event() is the survival analysis event of interest (in our case, death)
   death = event(follow_up_length_from_cancer_diagnosis_days, censored_patient), 
-  # tdc() are for time-dependent covariates (VTEs)
+  # tdc() are for time-dependent covariates
   vte_event = tdc(tu_1st_vte_all_from_cancer_diagnosis_days_corrected),
   vte_event = tdc(tu_2nd_vte_all_from_cancer_diagnosis_days_corrected),
-  vte_event = tdc(tu_3rd_vte_all_from_cancer_diagnosis_days_corrected), 
-  vte_event = tdc(tu_4th_vte_all_from_cancer_diagnosis_days_corrected),
-  vte_event = tdc(tu_5th_vte_all_from_cancer_diagnosis_days_corrected)
+  vte_event = tdc(tu_3rd_vte_all_from_cancer_diagnosis_days_corrected),
+  vte_event = tdc(tu_4th_vte_all_from_cancer_diagnosis_days_corrected)
   )
 ```
 
 
 ```{r}
+# Add other time-dependent covariates (i.e., blood transfusion, immobilisation, etc.)
 survival_vte_tmerge = tmerge(
   survival_vte_tmerge, 
   survival_vte_tmerge, 
@@ -432,7 +389,6 @@ survival_vte_tmerge = tmerge(
   blood_transfusion = tdc(tu_1st_blood_transfusion_from_cancer_diagnosis_days),
   blood_transfusion = tdc(tu_2nd_blood_transfusion_from_cancer_diagnosis_days),
   blood_transfusion = tdc(tu_3rd_blood_transfusion_from_cancer_diagnosis_days),
-  #major_trauma = tdc(tu_1st_major_trauma_from_cancer_diagnosis_days), 
   immobilisation = tdc(tu_1st_immobilisation_from_cancer_diagnosis_days), 
   immobilisation = tdc(tu_2nd_immobilisation_from_cancer_diagnosis_days), 
   immobilisation = tdc(tu_3rd_immobilisation_from_cancer_diagnosis_days), 
@@ -444,13 +400,6 @@ survival_vte_tmerge = tmerge(
   erythropoietin_tx = tdc(tu_2nd_erythropoietin_tx_from_cancer_diagnosis_days),
   erythropoietin_tx = tdc(tu_3rd_erythropoietin_tx_from_cancer_diagnosis_days)
   )
-```
-
-
-```{r}
-#survival_vte_tmerge$vte_event = factor(x = survival_vte_tmerge$vte_event, 
-                                    #levels = c(0, 1), 
-                                    #labels = c("No", "Yes"))
 ```
 
 
