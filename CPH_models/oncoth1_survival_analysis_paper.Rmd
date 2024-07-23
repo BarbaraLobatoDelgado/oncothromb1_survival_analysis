@@ -562,55 +562,41 @@ km_plot_vte
 
 ## No VTE vs single VTE vs VTE recurrence
 
-Show three survival lines in the same KM plot.  
-
 Recurrence is also a time-dependent covariate. 
 
 ```{r}
-no_vte_vs_vte_vs_recurrence_fit = survfit(Surv(
+# KM estimation
+km_fit_vte_recurrence = survfit(Surv(
   time = tstart, 
   time2 = tstop,
   event = death) ~ vte_recurrence + cluster(id), 
     id = id,
   data = survival_vte_tmerge)
 
-no_vte_vs_vte_vs_recurrence_fit
+km_fit_vte_recurrence
 ```
 
 
 ```{r}
-no_vte_vs_vte_vs_recurrence_cph_reg = coxph(Surv(
-  time = tstart, 
-  time2 = tstop, 
-  event = death) ~ vte_event:vte_recurrence + 
-    cluster(id),
-  id = id,
-  data = survival_vte_tmerge)
-
-no_vte_vs_vte_vs_recurrence_cph_test_summary = summary(no_vte_vs_vte_vs_recurrence_cph_reg)
-
-no_vte_vs_vte_vs_recurrence_pval_robust = format(
-  no_vte_vs_vte_vs_recurrence_cph_test_summary$robscore[["pvalue"]], 
-  digits = 1)
-
-no_vte_vs_vte_vs_recurrence_pval_robust
+# Get ...
+km_pval_vte_recurrence = get_robscore_pval(survival_vte_tmerge, covariates = c("vte_recurrence"))
 ```
 
 
 ```{r}
 # jpeg("../graphs/paper/KM_cat_recurrence.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
 
-no_vte_vs_vte_vs_recurrence_km_plot = 
+km_plot_vte_recurrence = 
   ggsurvplot(
-    fit = no_vte_vs_vte_vs_recurrence_fit,
+    fit = km_fit_vte_recurrence,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
     censor = FALSE,
     conf.int = FALSE,
     xlim = c(0, 540),
-    #surv.plot.height = 1.25, 
-    #tables.height = 0.25,
+    # surv.plot.height = 1.25, 
+    # tables.height = 0.25,
     legend.title = " ",
     legend.labs = c("No CAT", "CAT w/o recurrence", "CAT recurrence"),
     risk.table = "abs_pct", 
@@ -634,13 +620,13 @@ n_vte_recurrence = sum(oncoth1_data$vte_recurrence == "VTE recurrence")
 
 
 # Customize risk table title 
-no_vte_vs_vte_vs_recurrence_km_plot$table = 
-  no_vte_vs_vte_vs_recurrence_km_plot$table +
+km_plot_vte_recurrence$table = 
+  km_plot_vte_recurrence$table +
   theme(plot.title = element_text(size = 10))
 
 # Add p-value and n of patient subgroups
-no_vte_vs_vte_vs_recurrence_km_plot$plot = 
-  no_vte_vs_vte_vs_recurrence_km_plot$plot + 
+km_plot_vte_recurrence$plot = 
+  km_plot_vte_recurrence$plot + 
   # Log-rank p-value
   annotate(
     geom = "text", 
@@ -652,7 +638,7 @@ no_vte_vs_vte_vs_recurrence_km_plot$plot =
     geom = "text", 
     x = 28,
     y = 0.2,
-    label = "<0.001",
+    label = if (km_pval_vte_recurrence < 0.0001) {"< 0.0001"} else {km_pval_vte_recurrence},
     color = "black") + 
   # n subgroups
   annotate(
@@ -677,14 +663,16 @@ no_vte_vs_vte_vs_recurrence_km_plot$plot =
     label = paste0("n=", n_vte_recurrence), 
     color = "#FF6600")
 
-no_vte_vs_vte_vs_recurrence_km_plot
+km_plot_vte_recurrence
 
 # dev.off()
 ```
 
 
 ```{r}
-cph_recurrence = coxph(Surv(
+# Train CPH model to assess weight of VTE recurrence
+# Adjust by age, sex, cancer type and stage
+cph_vte_recurrence = coxph(Surv(
   time = tstart, 
   time2 = tstop, 
   event = death) ~ 
@@ -693,65 +681,41 @@ cph_recurrence = coxph(Surv(
     primary_tumor_simplified +
     tnm_stage_grouped +
     vte_event:vte_recurrence + # VTE recurrence only makes sense if there is VTE
-    #strata(primary_tumor_simplified) +
     cluster(id),
   id = id,
-  data = survival_vte_tmerge) 
+  data = survival_vte_tmerge
+  ) 
+```
 
-cph_recurrence %>% 
+```{r}
+# Test PH assumption
+cox.zph(cph_vte_recurrence)
+```
+
+
+```{r}
+# Inspect plot for violation of PH assumption
+ggcoxzph(cox.zph(cph_vte_recurrence))
+```
+
+
+```{r}
+# Show betas and p-values
+cph_vte_recurrence %>% 
   gtsummary::tbl_regression(exp = TRUE)
 ```
 
 
 ```{r}
-#cph_recurrence_test = coxph(Surv(
-#  time = tstart, 
-#  time2 = tstop, 
-#  event = death) ~ 
-#    age_when_cancer_dx + 
-#    gender +
-#    primary_tumor_simplified +
-#    tnm_stage_grouped +
-#    vte_event:vte_recurrence + # VTE recurrence only makes sense if there is VTE
-#    tt(vte_recurrence) +
-#    cluster(id),
-#    id = id,
-#    data = survival_vte_tmerge, 
-#    tt = function(x, t, ...) {
-#        mtrx <- model.matrix(~x)[,-1]
-#        mtrx * (t)
-#        }) 
-
-#cph_recurrence_test %>% 
-#  gtsummary::tbl_regression(exp = TRUE)
-```
-
-
-```{r}
-cox.zph(cph_recurrence, terms = FALSE)
-```
-
-
-```{r}
-#ggcoxzph(cox.zph(cph_recurrence, terms = FALSE))[[9]]
-```
-
-
-```{r}
-concordance(cph_recurrence)
+# C-index 
+concordance(cph_vte_recurrence)
 ```
 
 
 ```{r}
 # 18-month OS rate
-summary(survfit(Surv(
-  time = tstart, 
-  time2 = tstop, 
-  event = death) ~ vte_recurrence + cluster(id), 
-  id = id, 
-  data = survival_vte_tmerge), times = 18*30.25)
+summary(km_fit_vte_recurrence, times = 18*30.25)
 ```
-
 
 ## VTE & stage
 
@@ -769,6 +733,7 @@ km_fit_vte_stage = survfit(
 
 km_fit_vte_stage
 ```
+
 
 ```{r}
 # Get p-value
