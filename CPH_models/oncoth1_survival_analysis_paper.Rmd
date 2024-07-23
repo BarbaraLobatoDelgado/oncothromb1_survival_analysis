@@ -468,7 +468,7 @@ get_robscore_pval = function(data, covariates, tstart = "tstart", tstop = "tstop
   # way of dealing with left- and right-censored data
   
   # Construct formula
-  covariates = paste(covariates, sep = " + ")
+  covariates = paste(covariates, collapse = " + ")
     
   # Create formula for CPH model
   if (!is.null(strata)) {
@@ -577,27 +577,8 @@ km_estimator_fit_stage
 ```
 
 ```{r}
-
-```
-
-
-
-```{r}
-# We perform the log-rank test separately, because we need to manually insert the
-# p-value into the KM plot
-stratified_stage_cph_fit = coxph(Surv(
-  time = tstart, 
-  time2 = tstop, 
-  event = death) ~ 
-    vte_event + 
-    tnm_stage_two_groups + #test this primary_tumor_simplified
-    cluster(id),
-  data = survival_vte_tmerge)
-
-stratified_stage_cph_tests_summary = summary(stratified_stage_cph_fit)
-
-stratified_stage_cph_tests_summary$robscore[["pvalue"]]
-
+# Get p-value
+km_estimator_pval_vte_stage = get_robscore_pval(survival_vte_tmerge, covariates = c("vte_event", "tnm_stage_two_groups")) 
 ```
 
 
@@ -631,70 +612,74 @@ legend_labels_and_n = c(
 
 #median_survival_days = surv_median(km_estimator_fit_stage)
   
-# survplot_cat_stage = ggfortify::autoplot(
-#   km_estimator_fit_stage, 
-#   censor = FALSE, 
-#   conf.int = FALSE, 
-#   surv.size = 0.5, 
-#   surv.linetype = "strata") +
-#   theme_bw() +
-#   labs(
-#     x = "Time (months)", 
-#     y = "OS probability", 
-#     title = "") +
-#   theme(
-#     plot.title = element_text(hjust = 0.5), 
-#     legend.title = element_text(hjust = 0.5, face = "bold"),
-#     legend.text = element_text(size = 11),
-#     legend.position = "right") +
-#   scale_x_continuous(
-#     limits = c(0, 605), 
-#     breaks = seq(from = 0, to = 600, by = 60), 
-#     labels = seq(from = 0, to = 20, by = 2)) +
-#   scale_colour_manual(
-#     name = "CAT and Stage",
-#     labels = legend_labels_and_n,
-#     values = c("black", "black", "red", "red")) +   
-#   scale_linetype_manual(
-#     name = "CAT and Stage",
-#     labels = legend_labels_and_n, 
-#     values = c("longdash", "dotted", "longdash", "dotted"))
+survplot_cat_stage = ggplot2::autoplot(
+  km_estimator_fit_stage,
+  censor = FALSE,
+  conf.int = FALSE,
+  surv.size = 0.5,
+  surv.linetype = "strata") +
+  theme_bw() +
+  labs(
+    x = "Time (months)",
+    y = "OS probability",
+    title = "") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.title = element_text(hjust = 0.5, face = "bold"),
+    legend.text = element_text(size = 11),
+    legend.position = "right") +
+  scale_x_continuous(
+    limits = c(0, 605),
+    breaks = seq(from = 0, to = 600, by = 60),
+    labels = seq(from = 0, to = 20, by = 2)) +
+  scale_colour_manual(
+    name = "CAT and Stage",
+    labels = legend_labels_and_n,
+    values = c("black", "black", "red", "red")) +
+  scale_linetype_manual(
+    name = "CAT and Stage",
+    labels = legend_labels_and_n,
+    values = c("longdash", "dotted", "longdash", "dotted"))
 
-# Add log-rank p-value
-# survplot_cat_stage = survplot_cat_stage + 
-#   # Log-rank p-value
-#   annotate(
-#     geom = "text", 
-#     size = 4,
-#     x = 50,
-#     y = 0.2,
-#     label = "Log-rank",
-#     color = "black") + 
-#   annotate(
-#     geom = "text",
-#     size = 4,
-#     x = 50, 
-#     y = 0.15, 
-#     label = "<0.0001") 
+# # Add log-rank p-value
+survplot_cat_stage = survplot_cat_stage +
+  # Log-rank p-value
+  annotate(
+    geom = "text",
+    size = 4,
+    x = 50,
+    y = 0.2,
+    label = "Log-rank",
+    color = "black") +
+  annotate(
+    geom = "text",
+    size = 4,
+    x = 50,
+    y = 0.15,
+    label = as.character(format(
+      km_estimator_pval_v, 
+      scientific = TRUE, 
+      digits = 1))
+    )
 
 # Add median survival line
-# survplot_cat_stage = survplot_cat_stage +
-#   # Horizontal line
-#   geom_segment(
-#     aes(x = 0, y = 0.5, xend = 478, yend = 0.5), 
-#     linetype = "dashed", 
-#     size = 0.4) +
-#   # Vertical lines
-#   geom_segment(
-#     aes(x = 478, y = 0, xend = 478, yend = 0.5), 
-#     linetype = "dashed", 
-#     size = 0.4) +
-#   geom_segment(
-#     aes(x = 231, y = 0, xend = 231, yend = 0.5), 
-#     linetype = "dashed", 
-#     size = 0.4)
+survplot_cat_stage = survplot_cat_stage +
+  # Horizontal line
+  geom_segment(
+    aes(x = 0, y = 0.5, xend = 478, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4) +
+  # Vertical lines
+  geom_segment(
+    aes(x = 478, y = 0, xend = 478, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4) +
+  geom_segment(
+    aes(x = 231, y = 0, xend = 231, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4)
 
-# survplot_cat_stage
+survplot_cat_stage
 
 #dev.off()
 ```
