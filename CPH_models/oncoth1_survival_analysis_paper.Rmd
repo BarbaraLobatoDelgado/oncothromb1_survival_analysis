@@ -419,21 +419,21 @@ td_surv_fit = survfit(
 td_surv_fit
 ```
 
-This output contains several item:
+This output contains several items:
 
 - records: The total number of records in each group (vte_event=0 and vte_event=1).
 - n.max: The maximum number of subjects at risk at any time during the observation period.
 - n.start: The number of subjects at the start of the observation period.
 - events: The number of events (deaths) observed.
-- median: The median survival time.
-- 0.95LCL and 0.95UCL: The lower and upper 95% confidence limits for the median survival time.
+- median: The median survival time (days).
+- 0.95LCL and 0.95UCL: The lower and upper 95% confidence limits for the median survival time (days).
 
 
 ```{r}
 # Get information for all time points from Kaplan-Meier estimation
 summary_fit = summary(td_surv_fit)
 formatted_summary = data.frame(
-  yime = summary_fit$time,
+  time = summary_fit$time,
   n_risk = summary_fit$n.risk,
   n_event = summary_fit$n.event,
   survival = summary_fit$surv,
@@ -442,33 +442,13 @@ formatted_summary = data.frame(
   upper_95CI = summary_fit$upper
 )
 
-# kable(formatted_summary, format = "markdown", caption = "Survival Analysis Summary")
-
+# Show table with summary
 formatted_summary %>%
   kbl(caption = "Survival Analysis Summary") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
-                full_width = F) %>%
-  column_spec(1, bold = TRUE, color = "white", background = "#2E9FDF") %>%
-  column_spec(2:8, border_left = TRUE, border_right = TRUE) %>%
-  add_header_above(c(" ", "Summary Statistics" = 7))
-
+                full_width = FALSE) %>%
+  column_spec(ncol(formatted_summary)) 
 ```
-
-
-```{r}
-ggsurv <- ggsurvplot(
-  td_surv_fit,
-  data = survival_vte_tmerge,
-  pval = TRUE, # Add p-value for the log-rank test
-  conf.int = TRUE, # Add confidence interval
-  risk.table = TRUE, # Add number at risk table
-  ggtheme = theme_minimal(), # Minimal theme
-  palette = c("#E7B800", "#2E9FDF") # Custom color palette
-)
-```
-
-
-
 
 
 ```{r}
