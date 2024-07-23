@@ -430,6 +430,33 @@ This output contains several items:
 
 
 ```{r}
+km_estimator_summary = function(km_survfit) {
+  
+  # Obtain summary from KM estimator
+  summary_fit = summary(km_survfit)
+
+  formatted_summary = data.frame(
+    time = summary_fit$time,
+    n_risk = summary_fit$n.risk,
+    n_event = summary_fit$n.event,
+    survival = summary_fit$surv,
+    std_error = summary_fit$std.err,
+    lower_95CI = summary_fit$lower,
+    upper_95CI = summary_fit$upper
+  )
+  
+  # Show table with summary
+  formatted_summary %>%
+    kbl(caption = "Survival Analysis Summary") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                  full_width = FALSE) %>%
+    column_spec(ncol(formatted_summary))
+}
+```
+
+
+
+```{r}
 # Get information for all time points from Kaplan-Meier estimation
 summary_fit = summary(km_estimator_fit)
 
@@ -453,62 +480,15 @@ formatted_summary %>%
 
 
 ```{r}
-# Fit the Cox Proportional-Hazards Model
-cox_model <- coxph(Surv(time = tstart, 
-  time2 = tstop, 
-  event = death) ~ vte_event + cluster(id), data = survival_vte_tmerge)
-
-# Generate Survival Curves
-surv_fit <- survfit(cox_model)
-
-# Create a summary dataframe for the survival curves
-surv_summary <- summary(surv_fit)
-
-# Plot Survival Curves
-plot(surv_fit, xlab = "Time", ylab = "Survival Probability", main = "Survival Curves")
-
-```
-
-
-```{r}
-# We perform the log-rank test separately, because we need to manually insert the
-# p-value into the KM plot
-cph_fit = coxph(Surv(
-  time = tstart, 
-  time2 = tstop, 
-  event = death) ~ 
-    vte_event + 
-    #strata(tnm_stage_grouped) + #test this primary_tumor_simplified
-    cluster(id),
-  data = survival_vte_tmerge)
-
-cph_tests_summary = summary(cph_fit)
-
-cph_tests_summary$robscore[["pvalue"]]
-
-```
-
-
-```{r}
-tstart = "tstart"
-tstop = "tstop"
-event = "death"
-covariates = c("vte_event")
-cluster = "id"
-strata = NULL
-
-formula_string = paste0("Surv(", tstart, ", ", tstop, ", ", event, ") ~ ", covariates, " + strata(", strata, ") + cluster(", cluster, ")")
-formula_string
-```
-
-
-
-```{r}
 get_robscore_pval = function(data, covariates, tstart = "tstart", tstop = "tstop", event = "death", cluster = "id", strata = NULL) {
   
+  # Fit CPH model to extract robust score test p-value, since it is the best
+  # way of dealing with left- and right-censored data
+  
   # Construct formula
-  covariates_formula = paste(covariates, sep = " + ")
-     
+  covariates = paste(covariates, sep = " + ")
+    
+  # Create formula for CPH model
   if (!is.null(strata)) {
     formula_string = paste0("Surv(", tstart, ", ", tstop, ", ", event, ") ~ ", covariates, " + strata(", strata, ") + cluster(", cluster, ")")
   } else {
@@ -531,12 +511,10 @@ get_robscore_pval = function(data, covariates, tstart = "tstart", tstop = "tstop
 
 
 ```{r}
-get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_event"))
+# We perform the log-rank test separately, using coxph(), because it can handle left- and right-censored data
+# Later, we need to manually add the p-value into the KM curves
+km_estimator_pval = get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_event"))
 ```
-
-
-
-
 
 
 ```{r}
@@ -584,7 +562,7 @@ km_plot_vte$plot = km_plot_vte$plot +
     x = 28,
     y = 0.2,
     label = as.character(format(
-      cph_tests_summary$robscore[["pvalue"]], 
+      km_estimator_pval, 
       scientific = TRUE, 
       digits = 1)),
     color = "black")
@@ -605,7 +583,6 @@ km_plot_vte
 
 ```{r}
 # Fit survival analysis model
-km_estimator_fit_stage
 km_estimator_fit_stage = survfit(
   Surv(
     time = tstart, 
