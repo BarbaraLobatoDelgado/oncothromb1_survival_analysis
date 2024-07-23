@@ -409,14 +409,14 @@ survival_vte_tmerge = tmerge(
 We will fit several survival curves using the Kaplan-Meier estimator. 
 
 ```{r}
-# Fit survival analysis model
-td_surv_fit = survfit(
+# Fit Kaplan-Meier estimator 
+km_estimator_fit = survfit(
   Surv(time = tstart, time2 = tstop, event = death) ~ 
     vte_event + 
     cluster(id), # ensures that the survival estimates account for the correlation within individuals, providing more robust results in the presence of repeated measurements
   data = survival_vte_tmerge)
 
-td_surv_fit
+km_estimator_fit
 ```
 
 This output contains several items:
@@ -431,7 +431,7 @@ This output contains several items:
 
 ```{r}
 # Get information for all time points from Kaplan-Meier estimation
-summary_fit = summary(td_surv_fit)
+summary_fit = summary(km_estimator_fit)
 formatted_summary = data.frame(
   time = summary_fit$time,
   n_risk = summary_fit$n.risk,
@@ -449,6 +449,27 @@ formatted_summary %>%
                 full_width = FALSE) %>%
   column_spec(ncol(formatted_summary)) 
 ```
+
+
+```{r}
+
+# Fit the Cox Proportional-Hazards Model
+cox_model <- coxph(Surv(time = tstart, 
+  time2 = tstop, 
+  event = death) ~ vte_event + cluster(id), data = survival_vte_tmerge)
+
+# Generate Survival Curves
+surv_fit <- survfit(cox_model)
+
+# Create a summary dataframe for the survival curves
+surv_summary <- summary(surv_fit)
+
+# Plot Survival Curves
+plot(surv_fit, xlab = "Time", ylab = "Survival Probability", main = "Survival Curves")
+
+```
+
+
 
 
 ```{r}
@@ -473,7 +494,7 @@ cph_tests_summary$robscore[["pvalue"]]
 ```{r}
 # jpeg("../graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
 td_survival_km_plot = 
-  ggsurvplot(fit = td_surv_fit,
+  ggsurvplot(fit = km_estimator_fit,
            data = survival_vte_tmerge,
            xscale = 30,
            break.time.by = 60,
@@ -534,7 +555,7 @@ td_survival_km_plot
 
 ```{r}
 # Fit survival analysis model
-stratified_stage_td_surv_fit = survfit(
+stratified_stage_km_estimator_fit = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -544,7 +565,7 @@ stratified_stage_td_surv_fit = survfit(
     cluster(id), 
   data = survival_vte_tmerge)
 
-stratified_stage_td_surv_fit
+stratified_stage_km_estimator_fit
 ```
 
 
@@ -595,10 +616,10 @@ legend_labels_and_n = c(
   paste0("Stages I-II-III with CAT (n=", n_stages_i_ii_iii_vte, ")"), 
   paste0("Stage IV with CAT (n=", n_stages_iv_vte, ")"))
 
-#median_survival_days = surv_median(stratified_stage_td_surv_fit)
+#median_survival_days = surv_median(stratified_stage_km_estimator_fit)
   
 # survplot_cat_stage = ggfortify::autoplot(
-#   stratified_stage_td_surv_fit, 
+#   stratified_stage_km_estimator_fit, 
 #   censor = FALSE, 
 #   conf.int = FALSE, 
 #   surv.size = 0.5, 
@@ -667,7 +688,7 @@ legend_labels_and_n = c(
 
 
 ```{r}
-summary(stratified_stage_td_surv_fit, times = 18*30.25)
+summary(stratified_stage_km_estimator_fit, times = 18*30.25)
 ```
 
 
@@ -678,7 +699,7 @@ Stage IV heavily impacts the decrease in survival, more than having a VTE. Never
 
 ```{r}
 # Fit survival analysis model
-stratified_primary_tumor_td_surv_fit = survfit(
+stratified_primary_tumor_km_estimator_fit = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -688,7 +709,7 @@ stratified_primary_tumor_td_surv_fit = survfit(
     cluster(id), 
   data = survival_vte_tmerge)
 
-stratified_primary_tumor_td_surv_fit
+stratified_primary_tumor_km_estimator_fit
 ```
 
 
@@ -718,7 +739,7 @@ stratified_primary_tumor_cph_tests_summary$robscore[["pvalue"]]
 #jpeg("./graphs/time_dependent_covariate_analysis/stratified_primary_tumor_vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
 stratified_primary_tumor_td_survival_km_plot = 
   ggsurvplot(
-    fit = stratified_primary_tumor_td_surv_fit,
+    fit = stratified_primary_tumor_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -824,10 +845,10 @@ legend_labels_and_n = c(
   paste0("Pancreatic with CAT (n=", n_pancreatic_vte, ")")
   )
 
-#median_survival_days = surv_median(stratified_stage_td_surv_fit)
+#median_survival_days = surv_median(stratified_stage_km_estimator_fit)
   
 # survplot_cat_cancer_type = autoplot(
-#   stratified_primary_tumor_td_surv_fit, 
+#   stratified_primary_tumor_km_estimator_fit, 
 #   censor = FALSE, 
 #   conf.int = FALSE, 
 #   surv.size = 0.5, 
@@ -916,7 +937,7 @@ The p-value shows that having a VTE is significantly associated with a differenc
 
 ```{r}
 # Fit survival analysis model
-blood_transf_td_surv_fit = survfit(
+blood_transf_km_estimator_fit = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -927,7 +948,7 @@ blood_transf_td_surv_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-blood_transf_td_surv_fit
+blood_transf_km_estimator_fit
 ```
 
 
@@ -953,7 +974,7 @@ blood_transf_cph_tests_summary$robscore[["pvalue"]]
 
 ```{r}
 blood_transf_td_survival_km_plot = ggsurvplot(
-    fit = blood_transf_td_surv_fit,
+    fit = blood_transf_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1042,7 +1063,7 @@ cox.zph(coxph(Surv(
 
 ```{r}
 # Fit survival analysis model
-immobilisation_td_surv_fit = survfit(
+immobilisation_km_estimator_fit = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1053,7 +1074,7 @@ immobilisation_td_surv_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-immobilisation_td_surv_fit
+immobilisation_km_estimator_fit
 ```
 
 
@@ -1079,7 +1100,7 @@ immobilisation_cph_tests_summary$robscore[["pvalue"]]
 
 ```{r}
 immobilisation_td_survival_km_plot = ggsurvplot(
-    fit = immobilisation_td_surv_fit,
+    fit = immobilisation_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1150,7 +1171,7 @@ coxph(Surv(
 
 ```{r}
 # Fit survival analysis model
-recent_major_surgery_td_surv_fit = survfit(
+recent_major_surgery_km_estimator_fit = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1161,7 +1182,7 @@ recent_major_surgery_td_surv_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-recent_major_surgery_td_surv_fit
+recent_major_surgery_km_estimator_fit
 ```
 
 
@@ -1188,7 +1209,7 @@ recent_major_surgery_cph_fit
 
 ```{r}
 recent_major_surgery_td_survival_km_plot = ggsurvplot(
-    fit = recent_major_surgery_td_surv_fit,
+    fit = recent_major_surgery_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1259,7 +1280,7 @@ coxph(Surv(
 
 ```{r}
 # Fit survival analysis model
-thromboprophylaxis_hospital_td_surv_fit = survfit(
+thromboprophylaxis_hospital_km_estimator_fit = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1270,7 +1291,7 @@ thromboprophylaxis_hospital_td_surv_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-thromboprophylaxis_hospital_td_surv_fit
+thromboprophylaxis_hospital_km_estimator_fit
 ```
 
 
@@ -1297,7 +1318,7 @@ thromboprophylaxis_hospital_cph_tests_summary$robscore[["pvalue"]]
 ```{r}
 thromboprophylaxis_hospital_td_survival_km_plot = 
   ggsurvplot(
-    fit = thromboprophylaxis_hospital_td_surv_fit,
+    fit = thromboprophylaxis_hospital_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1369,7 +1390,7 @@ coxph(Surv(
 
 ```{r}
 # Fit survival analysis model
-erythropoietin_tx_td_surv_fit = survfit(
+erythropoietin_tx_km_estimator_fit = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1380,7 +1401,7 @@ erythropoietin_tx_td_surv_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-erythropoietin_tx_td_surv_fit
+erythropoietin_tx_km_estimator_fit
 ```
 
 
@@ -1407,7 +1428,7 @@ erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]]
 ```{r}
 erythropoietin_tx_td_survival_km_plot = 
   ggsurvplot(
-    fit = erythropoietin_tx_td_surv_fit,
+    fit = erythropoietin_tx_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -1494,7 +1515,7 @@ coxph(Surv(
 
 ```{r}
 # Fit survival analysis model
-stratified_stage_erythropoietin_tx_td_surv_fit = survfit(
+stratified_stage_erythropoietin_tx_km_estimator_fit = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -1505,7 +1526,7 @@ stratified_stage_erythropoietin_tx_td_surv_fit = survfit(
   id = id,
   data = survival_vte_tmerge)
 
-stratified_stage_erythropoietin_tx_td_surv_fit
+stratified_stage_erythropoietin_tx_km_estimator_fit
 ```
 
 
@@ -1532,7 +1553,7 @@ stratified_stage_erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]]
 ```{r}
 stratified_stage_erythropoietin_tx_td_survival_km_plot = 
   ggsurvplot(
-    fit = stratified_stage_erythropoietin_tx_td_surv_fit,
+    fit = stratified_stage_erythropoietin_tx_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
     break.time.by = 60,
@@ -4375,7 +4396,7 @@ survival_vte_tmerge_inc_sympt = tmerge(
 
 
 ```{r}
-inc_symp_td_surv_fit = survfit(Surv(
+inc_symp_km_estimator_fit = survfit(Surv(
   time = tstart, 
   time2 = tstop, 
   event = death) ~ 
@@ -4384,7 +4405,7 @@ inc_symp_td_surv_fit = survfit(Surv(
   id = id,
   data = survival_vte_tmerge_inc_sympt)
 
-inc_symp_td_surv_fit
+inc_symp_km_estimator_fit
 ```
 
 
@@ -4411,7 +4432,7 @@ inc_symp_cph_tests_summary$robscore[["pvalue"]]
 #jpeg("./graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
 inc_symp_td_survival_km_plot = 
   ggsurvplot(
-    fit = inc_symp_td_surv_fit,
+    fit = inc_symp_km_estimator_fit,
     data = survival_vte_tmerge_inc_sympt,
     xscale = 30,
     break.time.by = 60,
@@ -4766,6 +4787,7 @@ cph_recurrence_primary_tumor = coxph(Surv(
 cph_recurrence_primary_tumor %>% 
   gtsummary::tbl_regression(exp = TRUE)
 ```
+
 
 ```{r}
 cox.zph(cph_recurrence_primary_tumor, terms = FALSE)
