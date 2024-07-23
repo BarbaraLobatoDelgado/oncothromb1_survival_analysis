@@ -26,6 +26,7 @@ options(scipen = 999, max.print = 10000)
 ```{r}
 # Load libraries
 pacman::p_load(
+  kableExtra,
   an9elproject, 
   tidyverse,
   lubridate, 
@@ -412,11 +413,62 @@ We will fit several survival curves using the Kaplan-Meier estimator.
 td_surv_fit = survfit(
   Surv(time = tstart, time2 = tstop, event = death) ~ 
     vte_event + 
-    cluster(id), 
+    cluster(id), # ensures that the survival estimates account for the correlation within individuals, providing more robust results in the presence of repeated measurements
   data = survival_vte_tmerge)
 
 td_surv_fit
 ```
+
+This output contains several item:
+
+- records: The total number of records in each group (vte_event=0 and vte_event=1).
+- n.max: The maximum number of subjects at risk at any time during the observation period.
+- n.start: The number of subjects at the start of the observation period.
+- events: The number of events (deaths) observed.
+- median: The median survival time.
+- 0.95LCL and 0.95UCL: The lower and upper 95% confidence limits for the median survival time.
+
+
+```{r}
+# Get information for all time points from Kaplan-Meier estimation
+summary_fit = summary(td_surv_fit)
+formatted_summary = data.frame(
+  yime = summary_fit$time,
+  n_risk = summary_fit$n.risk,
+  n_event = summary_fit$n.event,
+  survival = summary_fit$surv,
+  std_error = summary_fit$std.err,
+  lower_95CI = summary_fit$lower,
+  upper_95CI = summary_fit$upper
+)
+
+# kable(formatted_summary, format = "markdown", caption = "Survival Analysis Summary")
+
+formatted_summary %>%
+  kbl(caption = "Survival Analysis Summary") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F) %>%
+  column_spec(1, bold = TRUE, color = "white", background = "#2E9FDF") %>%
+  column_spec(2:8, border_left = TRUE, border_right = TRUE) %>%
+  add_header_above(c(" ", "Summary Statistics" = 7))
+
+```
+
+
+```{r}
+ggsurv <- ggsurvplot(
+  td_surv_fit,
+  data = survival_vte_tmerge,
+  pval = TRUE, # Add p-value for the log-rank test
+  conf.int = TRUE, # Add confidence interval
+  risk.table = TRUE, # Add number at risk table
+  ggtheme = theme_minimal(), # Minimal theme
+  palette = c("#E7B800", "#2E9FDF") # Custom color palette
+)
+```
+
+
+
 
 
 ```{r}
