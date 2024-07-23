@@ -455,27 +455,9 @@ km_estimator_summary = function(km_survfit) {
 ```
 
 
-
 ```{r}
-# Get information for all time points from Kaplan-Meier estimation
-summary_fit = summary(km_estimator_fit)
-
-formatted_summary = data.frame(
-  time = summary_fit$time,
-  n_risk = summary_fit$n.risk,
-  n_event = summary_fit$n.event,
-  survival = summary_fit$surv,
-  std_error = summary_fit$std.err,
-  lower_95CI = summary_fit$lower,
-  upper_95CI = summary_fit$upper
-)
-
-# Show table with summary
-formatted_summary %>%
-  kbl(caption = "Survival Analysis Summary") %>%
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
-                full_width = FALSE) %>%
-  column_spec(ncol(formatted_summary)) 
+# Show table with summary with all time points from Kaplan-Meier estimation
+km_estimator_summary(km_estimator_fit)
 ```
 
 
@@ -577,9 +559,7 @@ km_plot_vte
 # dev.off()
 ```
 
-
-
-### Stratified by TNM staging
+## VTE & stage
 
 ```{r}
 # Fit survival analysis model
@@ -595,6 +575,11 @@ km_estimator_fit_stage = survfit(
 
 km_estimator_fit_stage
 ```
+
+```{r}
+
+```
+
 
 
 ```{r}
@@ -723,7 +708,7 @@ summary(km_estimator_fit_stage, times = 18*30.25)
 Stage IV heavily impacts the decrease in survival, more than having a VTE. Nevertheless, within the subgroups defined by these stages, having a VTE also significantly decreases survival.  
 
 
-### Stratified by primary tumor
+## VTE & primary tumor
 
 ```{r}
 # Fit survival analysis model
