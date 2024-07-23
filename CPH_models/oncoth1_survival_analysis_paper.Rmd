@@ -406,6 +406,8 @@ survival_vte_tmerge = tmerge(
 
 We will fit several survival curves using the Kaplan-Meier estimator. 
 
+## VTE
+
 ```{r}
 # Fit Kaplan-Meier estimator 
 km_estimator_fit = survfit(
@@ -430,6 +432,7 @@ This output contains several items:
 ```{r}
 # Get information for all time points from Kaplan-Meier estimation
 summary_fit = summary(km_estimator_fit)
+
 formatted_summary = data.frame(
   time = summary_fit$time,
   n_risk = summary_fit$n.risk,
@@ -467,8 +470,6 @@ plot(surv_fit, xlab = "Time", ylab = "Survival Probability", main = "Survival Cu
 ```
 
 
-
-
 ```{r}
 # We perform the log-rank test separately, because we need to manually insert the
 # p-value into the KM plot
@@ -489,38 +490,89 @@ cph_tests_summary$robscore[["pvalue"]]
 
 
 ```{r}
+tstart = "tstart"
+tstop = "tstop"
+event = "death"
+covariates = c("vte_event")
+cluster = "id"
+strata = NULL
+
+formula_string = paste0("Surv(", tstart, ", ", tstop, ", ", event, ") ~ ", covariates, " + strata(", strata, ") + cluster(", cluster, ")")
+formula_string
+```
+
+
+
+```{r}
+get_robscore_pval = function(data, covariates, tstart = "tstart", tstop = "tstop", event = "death", cluster = "id", strata = NULL) {
+  
+  # Construct formula
+  covariates_formula = paste(covariates, sep = " + ")
+     
+  if (!is.null(strata)) {
+    formula_string = paste0("Surv(", tstart, ", ", tstop, ", ", event, ") ~ ", covariates, " + strata(", strata, ") + cluster(", cluster, ")")
+  } else {
+    formula_string = paste0("Surv(", tstart, ", ", tstop, ", ", event, ") ~ ", covariates, " + cluster(", cluster, ")")
+  }
+  
+  # Convert to formula object
+  formula_string = as.formula(formula_string)
+    
+  # Train CPH model
+  cph_fit = coxph(formula_string,data = data)
+
+  # Get p-value from robust score test
+  cph_tests_summary = summary(cph_fit)
+  robscore_pval = cph_tests_summary$robscore[["pvalue"]]
+
+  return(robscore_pval)
+}
+```
+
+
+```{r}
+get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_event"))
+```
+
+
+
+
+
+
+```{r}
 # jpeg("../graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-td_survival_km_plot = 
-  ggsurvplot(fit = km_estimator_fit,
-           data = survival_vte_tmerge,
-           xscale = 30,
-           break.time.by = 60,
-           censor = FALSE,
-           #pval = TRUE, 
-           #pval.method = TRUE,
-           #pval.size = 4, 
-           conf.int = TRUE,
-           conf.int.alpha = 0.15,
-           xlim = c(0, 540),
-           surv.plot.height = 1.25, 
-           tables.height = 0.25,
-           legend.title = " ",
-           legend.labs = c("No VTE", "VTE"),
-           risk.table = "abs_pct", 
-           risk.table.height = 0.3, 
-           fontsize = 3,
-           risk.table.col = "strata", 
-           risk.table.y.text.col = TRUE,
-           #linetype = "strata", 
-           surv.median.line = "hv",
-           xlab = "Time to death (months)",
-           ylab = "Overall Survival Probability",
-           ggtheme = theme_bw(),
-           palette = c("black", "red")
-           )
+km_plot_vte = 
+  ggsurvplot(
+    fit = km_estimator_fit,
+    data = survival_vte_tmerge,
+    xscale = 30,
+    break.time.by = 60,
+    censor = FALSE,
+    # pval = TRUE, 
+    # pval.method = TRUE,
+     #pval.size = 4, 
+    conf.int = TRUE,
+    conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    surv.plot.height = 1.25, 
+    tables.height = 0.25,
+    legend.title = " ",
+    legend.labs = c("No VTE", "VTE"),
+    risk.table = "abs_pct", 
+    risk.table.height = 0.3, 
+    fontsize = 3,
+    risk.table.col = "strata", 
+    risk.table.y.text.col = TRUE,
+    # linetype = "strata", 
+    surv.median.line = "hv",
+    xlab = "Time to death (months)",
+    ylab = "Overall Survival Probability",
+    ggtheme = theme_bw(),
+    palette = c("black", "red")
+  )
 
 # Add p-value
-td_survival_km_plot$plot = td_survival_km_plot$plot + 
+km_plot_vte$plot = km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -538,24 +590,23 @@ td_survival_km_plot$plot = td_survival_km_plot$plot +
     color = "black")
 
 # Customize risk table title 
-td_survival_km_plot$table = 
-  td_survival_km_plot$table +
+km_plot_vte$table = 
+  km_plot_vte$table +
   theme(plot.title = element_text(size = 10))
 
-td_survival_km_plot
+km_plot_vte
 
 # dev.off()
 ```
-```{r}
-aa
-```
+
 
 
 ### Stratified by TNM staging
 
 ```{r}
 # Fit survival analysis model
-stratified_stage_km_estimator_fit = survfit(
+km_estimator_fit_stage
+km_estimator_fit_stage = survfit(
   Surv(
     time = tstart, 
     time2 = tstop, 
@@ -565,7 +616,7 @@ stratified_stage_km_estimator_fit = survfit(
     cluster(id), 
   data = survival_vte_tmerge)
 
-stratified_stage_km_estimator_fit
+km_estimator_fit_stage
 ```
 
 
@@ -616,10 +667,10 @@ legend_labels_and_n = c(
   paste0("Stages I-II-III with CAT (n=", n_stages_i_ii_iii_vte, ")"), 
   paste0("Stage IV with CAT (n=", n_stages_iv_vte, ")"))
 
-#median_survival_days = surv_median(stratified_stage_km_estimator_fit)
+#median_survival_days = surv_median(km_estimator_fit_stage)
   
 # survplot_cat_stage = ggfortify::autoplot(
-#   stratified_stage_km_estimator_fit, 
+#   km_estimator_fit_stage, 
 #   censor = FALSE, 
 #   conf.int = FALSE, 
 #   surv.size = 0.5, 
@@ -688,7 +739,7 @@ legend_labels_and_n = c(
 
 
 ```{r}
-summary(stratified_stage_km_estimator_fit, times = 18*30.25)
+summary(km_estimator_fit_stage, times = 18*30.25)
 ```
 
 
@@ -737,7 +788,7 @@ stratified_primary_tumor_cph_tests_summary$robscore[["pvalue"]]
 
 ```{r}
 #jpeg("./graphs/time_dependent_covariate_analysis/stratified_primary_tumor_vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-stratified_primary_tumor_td_survival_km_plot = 
+stratified_primary_tumor_km_plot_vte = 
   ggsurvplot(
     fit = stratified_primary_tumor_km_estimator_fit,
     data = survival_vte_tmerge,
@@ -767,8 +818,8 @@ stratified_primary_tumor_td_survival_km_plot =
     )
 
 # Add p-value
-stratified_primary_tumor_td_survival_km_plot$plot = 
-  stratified_primary_tumor_td_survival_km_plot$plot + 
+stratified_primary_tumor_km_plot_vte$plot = 
+  stratified_primary_tumor_km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -786,11 +837,11 @@ stratified_primary_tumor_td_survival_km_plot$plot =
     color = "black")
 
 # Customize risk table title 
-#stratified_stage_td_survival_km_plot$table = 
-#  stratified_stage_td_survival_km_plot$table +
+#stratified_stage_km_plot_vte$table = 
+#  stratified_stage_km_plot_vte$table +
 #  theme(plot.title = element_text(size = 10))
 
-stratified_primary_tumor_td_survival_km_plot
+stratified_primary_tumor_km_plot_vte
 
 #dev.off()
 ```
@@ -845,7 +896,7 @@ legend_labels_and_n = c(
   paste0("Pancreatic with CAT (n=", n_pancreatic_vte, ")")
   )
 
-#median_survival_days = surv_median(stratified_stage_km_estimator_fit)
+#median_survival_days = surv_median(km_estimator_fit_stage)
   
 # survplot_cat_cancer_type = autoplot(
 #   stratified_primary_tumor_km_estimator_fit, 
@@ -973,7 +1024,7 @@ blood_transf_cph_tests_summary$robscore[["pvalue"]]
 
 
 ```{r}
-blood_transf_td_survival_km_plot = ggsurvplot(
+blood_transf_km_plot_vte = ggsurvplot(
     fit = blood_transf_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
@@ -1001,8 +1052,8 @@ blood_transf_td_survival_km_plot = ggsurvplot(
     )
 
 # Add p-value
-blood_transf_td_survival_km_plot$plot = 
-  blood_transf_td_survival_km_plot$plot + 
+blood_transf_km_plot_vte$plot = 
+  blood_transf_km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -1019,7 +1070,7 @@ blood_transf_td_survival_km_plot$plot =
       digits = 1)),
     color = "black")
 
-blood_transf_td_survival_km_plot
+blood_transf_km_plot_vte
 
 ```
 
@@ -1099,7 +1150,7 @@ immobilisation_cph_tests_summary$robscore[["pvalue"]]
 
 
 ```{r}
-immobilisation_td_survival_km_plot = ggsurvplot(
+immobilisation_km_plot_vte = ggsurvplot(
     fit = immobilisation_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
@@ -1127,8 +1178,8 @@ immobilisation_td_survival_km_plot = ggsurvplot(
     )
 
 # Add p-value
-immobilisation_td_survival_km_plot$plot = 
-  immobilisation_td_survival_km_plot$plot + 
+immobilisation_km_plot_vte$plot = 
+  immobilisation_km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -1145,7 +1196,7 @@ immobilisation_td_survival_km_plot$plot =
       digits = 1)),
     color = "black")
 
-immobilisation_td_survival_km_plot
+immobilisation_km_plot_vte
 
 ```
 
@@ -1208,7 +1259,7 @@ recent_major_surgery_cph_fit
 
 
 ```{r}
-recent_major_surgery_td_survival_km_plot = ggsurvplot(
+recent_major_surgery_km_plot_vte = ggsurvplot(
     fit = recent_major_surgery_km_estimator_fit,
     data = survival_vte_tmerge,
     xscale = 30,
@@ -1236,8 +1287,8 @@ recent_major_surgery_td_survival_km_plot = ggsurvplot(
     )
 
 # Add p-value
-recent_major_surgery_td_survival_km_plot$plot = 
-  recent_major_surgery_td_survival_km_plot$plot + 
+recent_major_surgery_km_plot_vte$plot = 
+  recent_major_surgery_km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -1254,7 +1305,7 @@ recent_major_surgery_td_survival_km_plot$plot =
       digits = 1)),
     color = "black")
 
-recent_major_surgery_td_survival_km_plot
+recent_major_surgery_km_plot_vte
 
 ```
 
@@ -1316,7 +1367,7 @@ thromboprophylaxis_hospital_cph_tests_summary$robscore[["pvalue"]]
 
 
 ```{r}
-thromboprophylaxis_hospital_td_survival_km_plot = 
+thromboprophylaxis_hospital_km_plot_vte = 
   ggsurvplot(
     fit = thromboprophylaxis_hospital_km_estimator_fit,
     data = survival_vte_tmerge,
@@ -1345,8 +1396,8 @@ thromboprophylaxis_hospital_td_survival_km_plot =
     )
 
 # Add p-value
-thromboprophylaxis_hospital_td_survival_km_plot$plot = 
-  thromboprophylaxis_hospital_td_survival_km_plot$plot + 
+thromboprophylaxis_hospital_km_plot_vte$plot = 
+  thromboprophylaxis_hospital_km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -1363,7 +1414,7 @@ thromboprophylaxis_hospital_td_survival_km_plot$plot =
       digits = 1)),
     color = "black")
 
-thromboprophylaxis_hospital_td_survival_km_plot
+thromboprophylaxis_hospital_km_plot_vte
 
 ```
 
@@ -1426,7 +1477,7 @@ erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]]
 
 
 ```{r}
-erythropoietin_tx_td_survival_km_plot = 
+erythropoietin_tx_km_plot_vte = 
   ggsurvplot(
     fit = erythropoietin_tx_km_estimator_fit,
     data = survival_vte_tmerge,
@@ -1455,8 +1506,8 @@ erythropoietin_tx_td_survival_km_plot =
     )
 
 # Add p-value
-erythropoietin_tx_td_survival_km_plot$plot = 
-  erythropoietin_tx_td_survival_km_plot$plot + 
+erythropoietin_tx_km_plot_vte$plot = 
+  erythropoietin_tx_km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -1473,7 +1524,7 @@ erythropoietin_tx_td_survival_km_plot$plot =
       digits = 1)),
     color = "black")
 
-erythropoietin_tx_td_survival_km_plot
+erythropoietin_tx_km_plot_vte
 
 ```
 
@@ -1551,7 +1602,7 @@ stratified_stage_erythropoietin_tx_cph_tests_summary$robscore[["pvalue"]]
 
 
 ```{r}
-stratified_stage_erythropoietin_tx_td_survival_km_plot = 
+stratified_stage_erythropoietin_tx_km_plot_vte = 
   ggsurvplot(
     fit = stratified_stage_erythropoietin_tx_km_estimator_fit,
     data = survival_vte_tmerge,
@@ -1582,8 +1633,8 @@ stratified_stage_erythropoietin_tx_td_survival_km_plot =
     )
 
 # Add p-value
-stratified_stage_erythropoietin_tx_td_survival_km_plot$plot = 
-  stratified_stage_erythropoietin_tx_td_survival_km_plot$plot + 
+stratified_stage_erythropoietin_tx_km_plot_vte$plot = 
+  stratified_stage_erythropoietin_tx_km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -1600,7 +1651,7 @@ stratified_stage_erythropoietin_tx_td_survival_km_plot$plot =
       digits = 1)),
     color = "black")
 
-stratified_stage_erythropoietin_tx_td_survival_km_plot
+stratified_stage_erythropoietin_tx_km_plot_vte
 
 ```
 
@@ -4430,7 +4481,7 @@ inc_symp_cph_tests_summary$robscore[["pvalue"]]
 
 ```{r}
 #jpeg("./graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-inc_symp_td_survival_km_plot = 
+inc_symp_km_plot_vte = 
   ggsurvplot(
     fit = inc_symp_km_estimator_fit,
     data = survival_vte_tmerge_inc_sympt,
@@ -4457,7 +4508,7 @@ inc_symp_td_survival_km_plot =
     palette = c("black", "magenta", "blue"))
 
 # Add p-value
-inc_symp_td_survival_km_plot$plot = inc_symp_td_survival_km_plot$plot + 
+inc_symp_km_plot_vte$plot = inc_symp_km_plot_vte$plot + 
   annotate(
     geom = "text", 
     x = 26,
@@ -4475,11 +4526,11 @@ inc_symp_td_survival_km_plot$plot = inc_symp_td_survival_km_plot$plot +
     color = "black")
 
 # Customize risk table title 
-inc_symp_td_survival_km_plot$table = 
-  inc_symp_td_survival_km_plot$table +
+inc_symp_km_plot_vte$table = 
+  inc_symp_km_plot_vte$table +
   theme(plot.title = element_text(size = 10))
 
-inc_symp_td_survival_km_plot
+inc_symp_km_plot_vte
 
 #dev.off()
 ```
