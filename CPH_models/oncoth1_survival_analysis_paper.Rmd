@@ -180,9 +180,9 @@ oncoth1_data %<>%
 ```
 
 
-# Create data sets for survival analysis
+# Create dataset for survival analysis
 
-This dataset must be in the right format to deal with time-dependent covariates and left- and right-censoring.
+This dataset must be in the proper format to deal with time-dependent covariates and left- and right-censoring. The function `survival::tmerge()` helps us with it. 
 
 ```{r}
 # Get subset of covariates for survival analysis
@@ -403,20 +403,9 @@ survival_vte_tmerge = tmerge(
 ```
 
 
-## CPH regression data set
+# Survival curves 
 
-```{r}
-#survival_dataset = merge(
-#  oncoth1_data %>% 
-#    select(id, follow_up_length_from_cancer_diagnosis_days, censored_patient),
-#  covariates_df, 
-#  by = "id"
-#)
-```
-
-
-# Bivariate survival analysis
-
+We will fit several survival curves using the Kaplan-Meier estimator. 
 
 ```{r}
 # Fit survival analysis model
