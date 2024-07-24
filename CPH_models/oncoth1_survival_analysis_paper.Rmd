@@ -55,16 +55,6 @@ oncoth1_data = oncoth1$data
 
 
 ```{r}
-table(oncoth1_data$patient_group)
-```
-
-
-```{r}
-table(oncoth1_data$patient_group, oncoth1_data$vte_recurrence)
-```
-
-
-```{r}
 # Group tobacco use into 'Never smoked' vs 'Former/current'
 oncoth1_data %<>%
   mutate(tobacco_use_imp_grouped = case_when(
@@ -124,33 +114,9 @@ covariates_df = oncoth1_data %>%
          bmi_category, 
          performance_status_category_corrected_imp,
          hormone_therapy,
-         # albumin_imp, 
-         # albumin_imp_category,
-         # aptt_imp, 
-         # aptt_imp_category,
-         # aptt_ratio_imp,
-         # aptt_ratio_imp_category,
-         # bilirubin_imp, 
-         # bilirubin_imp_category,
-         # creatinine_imp,
-         # creatinine_imp_category,
-         # alkaline_phosphatase_imp, 
-         # alkaline_phosphatase_imp_category,
-         # hemoglobin, 
-         # hemoglobin_category,
-         # inr_imp, 
-         # inr_imp_category,
-         # leukocytes_imp, 
-         # leukocytes_imp_category,
-         # platelets, 
-         # platelets_category, 
-         # leukocytosis_imp,
-         # thrombocytosis, 
-         # low_hemoglobin, 
-         # personal_background, 
          major_surgery_in_medical_history, 
-         pregnancy_imp, # constant
-         oral_contraceptive_tx, # constant
+         pregnancy_imp, 
+         oral_contraceptive_tx, 
          diabetes_mellitus, 
          dyslipidemia, 
          tobacco_use_imp, 
