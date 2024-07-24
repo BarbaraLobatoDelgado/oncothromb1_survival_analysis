@@ -628,108 +628,108 @@ km_pval_vte_stage = get_robscore_pval(survival_vte_tmerge, covariates = c("vte_e
 
 
 ```{r}
-# #jpeg("./graphs/paper/KM_cat_and_stage.jpeg", width = 8, height = 4, units = 'in', res = 700)
-# 
-# # Custom KM 
-# # tt <- oncoth1_data %>%
-# #   group_by(tnm_stage_two_groups, patient_group) %>%
-# #   summarize(count = n(), .groups = 'drop')
-# 
-# # Count n patients in each subgroup
-# n_stages_i_ii_iii_no_vte = sum(
-#   oncoth1_data$tnm_stage_two_groups == "I-II-III" & 
-#     oncoth1_data$patient_group == "Control")
-# 
-# n_stages_i_ii_iii_vte = sum(
-#   oncoth1_data$tnm_stage_two_groups == "I-II-III" & 
-#     oncoth1_data$patient_group == "Case")
-# 
-# n_stages_iv_no_vte = sum(
-#   oncoth1_data$tnm_stage_two_groups == "IV" & 
-#     oncoth1_data$patient_group == "Control")
-# 
-# n_stages_iv_vte = sum(
-#   oncoth1_data$tnm_stage_two_groups == "IV" & 
-#     oncoth1_data$patient_group == "Case")
-# 
-# legend_labels_and_n = c(
-#   paste0("Stages I-II-III w/o CAT (n=", n_stages_i_ii_iii_no_vte, ")"), 
-#   paste0("Stage IV w/o CAT (n=", n_stages_iv_no_vte, ")"),
-#   paste0("Stages I-II-III with CAT (n=", n_stages_i_ii_iii_vte, ")"), 
-#   paste0("Stage IV with CAT (n=", n_stages_iv_vte, ")"))
-# 
-# #median_survival_days = surv_median(km_fit_vte_stage)
-#   
-# survplot_cat_stage = ggfortify::autoplot(
-#   km_fit_vte_stage,
-#   censor = FALSE,
-#   conf.int = FALSE,
-#   surv.size = 0.5,
-#   surv.linetype = "strata") +
-#   theme_bw() +
-#   labs(
-#     x = "Time (months)",
-#     y = "OS probability",
-#     title = "") +
-#   theme(
-#     plot.title = element_text(hjust = 0.5),
-#     legend.title = element_text(hjust = 0.5, face = "bold"),
-#     legend.text = element_text(size = 11),
-#     legend.position = "right") +
-#   scale_x_continuous(
-#     limits = c(0, 605),
-#     breaks = seq(from = 0, to = 600, by = 60),
-#     labels = seq(from = 0, to = 20, by = 2)) +
-#   scale_colour_manual(
-#     name = "CAT and Stage",
-#     labels = legend_labels_and_n,
-#     values = c("black", "black", "red", "red")) +
-#   scale_linetype_manual(
-#     name = "CAT and Stage",
-#     labels = legend_labels_and_n,
-#     values = c("longdash", "dotted", "longdash", "dotted"))
-# 
-# # # Add log-rank p-value
-# survplot_cat_stage = survplot_cat_stage +
-#   # Log-rank p-value
-#   annotate(
-#     geom = "text",
-#     size = 4,
-#     x = 50,
-#     y = 0.2,
-#     label = "Log-rank",
-#     color = "black") +
-#   annotate(
-#     geom = "text",
-#     size = 4,
-#     x = 50,
-#     y = 0.15,
-#     label = as.character(format(
-#       km_pval_vte_stage, 
-#       scientific = TRUE, 
-#       digits = 1))
-#     )
-# 
-# # Add median survival line
-# survplot_cat_stage = survplot_cat_stage +
-#   # Horizontal line
-#   geom_segment(
-#     aes(x = 0, y = 0.5, xend = 478, yend = 0.5),
-#     linetype = "dashed",
-#     size = 0.4) +
-#   # Vertical lines
-#   geom_segment(
-#     aes(x = 478, y = 0, xend = 478, yend = 0.5),
-#     linetype = "dashed",
-#     size = 0.4) +
-#   geom_segment(
-#     aes(x = 231, y = 0, xend = 231, yend = 0.5),
-#     linetype = "dashed",
-#     size = 0.4)
-# 
-# survplot_cat_stage
-# 
-# #dev.off()
+#jpeg("./graphs/paper/KM_cat_and_stage.jpeg", width = 8, height = 4, units = 'in', res = 700)
+
+# Custom KM
+# tt <- oncoth1_data %>%
+#   group_by(tnm_stage_two_groups, patient_group) %>%
+#   summarize(count = n(), .groups = 'drop')
+
+# Count n patients in each subgroup
+n_stages_i_ii_iii_no_vte = sum(
+  oncoth1_data$tnm_stage_two_groups == "I-II-III" &
+    oncoth1_data$patient_group == "Control")
+
+n_stages_i_ii_iii_vte = sum(
+  oncoth1_data$tnm_stage_two_groups == "I-II-III" &
+    oncoth1_data$patient_group == "Case")
+
+n_stages_iv_no_vte = sum(
+  oncoth1_data$tnm_stage_two_groups == "IV" &
+    oncoth1_data$patient_group == "Control")
+
+n_stages_iv_vte = sum(
+  oncoth1_data$tnm_stage_two_groups == "IV" &
+    oncoth1_data$patient_group == "Case")
+
+legend_labels_and_n = c(
+  paste0("Stages I-II-III w/o CAT (n=", n_stages_i_ii_iii_no_vte, ")"),
+  paste0("Stage IV w/o CAT (n=", n_stages_iv_no_vte, ")"),
+  paste0("Stages I-II-III with CAT (n=", n_stages_i_ii_iii_vte, ")"),
+  paste0("Stage IV with CAT (n=", n_stages_iv_vte, ")"))
+
+#median_survival_days = surv_median(km_fit_vte_stage)
+
+survplot_cat_stage = autoplot(
+  km_fit_vte_stage,
+  censor = FALSE,
+  conf.int = FALSE,
+  surv.size = 0.5,
+  surv.linetype = "strata") +
+  theme_bw() +
+  labs(
+    x = "Time (months)",
+    y = "OS probability",
+    title = "") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.title = element_text(hjust = 0.5, face = "bold"),
+    legend.text = element_text(size = 11),
+    legend.position = "right") +
+  scale_x_continuous(
+    limits = c(0, 605),
+    breaks = seq(from = 0, to = 600, by = 60),
+    labels = seq(from = 0, to = 20, by = 2)) +
+  scale_colour_manual(
+    name = "CAT and Stage",
+    labels = legend_labels_and_n,
+    values = c("black", "black", "red", "red")) +
+  scale_linetype_manual(
+    name = "CAT and Stage",
+    labels = legend_labels_and_n,
+    values = c("longdash", "dotted", "longdash", "dotted"))
+
+# # Add log-rank p-value
+survplot_cat_stage = survplot_cat_stage +
+  # Log-rank p-value
+  annotate(
+    geom = "text",
+    size = 4,
+    x = 50,
+    y = 0.2,
+    label = "Log-rank",
+    color = "black") +
+  annotate(
+    geom = "text",
+    size = 4,
+    x = 50,
+    y = 0.15,
+    label = as.character(format(
+      km_pval_vte_stage,
+      scientific = TRUE,
+      digits = 1))
+    )
+
+# Add median survival line
+survplot_cat_stage = survplot_cat_stage +
+  # Horizontal line
+  geom_segment(
+    aes(x = 0, y = 0.5, xend = 478, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4) +
+  # Vertical lines
+  geom_segment(
+    aes(x = 478, y = 0, xend = 478, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4) +
+  geom_segment(
+    aes(x = 231, y = 0, xend = 231, yend = 0.5),
+    linetype = "dashed",
+    size = 0.4)
+
+survplot_cat_stage
+
+#dev.off()
 ```
 
 
