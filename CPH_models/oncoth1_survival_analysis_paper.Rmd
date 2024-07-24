@@ -42,7 +42,7 @@ pacman::p_load(
 
 ```{r}
 # Load DB
-oncoth1 = get_project("oncothr1", version = "0.0.8003") # 0.0.8004
+oncoth1 = get_project("oncothr1", version = "0.0.8004")
 ```
 
 
@@ -59,17 +59,6 @@ table(oncoth1_data$patient_group)
 
 ```{r}
 table(oncoth1_data$patient_group, oncoth1_data$vte_recurrence)
-```
-
-
-```{r}
-# UPDATE an9leproject!!!
-# Correct information for patient id = 118
-oncoth1_data %<>%
-  mutate(vte_recurrence = case_when(
-    id == 118 ~ "No VTE", 
-    TRUE ~ vte_recurrence
-    ))
 ```
 
 
