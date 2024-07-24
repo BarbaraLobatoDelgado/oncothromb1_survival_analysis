@@ -1170,11 +1170,68 @@ variance_per_feature[order(variance_per_feature[variance_per_feature < variance_
 ```
 
 
+### Correlation plot
+
 ```{r}
 # Correlation matrix
-oncoth1_correlation = cor(survival_vte_tmerge_dummies)
+oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
+  # Select relevant variables
+  select(
+    age_when_cancer_dx, 
+    weight, 
+    height, 
+    body_surface_area, 
+    bmi_value, 
+    khorana_risk_score_imp, 
+    death, 
+    vte_event, 
+    blood_transfusion, 
+    immobilisation, 
+    recent_major_surgery, 
+    thromboprophylaxis_hospital, 
+    erythropoietin_tx, 
+    `age_quartiles_61-69`, 
+    `age_quartiles_70-93`, 
+    `age_when_cancer_dx_50_Older or 50 years old`, 
+    `age_when_cancer_dx_65_Older or 65 years old`, 
+    gender_Female, 
+    menopausal_status_imp_Pre-menopausal,
+    menopausal_status_imp_Peri-menopausal, 
+    menopausal_status_imp_Post-menopausal, 
+    bmi_category_Normal, 
+    bmi_category_Overweight, 
+    bmi_category_Obese, 
+    performance_status_category_corrected_imp_1, 
+    performance_status_category_corrected_imp_2, 
+    diabetes_mellitus_Yes, 
+    dyslipidemia_Yes, 
+    tobacco_use_imp_Former smoker, 
+    tobacco_use_imp_Active smoker, 
+    tobacco_use_imp_grouped_Never, 
+    copd_imp_Yes, 
+    arterial_hypertension_Yes, 
+    chronic_cardiac_insufficiency_Yes, 
+    renal_insufficiency_Yes, 
+    previous_onco_surgery_Yes, 
+    primary_tumor_simplified_NSCLC, 
+    `primary_tumor_simplified_Oesophago-gastric`, 
+    primary_tumor_simplified_Pancreatic, 
+    tumor_surgically_removed_Yes, 
+    `progression_according_to_clinical_stage_imp_Locally advanced`,
+    progression_according_to_clinical_stage_imp_Metastatic, 
+    tnm_stage_II, 
+    tnm_stage_III, 
+    tnm_stage_IV, 
+    tnm_stage_grouped_III, 
+    tnm_stage_grouped_IV, 
+    tnm_stage_two_groups_IV, 
+    histology_type_imp_Adenocarcinoma, 
+    histology_type_imp_Epidermoid, mucinous_histology_imp_Yes, 
+    grade_histological_differentiation_imp_Moderately differentiated, grade_histological_differentiation_imp_Poorly differentiated, n_metastases_1, n_metastases_2, n_metastases_3, n_metastases_4, n_metastases_5, n_metastases_grouped_1, n_metastases_grouped_2+, metastasis_adrenal_glands_Yes, metastasis_bones_Yes, metastasis_brain_Yes, metastasis_liver_Yes, metastasis_lung_Yes, metastasis_lymph_nodes_Yes, metastasis_peritoneum_Yes, metastasis_pleura_Yes, metastasis_skin_Yes, metastasis_soft_tissues_Yes, other_metastases_Yes, catheter_device_imp_Yes, venous_insufficiency_imp_Yes, n_comorbidities_1, n_comorbidities_2+, family_background_vte_Yes, family_background_vte_n_1, family_background_vte_n_2, family_background_vte_all_relatives_Father, family_background_vte_all_relatives_Mother, family_background_vte_all_relatives_Siblings, family_background_vte_all_relatives_Offspring, family_background_vte_all_relatives_Others, family_background_vte_all_relatives_Two relatives, family_background_VTE_father_Yes, family_background_VTE_mother_Yes, family_background_VTE_siblings_Yes, family_background_VTE_offspring_Yes, family_background_VTE_other_relatives_Yes, previous_vte_Yes, previous_ate_Yes, n_previous_ate_1, n_previous_ate_2, n_previous_ate_3, previous_ate_type_CVA, previous_ate_type_Myocardial infarction, previous_ate_type_PAD, previous_ate_type_TIA, previous_ate_type_Other, previous_ate_type_Two or more, cva_ate_Yes, myocardial_infarction_ate_Yes, pad_ate_Yes, tia_ate_Yes, other_thromb_ate_Yes, anticoag_tx_vte_Yes, anticoag_tx_vte_NA, anticoag_tx_vte_drugs_Vit K antagonists, anticoag_tx_vte_drugs_NA, anticoag_tx_cardiopathy_Yes, anticoag_tx_other_causes_Yes, anticoag_tx_reason_Others, anticoag_tx_reason_VTE, anticoag_tx_reason_NA, anticoag_tx_apixaban_Yes, anticoag_tx_dabigatran_Yes, anticoag_tx_lmwh_Yes, anticoag_tx_lmwh_NA, anticoag_tx_lmwh_dosage_Therapeutic, anticoag_tx_lmwh_dosage_NA, anticoag_tx_vit_k_antag_Yes, anticoag_tx_other_drugs_Yes, anticoag_tx_currently_Yes, n_antiaggreg_tx_1, n_antiaggreg_tx_2, antiaggreg_tx_reason_CVA, antiaggreg_tx_reason_Cardiopathy, antiaggreg_tx_reason_Others, antiaggreg_tx_reason_Two ATE types, antiaggreg_tx_cardiopathy_Yes, antiaggreg_tx_cva_Yes, antiaggreg_tx_other_causes_Yes, antiaggreg_tx_currently_Yes, vte_recurrence_No VTE recurrence, vte_recurrence_VTE recurrence) %>%
+  cor(.)
 
-corrplot::corrplot(oncoth1_correlation, method = "circle")
+# Correlation plot
+corrplot::corrplot(oncoth1_correlations_vars, method = "circle")
 ```
 
 
