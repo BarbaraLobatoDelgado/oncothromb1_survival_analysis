@@ -1489,7 +1489,7 @@ for (i in 1:10) {
     # thromboprophylaxis_hospital + # CONFOUNDER
     # erythropoietin_tx,
     data = training_fold,
-    include = "primary_tumor_simplified",
+    # include = "primary_tumor_simplified",
     selection = "bidirection",
     select = "AIC", 
     method = "efron"
@@ -1497,7 +1497,6 @@ for (i in 1:10) {
   
   # Save selected variables
   selected_variables = unname(unlist(stepwise_model$`Selected Varaibles`))
-  # selected_variables = stepwise_model$`Coefficients of the Selected Variables`$Variable
   # print(selected_variables)
   
   # Fit model with selected variables in this fold
