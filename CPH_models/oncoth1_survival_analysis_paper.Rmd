@@ -1204,7 +1204,16 @@ variance_per_feature[order(variance_per_feature[variance_per_feature < variance_
 ```
 
 
-### Correlation between variables using Cramer's V
+```{r}
+# Correlation matrix
+oncoth1_correlation = cor(survival_vte_tmerge_dummies)
+
+corrplot::corrplot(oncoth1_correlation, method = "circle")
+```
+
+
+
+### Association between categorical variables using Cramer's V
 
 ```{r}
 # Do correlation between CVC and tumor surgically removed with primary tumor
@@ -1382,11 +1391,11 @@ for (i in 1:10) {
     # two_groups_krs +
     previous_onco_surgery +
     tumor_surgically_removed + 
-    primary_tumor_simplified +
-    # primary_tumor_simplified_Colorectal +
-    # primary_tumor_simplified_NSCLC +
-    # primary_tumor_simplified_Oesophagogastric +
-    # primary_tumor_simplified_Pancreatic +
+    # primary_tumor_simplified +
+    primary_tumor_simplified_Colorectal +
+    primary_tumor_simplified_NSCLC +
+    primary_tumor_simplified_Oesophagogastric +
+    primary_tumor_simplified_Pancreatic +
     # progression_according_to_clinical_stage_imp + # too wide CI
     # tnm_stage +
     # tnm_stage_grouped +
@@ -1395,7 +1404,6 @@ for (i in 1:10) {
     mucinous_histology_imp +
     # grade_histological_differentiation_imp + # violates PH assumption
     # n_metastases_grouped + # confounder, possibly correlated to pTNM stage
-    # metastasis_adrenal_glands +
     # metastasis_bones +
     # metastasis_liver +
     # metastasis_lung +
@@ -1436,13 +1444,9 @@ for (i in 1:10) {
     data = validation_fold
   )
   
-  # Find aliases (linearly dependent terms) in a linear model
-  aliased_covariates = alias(fold_cph_model)
-  print(aliased_covariates)
-  
   # VIF
-  # vif_results = car::vif(fold_cph_model)
-  # print(vif_results)
+  vif_results = car::vif(fold_cph_model)
+  print(vif_results)
   
   # Make predictions on the validation fold
   # The result is the hazard of suffering the event. It's difficult to interpret
@@ -1552,6 +1556,7 @@ concordance(stepwise_cv_cph_final_model, newdata = stepwise_testing_set)
 ```{r}
 #AICcmodavg::aictab(final_cph_model)
 ```
+
 
 ```{r}
 # # Predict survival probabilities for different groups
