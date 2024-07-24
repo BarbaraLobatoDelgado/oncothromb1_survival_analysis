@@ -1179,6 +1179,10 @@ oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
   # Select relevant variables
   select(
     age_when_cancer_dx, 
+    # `age_quartiles_61-69`,
+    # `age_quartiles_70-93`,
+    # `age_when_cancer_dx_50_Older or 50 years old`,
+    # `age_when_cancer_dx_65_Older or 65 years old`,
     weight, 
     height, 
     body_surface_area, 
@@ -1191,10 +1195,6 @@ oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
     recent_major_surgery, 
     thromboprophylaxis_hospital, 
     erythropoietin_tx, 
-    # `age_quartiles_61-69`, 
-    # `age_quartiles_70-93`, 
-    # `age_when_cancer_dx_50_Older or 50 years old`, 
-    # `age_when_cancer_dx_65_Older or 65 years old`, 
     gender_Female, 
     `menopausal_status_imp_Pre-menopausal`,
     `menopausal_status_imp_Peri-menopausal`, 
@@ -1215,11 +1215,14 @@ oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
     primary_tumor_simplified_NSCLC, 
     `primary_tumor_simplified_Oesophago-gastric`, 
     primary_tumor_simplified_Pancreatic, 
-    `progression_according_to_clinical_stage_imp_Locally advanced`,
-    progression_according_to_clinical_stage_imp_Metastatic, 
     tnm_stage_II, 
     tnm_stage_III, 
     tnm_stage_IV, 
+    # metastasis_bones_Yes,
+    # metastasis_liver_Yes,
+    # metastasis_lung_Yes,
+    # metastasis_lymph_nodes_Yes,
+    # metastasis_peritoneum_Yes,
     histology_type_imp_Adenocarcinoma, 
     histology_type_imp_Epidermoid, 
     mucinous_histology_imp_Yes, 
@@ -1227,27 +1230,22 @@ oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
     `grade_histological_differentiation_imp_Poorly differentiated`, 
     catheter_device_imp_Yes, 
     venous_insufficiency_imp_Yes, 
-    n_comorbidities_1, 
-    `n_comorbidities_2+`, 
+    # n_comorbidities_1, 
+    # `n_comorbidities_2+`, 
     family_background_vte_Yes, 
     previous_vte_Yes, 
     previous_ate_Yes,
     anticoag_tx_currently_Yes,
-    antiaggreg_tx_currently_Yes, 
-    `vte_recurrence_No VTE recurrence`, 
-    `vte_recurrence_VTE recurrence`
+    antiaggreg_tx_currently_Yes
     ) %>%
   cor(.)
 
 # Correlation plot
 # corrplot::corrplot(oncoth1_correlations_vars, method = "circle")
-
-
 ```
 
 
 ```{r}
-
 # Heatmap and dendrogram
 heatmap(oncoth1_correlations_vars)
 ```
@@ -1271,6 +1269,17 @@ plot_ly(
     yaxis = list(title = "Variables")
   )
 ```
+
+- Menopausal status is correlated to age and sex. We remove it from the training of the model.  
+- Height, weight and body surface area are correlated with sex. 
+- Logically, BMI is correlated to body surface area. 
+- Having more than 2 comorbidities is correlated with diabetes mellitus, dyslipidemia and arterial hypertension; and, to a lesser degree, with COPD, chronic cardiac insufficiency and renal insufficiency. 
+- Previous ATE is correlated with the intake of antiaggregants, and slightly with arterial hypertension and chronic cardiac insufficiency. 
+- Central venous catheter is negatively correlated to NSCLC. 
+- Adenocarcinoma and epidermoid types are correlated to NSCLC. 
+- Grade 2 of histological differentitation is negatively correlated to NSCLC. 
+- Stage IV is very correlated to metastases locations (peritoneum, lymph nodes, lung, liver, bones...). 
+- Khorana Risk Score is correlated to pancreatic and esophago-gastric cancers. 
 
 
 ```{r}
@@ -1404,7 +1413,7 @@ stepwise_folds <- cut(folds_shuffled_ids, breaks = 10, labels = FALSE)
 # Initialize a vector to store the evaluation results
 stepwise_cv_vars_results <- vector("list", length = 10)
 stepwise_cv_cindex_results <- vector("list", length = 10)
-# stepwise_cv_vif_results <- vector("list", length = 10)
+stepwise_cv_vif_results <- vector("list", length = 10) # Inspection of GVIF in trained models is necessary to detect multicollinearity issues
 
 for (i in 1:10) {
   # Get the validation IDs
@@ -1437,24 +1446,20 @@ for (i in 1:10) {
     # age_quartiles + 
     # age_when_cancer_dx_50 +
     # age_when_cancer_dx_65 +
-    gender + # Collinear with menopausal status
-    # menopausal_status_imp +
-    # weight +
-    # height +
+    gender +
     bmi_value +
     performance_status_category_corrected_imp +
-    # diabetes_mellitus + # Confounder
+    # diabetes_mellitus + # Confounder. We know it is associated with pancreatic cancer patients that undergo resection of pancreas
     dyslipidemia +
     tobacco_use_imp +
-    # tobacco_use_imp_grouped +
-    copd_imp +
+    tobacco_use_imp_grouped +
+    # copd_imp + # Correlated to tobacco use
     arterial_hypertension +
     # chronic_cardiac_insufficiency + # Low variance
     # renal_insufficiency + # Low variance
-    venous_insufficiency_imp +
-    n_comorbidities +
-    # khorana_risk_score_imp + 
-    # two_groups_krs +
+    venous_insufficiency_imp + # High GVIF, multicollinearity in some models
+    # khorana_risk_score_imp + # Correlated to pancreatic and esophago-gastric cancers
+    # two_groups_krs + # Correlated to pancreatic and esophago-gastric cancers
     previous_onco_surgery +
     tumor_surgically_removed + 
     # primary_tumor_simplified +
@@ -1462,21 +1467,13 @@ for (i in 1:10) {
     primary_tumor_simplified_NSCLC +
     primary_tumor_simplified_Oesophagogastric +
     primary_tumor_simplified_Pancreatic +
-    # progression_according_to_clinical_stage_imp + # too wide CI
-    # tnm_stage +
     # tnm_stage_grouped +
     tnm_stage_two_groups +
-    # histology_type_imp +
+    # histology_type_imp + # Correlated with NSCLC
     mucinous_histology_imp +
     # grade_histological_differentiation_imp + # violates PH assumption
-    # n_metastases_grouped + # confounder, possibly correlated to pTNM stage
-    # metastasis_bones +
-    # metastasis_liver +
-    # metastasis_lung +
-    # metastasis_lymph_nodes +
-    # metastasis_peritoneum +
     # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
-    family_background_vte +
+    family_background_vte + # High GVIF, multicollinearity in some models
     previous_vte +
     previous_ate +
     anticoag_tx_currently +
@@ -1532,7 +1529,7 @@ for (i in 1:10) {
   # Store the evaluation result
   stepwise_cv_vars_results[[i]] = selected_variables
   stepwise_cv_cindex_results[[i]] = fold_cindex$concordance
-  # stepwise_cv_vif_results[[i]] = as.data.frame(vif_results)
+  stepwise_cv_vif_results[[i]] = as.data.frame(vif_results)
 
 }
 ```
