@@ -1451,7 +1451,7 @@ for (i in 1:10) {
     performance_status_category_corrected_imp +
     # diabetes_mellitus + # Confounder. We know it is associated with pancreatic cancer patients that undergo resection of pancreas
     dyslipidemia +
-    tobacco_use_imp +
+    # tobacco_use_imp +
     tobacco_use_imp_grouped +
     # copd_imp + # Correlated to tobacco use
     arterial_hypertension +
