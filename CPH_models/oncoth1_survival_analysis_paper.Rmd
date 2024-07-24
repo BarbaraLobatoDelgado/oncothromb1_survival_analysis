@@ -35,6 +35,7 @@ pacman::p_load(
   survminer, 
   car,
   StepReg,
+  plotly,
   install = FALSE, update = FALSE
   )
 ```
@@ -1190,17 +1191,14 @@ oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
     recent_major_surgery, 
     thromboprophylaxis_hospital, 
     erythropoietin_tx, 
-    `age_quartiles_61-69`, 
-    `age_quartiles_70-93`, 
-    `age_when_cancer_dx_50_Older or 50 years old`, 
-    `age_when_cancer_dx_65_Older or 65 years old`, 
+    # `age_quartiles_61-69`, 
+    # `age_quartiles_70-93`, 
+    # `age_when_cancer_dx_50_Older or 50 years old`, 
+    # `age_when_cancer_dx_65_Older or 65 years old`, 
     gender_Female, 
-    menopausal_status_imp_Pre-menopausal,
-    menopausal_status_imp_Peri-menopausal, 
-    menopausal_status_imp_Post-menopausal, 
-    bmi_category_Normal, 
-    bmi_category_Overweight, 
-    bmi_category_Obese, 
+    `menopausal_status_imp_Pre-menopausal`,
+    `menopausal_status_imp_Peri-menopausal`, 
+    `menopausal_status_imp_Post-menopausal`, 
     performance_status_category_corrected_imp_1, 
     performance_status_category_corrected_imp_2, 
     diabetes_mellitus_Yes, 
@@ -1213,33 +1211,20 @@ oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
     chronic_cardiac_insufficiency_Yes, 
     renal_insufficiency_Yes, 
     previous_onco_surgery_Yes, 
+    tumor_surgically_removed_Yes, 
     primary_tumor_simplified_NSCLC, 
     `primary_tumor_simplified_Oesophago-gastric`, 
     primary_tumor_simplified_Pancreatic, 
-    tumor_surgically_removed_Yes, 
     `progression_according_to_clinical_stage_imp_Locally advanced`,
     progression_according_to_clinical_stage_imp_Metastatic, 
     tnm_stage_II, 
     tnm_stage_III, 
     tnm_stage_IV, 
-    tnm_stage_grouped_III, 
-    tnm_stage_grouped_IV, 
-    tnm_stage_two_groups_IV, 
     histology_type_imp_Adenocarcinoma, 
-    histology_type_imp_Epidermoid, mucinous_histology_imp_Yes, 
+    histology_type_imp_Epidermoid, 
+    mucinous_histology_imp_Yes, 
     `grade_histological_differentiation_imp_Moderately differentiated`,
     `grade_histological_differentiation_imp_Poorly differentiated`, 
-    metastasis_adrenal_glands_Yes, 
-    metastasis_bones_Yes, 
-    metastasis_brain_Yes, 
-    metastasis_liver_Yes, 
-    metastasis_lung_Yes, 
-    metastasis_lymph_nodes_Yes, 
-    metastasis_peritoneum_Yes, 
-    metastasis_pleura_Yes, 
-    metastasis_skin_Yes, 
-    metastasis_soft_tissues_Yes, 
-    other_metastases_Yes, 
     catheter_device_imp_Yes, 
     venous_insufficiency_imp_Yes, 
     n_comorbidities_1, 
@@ -1255,7 +1240,41 @@ oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
   cor(.)
 
 # Correlation plot
-corrplot::corrplot(oncoth1_correlations_vars, method = "circle")
+# corrplot::corrplot(oncoth1_correlations_vars, method = "circle")
+
+
+```
+
+
+```{r}
+
+# Heatmap and dendrogram
+heatmap(oncoth1_correlations_vars)
+```
+
+
+```{r}
+# Interactive heatmap
+plot_ly(
+  data = reshape2::melt(oncoth1_correlations_vars),
+  x = ~Var1,
+  y = ~Var2,
+  z = ~value,
+  type = "heatmap",
+  colors = colorRamp(c("blue", "white", "red")),
+  colorbar = list(title = "Correlation"),
+  showscale = TRUE
+) %>%
+  layout(
+    title = "Interactive Heatmap of Correlations in ONCOTHROMB1",
+    xaxis = list(title = "Variables"),
+    yaxis = list(title = "Variables")
+  )
+```
+
+
+```{r}
+aa
 ```
 
 
