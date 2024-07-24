@@ -33,6 +33,7 @@ pacman::p_load(
   magrittr,
   survival,
   survminer, 
+  car,
   StepReg,
   install = FALSE, update = FALSE
   )
@@ -1175,15 +1176,68 @@ cox.zph(all_covariates_td_cph_reg)
 
 ## Prior selection of features... [variability? correlation? multicollinearity?]
 
-```{r}
-survival_vte_tmerge_tt = survival_vte_tmerge %>%
-  select(-c(id, contains("tu_"))) %>%
-  fastDummies::dummy_cols(., remove_first_dummy = TRUE, remove_selected_columns = TRUE)
 
-# Variance per feature
-variance_per_feature = sapply(survival_vte_tmerge_tt, function (x) var(x, na.rm = TRUE))
-variance_per_feature[order(variance_per_feature)]
+### Variance per feature
+
+```{r}
+# Convert categorical variables into dummies (one-hot encoding)
+survival_vte_tmerge_dummies = survival_vte_tmerge %>%
+  # Remove useless variables
+  select(-c(id, tstart, tstop, contains("tu_"))) %>%
+  # Convert KRS to numeric
+  mutate(khorana_risk_score_imp = as.numeric(khorana_risk_score_imp)) %>%
+  # Create dummies for all categorical variables (character and factors)
+  fastDummies::dummy_cols(., remove_first_dummy = TRUE, remove_selected_columns = TRUE)
 ```
+
+
+```{r}
+# Variance per feature
+variance_per_feature = sapply(survival_vte_tmerge_dummies, function (x) var(x, na.rm = TRUE))
+variance_per_feature = variance_per_feature[order(variance_per_feature)] 
+
+# Threshold
+variance_threshold = 0.05  
+
+# Variables with less than threshold variance, ordered from less to more
+variance_per_feature[order(variance_per_feature[variance_per_feature < variance_threshold])]
+```
+
+
+### Correlation between variables using Cramer's V
+
+```{r}
+# Do correlation between CVC and tumor surgically removed with primary tumor
+oncoth1_corr_vars = oncoth1_data %>% 
+  select(id, primary_tumor_simplified, catheter_device, tumor_surgically_removed)
+
+# Calculate Cramér's V
+# Close to 0: Weak or no association.
+# Around 0.1: Small association.
+# Around 0.3: Moderate association.
+# Around 0.5: Strong association.
+# Close to 1: Very strong or perfect association.
+
+# Primary tumor and CVC
+contingency_table1 <- table(
+  oncoth1_corr_vars$primary_tumor_simplified,
+  oncoth1_corr_vars$catheter_device
+  )
+
+cramers_v1 <- round(sqrt(chisq.test(contingency_table1)$statistic / sum(contingency_table1)), digits = 4)
+print(paste("Cramer's V for cancer type and CVC =", cramers_v1))
+
+
+# Primary tumor and tumor surgically removed
+contingency_table2 <- table(
+  oncoth1_corr_vars$primary_tumor_simplified,
+  oncoth1_corr_vars$tumor_surgically_removed
+  )
+
+cramers_v2 <- round(sqrt(chisq.test(contingency_table2)$statistic / sum(contingency_table2)), digits = 4)
+print(paste("Cramer's V for cancer type and surgical resection of tumor =", cramers_v2))
+```
+
 
 
 ## Stepwise feature selection CPH [careful with StepReg version]
@@ -1213,125 +1267,7 @@ survival_vte_tmerge_stepwise %<>%
 ```
 
 
-```{r}
-# # Train stepwise feature selection Cox Proportional Hazards regression for event death
-# StepReg::stepwiseCox(
-#   formula = Surv(time = tstart, time2 = tstop, event = death) ~ 
-#     vte_event + 
-#     age_when_cancer_dx + 
-#     gender + # Multicollinear with menopausal status
-#     #menopausal_status_imp + 
-#     #weight + 
-#     #height + 
-#     #body_surface_area + 
-#     # bmi_value +
-#     bmi_category + 
-#     # performance_status_category_corrected_imp + 
-#     # major_surgery_in_medical_history + 
-#     # hormone_therapy + 
-#     # pregnancy + # Low variance
-#     # oral_contraceptive_tx + # Low variance
-#     diabetes_mellitus +
-#     dyslipidemia +
-#     tobacco_use_imp +
-#     # tobacco_use_imp_grouped +
-#     copd_imp +
-#     arterial_hypertension +
-#     chronic_cardiac_insufficiency + # Very little variance
-#     renal_insufficiency + # Very little variance
-#     venous_insufficiency_imp +
-#     n_comorbidities +
-#     # khorana_risk_score_imp + 
-#     # two_groups_krs + 
-#     # tic_onco_imp + 
-#     previous_onco_surgery + 
-#     tumor_surgically_removed + 
-#     primary_tumor_simplified +
-#     # progression_according_to_clinical_stage_imp + 
-#     # tnm_stage + 
-#     tnm_stage_grouped + 
-#     # tnm_stage_two_groups +
-#     histology_type_imp +
-#     mucinous_histology_imp +
-#     # grade_histological_differentiation_imp + 
-#     # n_metastases_grouped +
-#     # metastasis_adrenal_glands + 
-#     # metastasis_bones +
-#     # metastasis_brain + 
-#     # metastasis_liver + 
-#     # metastasis_lung + 
-#     # metastasis_lymph_nodes + 
-#     # metastasis_peritoneum + 
-#     # metastasis_pleura + 
-#     # metastasis_skin + # Low variance
-#     # metastasis_soft_tissues + 
-#     # other_metastases + 
-#     catheter_device_imp + 
-#     family_background_vte +
-#     #family_background_vte_n + 
-#     #family_background_vte_all_relatives +
-#     #family_background_VTE_father + 
-#     #family_background_VTE_mother + 
-#     #family_background_VTE_siblings + 
-#     #family_background_VTE_offspring + 
-#     #family_background_VTE_other_relatives +
-#     previous_vte +
-#     # previous_ate +
-#     anticoag_tx_currently +  
-#     antiaggreg_tx_currently +
-#     # blood_transfusion + # Correlated with low blood cells, low hemoglobin, etc. CONFOUNDER
-#     # immobilisation + # Correlated with PS. Also, CONFOUNDER
-#     # recent_major_surgery + # few observations
-#     # thromboprophylaxis_hospital + # CONFOUNDER
-#     erythropoietin_tx,
-#   data = survival_vte_tmerge_stepwise,
-#   selection = "bidirection", 
-#   select = "AIC", # either AIC, AICc or SBC
-#   method = "efron"
-# )
-```
 
-
-```{r}
-# final_cph_model = coxph(
-#   Surv(time = tstart, 
-#        time2 = tstop, 
-#        event = death) ~ 
-#     cluster(id) + 
-#     tnm_stage_grouped + 
-#     primary_tumor_simplified +
-#     vte_event +
-#     tumor_surgically_removed +
-#     catheter_device_imp +
-#     family_background_vte +
-#     previous_onco_surgery +    
-#     n_comorbidities +
-#     mucinous_histology_imp +
-#     diabetes_mellitus +
-#     erythropoietin_tx,
-#   id = id,
-#   data = survival_vte_tmerge_stepwise)
-# 
-# cox.zph(final_cph_model)
-# 
-# final_cph_model %>% 
-#   gtsummary::tbl_regression(exp = TRUE)
-```
-
-
-```{r}
-# summary(final_cph_model)
-```
-
-
-```{r}
-# AIC(final_cph_model)
-```
-
-
-```{r}
-#AICcmodavg::aictab(final_cph_model)
-```
 
 
 ### Training/test set partition and CV
@@ -1357,7 +1293,7 @@ table(oncoth1_data$patient_status_at_end_study_simplified, useNA = "always")
 unique_ids <- unique(survival_vte_tmerge_stepwise$id)
 
 # Randomly assign each unique ID to either train or test
-train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids)))  # 80% for training
+train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
 test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 
 # Partition the data into train and test sets based on the assigned IDs
@@ -1372,7 +1308,7 @@ stopifnot(
 
 
 ```{r}
-# Create folds for 5-fold CV
+# Create folds for k-fold CV
 
 # Create a grouping variable for each ID
 group_var <- as.numeric(factor(stepwise_training_set$id))
@@ -1430,27 +1366,20 @@ for (i in 1:10) {
     # menopausal_status_imp +
     # weight +
     # height +
-    # body_surface_area +
     bmi_value +
-    # bmi_category +
     performance_status_category_corrected_imp +
-    # major_surgery_in_medical_history +
-    # hormone_therapy +
-    # pregnancy + # Low variance
-    # oral_contraceptive_tx + # Low variance
     # diabetes_mellitus + # Confounder
     dyslipidemia +
     tobacco_use_imp +
     # tobacco_use_imp_grouped +
     copd_imp +
     arterial_hypertension +
-    chronic_cardiac_insufficiency + # Low variance
-    renal_insufficiency + # Low variance
+    # chronic_cardiac_insufficiency + # Low variance
+    # renal_insufficiency + # Low variance
     venous_insufficiency_imp +
-    # n_comorbidities +
+    n_comorbidities +
     # khorana_risk_score_imp + 
     # two_groups_krs +
-    # tic_onco_imp +
     previous_onco_surgery +
     tumor_surgically_removed + 
     primary_tumor_simplified +
@@ -1468,15 +1397,10 @@ for (i in 1:10) {
     # n_metastases_grouped + # confounder, possibly correlated to pTNM stage
     # metastasis_adrenal_glands +
     # metastasis_bones +
-    # metastasis_brain +
     # metastasis_liver +
     # metastasis_lung +
     # metastasis_lymph_nodes +
     # metastasis_peritoneum +
-    # metastasis_pleura +
-    # metastasis_skin + # Low variance
-    # metastasis_soft_tissues +
-    # other_metastases +
     # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
     family_background_vte +
     previous_vte +
@@ -1511,6 +1435,10 @@ for (i in 1:10) {
     id = id,
     data = validation_fold
   )
+  
+  # Find aliases (linearly dependent terms) in a linear model
+  aliased_covariates = alias(fold_cph_model)
+  print(aliased_covariates)
   
   # VIF
   # vif_results = car::vif(fold_cph_model)
@@ -1565,40 +1493,6 @@ mean(unlist(stepwise_cv_cindex_results))
 
 
 ```{r}
-# Do correlation between CVC and tumor surgically removed with primary tumor
-oncoth1_corr_vars = oncoth1_data %>% 
-  select(id, primary_tumor_simplified, catheter_device, tumor_surgically_removed)
-
-# Calculate Cramér's V
-# Close to 0: Weak or no association.
-# Around 0.1: Small association.
-# Around 0.3: Moderate association.
-# Around 0.5: Strong association.
-# Close to 1: Very strong or perfect association.
-
-# Primary tumor and CVC
-contingency_table1 <- table(
-  oncoth1_corr_vars$primary_tumor_simplified,
-  oncoth1_corr_vars$catheter_device
-  )
-
-cramers_v1 <- round(sqrt(chisq.test(contingency_table1)$statistic / sum(contingency_table1)), digits = 4)
-print(paste("Cramer's V for cancer type and CVC =", cramers_v1))
-
-
-# Primary tumor and tumor surgically removed
-contingency_table2 <- table(
-  oncoth1_corr_vars$primary_tumor_simplified,
-  oncoth1_corr_vars$tumor_surgically_removed
-  )
-
-cramers_v2 <- round(sqrt(chisq.test(contingency_table2)$statistic / sum(contingency_table2)), digits = 4)
-print(paste("Cramer's V for cancer type and surgical resection of tumor =", cramers_v2))
-```
-
-
-
-```{r}
 # Convert variable from factor to binary
 # stepwise_training_set$mucinous_histology_imp = ifelse(stepwise_training_set$mucinous_histology_imp == "No", 0, 1)
 ```
@@ -1649,6 +1543,15 @@ vif_results
 concordance(stepwise_cv_cph_final_model, newdata = stepwise_testing_set)
 ```
 
+
+```{r}
+# AIC(final_cph_model)
+```
+
+
+```{r}
+#AICcmodavg::aictab(final_cph_model)
+```
 
 ```{r}
 # # Predict survival probabilities for different groups
