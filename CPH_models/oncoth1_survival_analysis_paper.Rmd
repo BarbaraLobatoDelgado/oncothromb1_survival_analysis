@@ -1444,14 +1444,14 @@ for (i in 1:10) {
     # tobacco_use_imp_grouped +
     copd_imp +
     arterial_hypertension +
-    # chronic_cardiac_insufficiency + # Low variance
-    # renal_insufficiency + # Low variance
+    chronic_cardiac_insufficiency + # Low variance
+    renal_insufficiency + # Low variance
     venous_insufficiency_imp +
     # n_comorbidities +
-    # khorana_risk_score_imp +
+    # khorana_risk_score_imp + 
     # two_groups_krs +
     # tic_onco_imp +
-    # previous_onco_surgery +
+    previous_onco_surgery +
     tumor_surgically_removed + 
     primary_tumor_simplified +
     # primary_tumor_simplified_Colorectal +
@@ -1459,7 +1459,7 @@ for (i in 1:10) {
     # primary_tumor_simplified_Oesophagogastric +
     # primary_tumor_simplified_Pancreatic +
     # progression_according_to_clinical_stage_imp + # too wide CI
-    #tnm_stage +
+    # tnm_stage +
     # tnm_stage_grouped +
     tnm_stage_two_groups +
     # histology_type_imp +
@@ -1496,7 +1496,8 @@ for (i in 1:10) {
     )
   
   # Save selected variables
-  selected_variables = as.vector(unlist(stepwise_model$`Selected Variables`))
+  selected_variables = unname(unlist(stepwise_model$`Selected Varaibles`))
+  # selected_variables = stepwise_model$`Coefficients of the Selected Variables`$Variable
   # print(selected_variables)
   
   # Fit model with selected variables in this fold
