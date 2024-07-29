@@ -874,6 +874,10 @@ stopifnot(
 ```{r}
 # Create folds for k-fold CV
 
+# Set seed
+set.seed(2828)
+
+# Number of folds
 k = 10
 
 # Create a grouping variable for each ID
@@ -892,6 +896,9 @@ stepwise_folds <- cut(folds_shuffled_ids, breaks = k, labels = FALSE)
 
 
 ```{r}
+# Set seed
+set.seed(2828)
+
 # Initialize a vector to store the evaluation results
 stepwise_cv_vars_results <- vector("list", length = k)
 stepwise_cv_cindex_results <- vector("list", length = k)
@@ -977,7 +984,7 @@ for (i in 1:k) {
   
   # VIF
   vif_results = car::vif(fold_cph_model)
-  print(vif_results)
+  # print(vif_results)
   
   # Make predictions on the validation fold
   # The result is the hazard of suffering the event. It's difficult to interpret
@@ -989,11 +996,6 @@ for (i in 1:k) {
   fold_cindex <- concordance(fold_cph_model, newdata = validation_fold)
   # print(fold_cindex$concordance)
   
-  # Likelihood ratio test (LRT)
-  # fold_lrt <- anova(fold_cph_model)
-  # fold_lrt_p_value <- fold_lrt$`Pr(>Chisq)`[2]  # P-value for the model
-  # print(fold_lrt_p_value)
-  
   # Store the evaluation result
   stepwise_cv_vars_results[[i]] = selected_variables
   stepwise_cv_cindex_results[[i]] = fold_cindex$concordance
@@ -1001,16 +1003,6 @@ for (i in 1:k) {
 
 }
 ```
-
-Age by itself is not considered relevant.
-
-Patients grouped by aged with 65 years old as threshold is not a very important variable. However, when the threshold is 50 years old, it is selected as important, with patients equal or older than 50 y.o. being protected against death. 
-
-This strange result may be due to the tumor type:
-
-                              Colorectal NSCLC Oesophago-gastric Pancreatic
-  Younger than 50 years old         11     5                 9          8
-  Older or 50 years old            151    82                60         64
 
 
 ```{r}
