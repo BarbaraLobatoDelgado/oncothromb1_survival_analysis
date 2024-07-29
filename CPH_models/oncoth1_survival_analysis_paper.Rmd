@@ -646,7 +646,7 @@ variance_per_feature = sapply(survival_vte_tmerge_dummies, function (x) var(x, n
 variance_per_feature = variance_per_feature[order(variance_per_feature)] 
 
 # Threshold
-variance_threshold = 0.05  
+variance_threshold = 0.1 # 0.05  
 
 # Variables with less than threshold variance, ordered from less to more
 variance_per_feature[order(variance_per_feature[variance_per_feature < variance_threshold])]
@@ -927,8 +927,7 @@ for (i in 1:10) {
     performance_status_category_corrected_imp +
     # diabetes_mellitus + # Confounder. We know it is associated with pancreatic cancer patients that undergo resection of pancreas
     dyslipidemia +
-    tobacco_use_imp +
-    # tobacco_use_imp_grouped +
+    # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
     # copd_imp + # Correlated to tobacco use
     arterial_hypertension +
     # chronic_cardiac_insufficiency + # Low variance
@@ -936,31 +935,25 @@ for (i in 1:10) {
     venous_insufficiency_imp + # High GVIF, multicollinearity in some models
     # khorana_risk_score_imp + # Correlated to pancreatic and esophago-gastric cancers
     # two_groups_krs + # Correlated to pancreatic and esophago-gastric cancers
-    previous_onco_surgery +
+    # previous_onco_surgery + # Correlated to having had tumor resected
     tumor_surgically_removed + 
-    # primary_tumor_simplified +
-    primary_tumor_simplified_Colorectal +
-    primary_tumor_simplified_NSCLC +
-    primary_tumor_simplified_Oesophagogastric +
-    primary_tumor_simplified_Pancreatic +
+    primary_tumor_simplified +
     # tnm_stage_grouped +
     tnm_stage_two_groups +
     # histology_type_imp + # Correlated with NSCLC
     mucinous_histology_imp +
     # grade_histological_differentiation_imp + # violates PH assumption
     # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
-    family_background_vte + # High GVIF, multicollinearity in some models
+    # family_background_vte + # High GVIF, multicollinearity with venous insufficiency in some folds
     previous_vte +
     previous_ate +
     anticoag_tx_currently +
     antiaggreg_tx_currently, 
-    # blood_transfusion + # Correlated with low blood cells, low hemoglobin, etc. CONFOUNDER
+    # blood_transfusion + # CONFOUNDER ?
     # immobilisation + # Correlated with PS. Also, CONFOUNDER
-    # recent_major_surgery + # Low variance
-    # thromboprophylaxis_hospital + # CONFOUNDER
     # erythropoietin_tx,
     data = training_fold,
-    # include = "primary_tumor_simplified",
+    include = "primary_tumor_simplified",
     selection = "bidirection",
     select = "AIC", 
     method = "efron"
