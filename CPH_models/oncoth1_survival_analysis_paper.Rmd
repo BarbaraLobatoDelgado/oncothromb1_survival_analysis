@@ -386,7 +386,8 @@ km_pval = get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_even
 
 
 ```{r}
-# jpeg("../graphs/time_dependent_covariate_analysis/vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+# jpeg("../graphs/KM_curve_VTE.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+
 km_plot_vte = 
   ggsurvplot(
     fit = km_fit_vte,
@@ -441,6 +442,14 @@ km_plot_vte$table =
   theme(plot.title = element_text(size = 10))
 
 km_plot_vte
+
+# ggsave(
+#   filename = "../graphs/KM_curve_VTE.jpeg", 
+#   # width = 6.5, 
+#   # height = 4, 
+#   units = 'in', 
+#   dpi = 700
+#   )
 
 # dev.off()
 ```
@@ -603,545 +612,18 @@ concordance(cph_vte_recurrence)
 summary(km_fit_vte_recurrence, times = 18*30.25)
 ```
 
-## VTE & stage
-
-```{r}
-# Fit survival analysis model
-km_fit_vte_stage = survfit(
-  Surv(
-    time = tstart, 
-    time2 = tstop, 
-    event = death) ~ 
-    vte_event + 
-    tnm_stage_two_groups + #test this primary_tumor_simplified
-    cluster(id), 
-  data = survival_vte_tmerge)
-
-km_fit_vte_stage
-```
-
-
-```{r}
-# Get p-value
-km_pval_vte_stage = get_robscore_pval(survival_vte_tmerge, covariates = c("vte_event", "tnm_stage_two_groups")) 
-```
-
-
-```{r}
-#jpeg("./graphs/paper/KM_cat_and_stage.jpeg", width = 8, height = 4, units = 'in', res = 700)
-
-# Custom KM
-# tt <- oncoth1_data %>%
-#   group_by(tnm_stage_two_groups, patient_group) %>%
-#   summarize(count = n(), .groups = 'drop')
-
-# Count n patients in each subgroup
-n_stages_i_ii_iii_no_vte = sum(
-  oncoth1_data$tnm_stage_two_groups == "I-II-III" &
-    oncoth1_data$patient_group == "Control")
-
-n_stages_i_ii_iii_vte = sum(
-  oncoth1_data$tnm_stage_two_groups == "I-II-III" &
-    oncoth1_data$patient_group == "Case")
-
-n_stages_iv_no_vte = sum(
-  oncoth1_data$tnm_stage_two_groups == "IV" &
-    oncoth1_data$patient_group == "Control")
-
-n_stages_iv_vte = sum(
-  oncoth1_data$tnm_stage_two_groups == "IV" &
-    oncoth1_data$patient_group == "Case")
-
-legend_labels_and_n = c(
-  paste0("Stages I-II-III w/o CAT (n=", n_stages_i_ii_iii_no_vte, ")"),
-  paste0("Stage IV w/o CAT (n=", n_stages_iv_no_vte, ")"),
-  paste0("Stages I-II-III with CAT (n=", n_stages_i_ii_iii_vte, ")"),
-  paste0("Stage IV with CAT (n=", n_stages_iv_vte, ")"))
-
-#median_survival_days = surv_median(km_fit_vte_stage)
-
-survplot_cat_stage = autoplot(
-  km_fit_vte_stage,
-  censor = FALSE,
-  conf.int = FALSE,
-  surv.size = 0.5,
-  surv.linetype = "strata") +
-  theme_bw() +
-  labs(
-    x = "Time (months)",
-    y = "OS probability",
-    title = "") +
-  theme(
-    plot.title = element_text(hjust = 0.5),
-    legend.title = element_text(hjust = 0.5, face = "bold"),
-    legend.text = element_text(size = 11),
-    legend.position = "right") +
-  scale_x_continuous(
-    limits = c(0, 605),
-    breaks = seq(from = 0, to = 600, by = 60),
-    labels = seq(from = 0, to = 20, by = 2)) +
-  scale_colour_manual(
-    name = "CAT and Stage",
-    labels = legend_labels_and_n,
-    values = c("black", "black", "red", "red")) +
-  scale_linetype_manual(
-    name = "CAT and Stage",
-    labels = legend_labels_and_n,
-    values = c("longdash", "dotted", "longdash", "dotted"))
-
-# # Add log-rank p-value
-survplot_cat_stage = survplot_cat_stage +
-  # Log-rank p-value
-  annotate(
-    geom = "text",
-    size = 4,
-    x = 50,
-    y = 0.2,
-    label = "Log-rank",
-    color = "black") +
-  annotate(
-    geom = "text",
-    size = 4,
-    x = 50,
-    y = 0.15,
-    label = as.character(format(
-      km_pval_vte_stage,
-      scientific = TRUE,
-      digits = 1))
-    )
-
-# Add median survival line
-survplot_cat_stage = survplot_cat_stage +
-  # Horizontal line
-  geom_segment(
-    aes(x = 0, y = 0.5, xend = 478, yend = 0.5),
-    linetype = "dashed",
-    size = 0.4) +
-  # Vertical lines
-  geom_segment(
-    aes(x = 478, y = 0, xend = 478, yend = 0.5),
-    linetype = "dashed",
-    size = 0.4) +
-  geom_segment(
-    aes(x = 231, y = 0, xend = 231, yend = 0.5),
-    linetype = "dashed",
-    size = 0.4)
-
-survplot_cat_stage
-
-#dev.off()
-```
-
-
-```{r}
-# Get summary of KM estimator at 18 months
-summary(km_fit_vte_stage, times = 18 * 30.25)
-```
-
-Stage IV heavily impacts the decrease in survival, more than having a VTE. Nevertheless, within the subgroups defined by these stages, having a VTE also significantly decreases survival.  
-
-
-## VTE & primary tumor
-
-```{r}
-# Fit survival analysis model
-km_fit_vte_vte_cancer_type = survfit(
-  Surv(
-    time = tstart, 
-    time2 = tstop, 
-    event = death) ~ 
-    vte_event + 
-    primary_tumor_simplified +
-    cluster(id), 
-  data = survival_vte_tmerge)
-
-km_fit_vte_vte_cancer_type
-```
-
-```{r}
-# Get robust score test p-value
-km_pval_vte_cancer_type = get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_event", "primary_tumor_simplified"))
-```
-
-
-```{r}
-# # We perform the log-rank test separately, because we need to manually insert the
-# # p-value into the KM plot
-# stratified_primary_tumor_cph_fit = coxph(Surv(
-#   time = tstart, 
-#   time2 = tstop, 
-#   event = death) ~ 
-#     vte_event + 
-#     age_when_cancer_dx +
-#     gender + 
-#     tnm_stage_grouped +
-#     primary_tumor_simplified + #test this primary_tumor_simplified
-#     cluster(id),
-#   id = id, 
-#   data = survival_vte_tmerge)
-# 
-# stratified_primary_tumor_cph_tests_summary = summary(stratified_primary_tumor_cph_fit)
-# 
-# stratified_primary_tumor_cph_tests_summary$robscore[["pvalue"]]
-```
-
-
-```{r}
-#jpeg("./graphs/time_dependent_covariate_analysis/stratified_primary_tumor_vte_td_surv_analysis_KM_curve.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-
-survplot_cat_cancer_type = 
-  ggsurvplot(
-    fit = km_fit_vte_vte_cancer_type,
-    data = survival_vte_tmerge,
-    xscale = 30,
-    break.time.by = 60,
-    censor = FALSE,
-    conf.int = FALSE,
-    #conf.int.alpha = 0.15,
-    xlim = c(0, 540),
-    #surv.plot.height = 1.25, 
-    #tables.height = 0.25,
-    legend.title = " ",
-    legend.labs = c("No VTE - Colorectal",
-                    "No VTE - NSCLC",
-                    "No VTE - Oesophago-gastric",
-                    "No VTE - Pancreatic",
-                    "VTE - Colorectal", 
-                    "VTE - NSCLC", 
-                    "VTE - Oesophago-gastric",
-                    "VTE - Pancreatic"),
-    linetype = "vte_event", 
-    surv.median.line = "hv",
-    xlab = "Time to death (months)",
-    ylab = "Overall Survival Probability",
-    ggtheme = theme_bw(), 
-    palette = c("blue", "magenta", "orange", "steelblue", "blue", "magenta", "orange", "steelblue")
-    )
-
-# Add p-value
-survplot_cat_cancer_type$plot = 
-  survplot_cat_cancer_type$plot + 
-  annotate(
-    geom = "text", 
-    x = 26,
-    y = 0.3,
-    label = "Log-rank",
-    color = "black") + 
-  annotate(
-    geom = "text", 
-    x = 28,
-    y = 0.2,
-    label = as.character(format(
-      km_pval_vte_cancer_type, 
-      scientific = TRUE, 
-      digits = 1)),
-    color = "black")
-
-# Customize risk table title 
-#stratified_stage_km_plot_vte$table = 
-#  stratified_stage_km_plot_vte$table +
-#  theme(plot.title = element_text(size = 10))
-
-survplot_cat_cancer_type
-
-#dev.off()
-```
-
-```{r}
-# #jpeg("./graphs/paper/KM_cat_and_primary_tumor.jpeg", width = 8, height = 4, units = 'in', res = 700)
-# 
-# # Custom KM 
-# 
-# # Count n patients in each subgroup
-# n_colorectal_no_vte = sum(
-#   oncoth1_data$primary_tumor_simplified == "Colorectal" & 
-#     oncoth1_data$patient_group == "Control")
-# 
-# n_colorectal_vte = sum(
-#   oncoth1_data$primary_tumor_simplified == "Colorectal" & 
-#     oncoth1_data$patient_group == "Case")
-# 
-# n_nsclc_no_vte = sum(
-#   oncoth1_data$primary_tumor_simplified == "NSCLC" & 
-#     oncoth1_data$patient_group == "Control")
-# 
-# n_nsclc_vte = sum(
-#   oncoth1_data$primary_tumor_simplified == "NSCLC" & 
-#     oncoth1_data$patient_group == "Case")
-# 
-# n_oesophagogastric_no_vte = sum(
-#   oncoth1_data$primary_tumor_simplified == "Oesophago-gastric" & 
-#     oncoth1_data$patient_group == "Control")
-# 
-# n_oesophagogastric_vte = sum(
-#   oncoth1_data$primary_tumor_simplified == "Oesophago-gastric" & 
-#     oncoth1_data$patient_group == "Case")
-# 
-# n_pancreatic_no_vte = sum(
-#   oncoth1_data$primary_tumor_simplified == "Pancreatic" & 
-#     oncoth1_data$patient_group == "Control")
-# 
-# n_pancreatic_vte = sum(
-#   oncoth1_data$primary_tumor_simplified == "Pancreatic" & 
-#     oncoth1_data$patient_group == "Case")
-# 
-# 
-# legend_labels_and_n = c(
-#   paste0("Colorectal w/o CAT (n=", n_colorectal_no_vte, ")"), 
-#   paste0("Colorectal with CAT (n=", n_colorectal_vte, ")"),
-#   paste0("NSCLC w/o CAT (n=", n_nsclc_no_vte, ")"), 
-#   paste0("NSCLC with CAT (n=", n_nsclc_vte, ")"),
-#   paste0("Oesophago-gastric w/o CAT (n=", n_oesophagogastric_no_vte, ")"), 
-#   paste0("Oesophago-gastric with CAT (n=", n_oesophagogastric_vte, ")"),
-#   paste0("Pancreatic w/o CAT (n=", n_pancreatic_no_vte, ")"), 
-#   paste0("Pancreatic with CAT (n=", n_pancreatic_vte, ")")
-#   )
-# 
-# #median_survival_days = surv_median(km_fit_vte_stage)
-#   
-# survplot_cat_cancer_type = autoplot(
-#   km_fit_vte_vte_cancer_type,
-#   censor = FALSE,
-#   conf.int = FALSE,
-#   surv.size = 0.5,
-#   surv.linetype = "strata") +
-#   theme_bw() +
-#   labs(
-#     x = "Time (months)",
-#     y = "OS probability",
-#     title = "") +
-#   theme(
-#     plot.title = element_text(hjust = 0.5),
-#     legend.title = element_text(hjust = 0.5, face = "bold"),
-#     legend.text = element_text(size = 11),
-#     legend.position = "right") +
-#   scale_x_continuous(
-#     limits = c(0, 605),
-#     breaks = seq(from = 0, to = 600, by = 60),
-#     labels = seq(from = 0, to = 20, by = 2)) +
-#   scale_colour_manual(
-#     name = "CAT and Cancer type",
-#   labels = legend_labels_and_n,
-#     values = c("#F8766D", "#F8766D",
-#                "#00BA42", "#00BA42",
-#                "#00BBDD", "#00BBDD",
-#                "#FF62BC", "#FF62BC")) +
-#   scale_linetype_manual(
-#     name = "CAT and Cancer type",
-#     labels = legend_labels_and_n,
-#     values = c("solid", "longdash",
-#                "solid", "longdash",
-#                "solid", "longdash",
-#                "solid", "longdash"))
-# 
-# # Add log-rank p-value
-# survplot_cat_cancer_type = survplot_cat_cancer_type +
-#   # Log-rank p-value
-#   annotate(
-#     geom = "text",
-#     size = 4,
-#     x = 50,
-#     y = 0.2,
-#     label = "Log-rank",
-#     color = "black") +
-#   annotate(
-#     geom = "text",
-#     size = 4,
-#     x = 50,
-#     y = 0.15,
-#     label = "<0.0001")
-# 
-# # Add median survival line
-# survplot_cat_cancer_type = survplot_cat_cancer_type +
-#   # Horizontal line
-#   geom_segment(
-#     aes(x = 0, y = 0.5, xend = 478, yend = 0.5),
-#     linetype = "dashed",
-#     size = 0.4) +
-#   # Vertical lines
-#   geom_segment(
-#     aes(x = 478, y = 0, xend = 478, yend = 0.5),
-#     linetype = "dashed",
-#     size = 0.4) +
-#   geom_segment(
-#     aes(x = 231, y = 0, xend = 231, yend = 0.5),
-#     linetype = "dashed",
-#     size = 0.4)
-# 
-# survplot_cat_cancer_type
-# 
-# #dev.off()
-```
-
-
-This plot is quite messy, but we can see that for all 4 types of tumor median survival is lower when patients have one or more VTEs than when they have none.  
-
-[CORREGIR]
-
-Among the subgroup of patients that suffer VTE, pancreatic cancer patients are the ones that die sooner (median survival time of almost 6 months). It is followed by NSCLC patients (median survival of 10.5 months, approximately); colorectal (median survival of 15.5 months approximately) and oesophago-gastric patients (median survival time of almost 19 months).  
-
-However, in the non-VTE patient's subgroup, pancreatic, NSCLC and oesophago-gastric have similar median survival times; whilst colorectal cancer patients have the best prognostic among all of them. This could also be related to the fact that the majority of colorectal cancer patients are in stage III (45.7%) and a lesser percentage (36.4%) are in stage IV. In the previous section, we have seen that stage IV cancer patients, regardless of the type of tumor, are the ones with shorter survival times.    
-
-The p-value shows that having a VTE is significantly associated with a difference in survival between patients subgroups, regardless of the type of cancer.  
-
-
 # Multivariate CPH regression
 
+Some pointers: 
 
-## Exploratory CPH regression [this is a mess, I don't know what I was doing]
-
-In a linear model (like the Cox regression), you generally should limit yourself to about 1 candidate predictor per 15 events in your dataset.
-
+- In a linear model (like the Cox regression), you generally should limit yourself to about 1 candidate predictor per 15 events in your dataset.
 https://stats.stackexchange.com/questions/178944/precisely-how-does-rs-coxph-handle-repeated-measures  
 
-One approach to dealing with a violation of the proportional hazards assumption is to stratify by that variable. Including a strata() term will result in a separate baseline hazard function being fit for each level in the stratification variable. It will be no longer possible to make direct inference on the effect associated with that variable.  
+- One approach to dealing with a violation of the proportional hazards assumption is to stratify by that variable. Including a strata() term will result in a separate baseline hazard function being fit for each level in the stratification variable. It will be no longer possible to make direct inference on the effect associated with that variable.  
 
+## Prior selection of features
 
-```{r}
-
-all_covariates_td_cph_reg = coxph(
-  Surv(time = tstart, time2 = tstop, event = death) ~ 
-    cluster(id) + 
-    vte_event + 
-    primary_tumor_simplified + # No significance along with       vte_event:tnm_stage_grouped
-    #vte_event:primary_tumor_simplified:tnm_stage_two_groups + # No significance
-    #vte_event:age_when_cancer_dx:menopausal_status_imp + 
-    age_when_cancer_dx + 
-    menopausal_status_imp +
-    #age_when_cancer_dx:menopausal_status_imp + # No significance
-    #age_when_cancer_dx:gender + # No significance
-    #gender + 
-    #gender:menopausal_status_imp +
-    #ethnicity_grouped + 
-    #weight + 
-    #height + 
-    #body_surface_area + 
-    #bmi_value +
-    #bmi_category + 
-    performance_status_category_corrected_imp + 
-    #major_surgery_in_medical_history + 
-    #hormone_therapy + 
-    #pregnancy + 
-    #oral_contraceptive_tx + 
-    #diabetes_mellitus + 
-    #dyslipidemia + 
-    #tobacco_use + 
-    #copd + 
-    #arterial_hypertension + 
-    #chronic_cardiac_insufficiency + 
-    #renal_insufficiency + 
-    #khorana_risk_score_imp + 
-    #two_groups_krs + 
-    #tic_onco_imp + 
-    #previous_onco_surgery + 
-    tumor_surgically_removed + 
-    #primary_tumor_simplified +
-    #progression_according_to_clinical_stage + 
-    #tnm_stage + 
-    #tnm_stage_detailed + 
-    tnm_stage_grouped + 
-    #strata(tnm_stage_grouped, vte_event) + 
-    #t_stage_grouped + 
-    #n_stage_grouped + 
-    #m_stage_grouped + 
-    #histology_type_imp + 
-    #mucinous_histology_imp + 
-    #grade_histological_differentiation_imp + 
-    #metastasis_dx + 
-    #n_metastases + 
-    #metastasis_adrenal_glands + 
-    #metastasis_bones +
-    #metastasis_brain + 
-    #metastasis_liver + 
-    #metastasis_lung + 
-    #metastasis_lymph_nodes + 
-    #metastasis_peritoneum + 
-    #metastasis_pleura + 
-    #metastasis_skin + 
-    #metastasis_soft_tissues + 
-    #other_metastases + 
-    #catheter_device_imp + 
-    #venous_insufficiency_imp + 
-    family_background_vte + 
-    #family_background_vte_n + 
-    #family_background_vte_all_relatives +
-    #family_background_VTE_father + 
-    #family_background_VTE_mother + 
-    #family_background_VTE_siblings + 
-    #family_background_VTE_offspring + 
-    #family_background_VTE_other_relatives +
-    previous_vte, # + 
-    ##n_previous_ate +
-    #previous_ate_type +
-    #previous_ate + 
-    #cva_ate + 
-    #myocardial_infarction_ate + 
-    #pad_ate + 
-    #tia_ate + 
-    #other_thromb_ate + 
-    #anticoag_tx_vte + 
-    #anticoag_tx_vte_drugs + 
-    #anticoag_tx_cardiopathy + 
-    #anticoag_tx_other_causes + 
-    #anticoag_tx_reason + 
-    #anticoag_tx_apixaban + 
-    #anticoag_tx_dabigatran + 
-    #anticoag_tx_lmwh + 
-    #anticoag_tx_lmwh_dosage + 
-    #anticoag_tx_vit_k_antag + 
-    #anticoag_tx_other_drugs + 
-    #anticoag_tx_currently + 
-    #n_antiaggreg_tx + 
-    #n_antiaggreg_tx,
-    #antiaggreg_tx_reason + 
-    #antiaggreg_tx_cardiopathy + 
-    #antiaggreg_tx_cva + 
-    #antiaggreg_tx_other_causes + 
-    #antiaggreg_tx_currently
-    #blood_transfusion + # Correlated with leukocytosis, low red cells, low hemoglobin, etc.
-    #immobilisation + # Correlated with PS
-    #recent_major_surgery + 
-    #thromboprophylaxis_hospital, # + 
-    #erythropoietin_tx, # Correlated with low red blood cells
-  #singular.ok = TRUE,
-  id = id,
-  data = survival_vte_tmerge)
-
-
-all_covariates_td_cph_reg %>% 
-  gtsummary::tbl_regression(exp = TRUE)
-
-```
-
-
-```{r}
-cox.zph(all_covariates_td_cph_reg)
-```
-
-[Investigate primary_tumor:previous_onco_surgery y tnm_stage:previous_onco_surgery.]
-
-```{r}
-concordance(all_covariates_td_cph_reg)
-```
-
-
-
-```{r}
-#glm(death ~ ., family=binomial(link=logit), data=survival_vte_tmerge)
-```
-
-
-```{r}
-# Multicollinearity
-rms::vif(all_covariates_td_cph_reg)
-```
-
-
-```{r}
-cox.zph(all_covariates_td_cph_reg)
-```
-
-## Prior selection of features... [variability? correlation? multicollinearity?]
+Linear models do not work well when there is multicollinearity. Also, given the small sample size, we should limit our model to have a pool of features from which then apply automatic feature selection. 
 
 
 ### Variance per feature
@@ -1239,9 +721,6 @@ oncoth1_correlations_vars = survival_vte_tmerge_dummies %>%
     antiaggreg_tx_currently_Yes
     ) %>%
   cor(.)
-
-# Correlation plot
-# corrplot::corrplot(oncoth1_correlations_vars, method = "circle")
 ```
 
 
@@ -1282,12 +761,6 @@ plot_ly(
 - Khorana Risk Score is correlated to pancreatic and esophago-gastric cancers. 
 
 
-```{r}
-aa
-```
-
-
-
 ### Association between categorical variables using Cramer's V
 
 ```{r}
@@ -1326,7 +799,7 @@ print(paste("Cramer's V for cancer type and surgical resection of tumor =", cram
 
 ## Stepwise feature selection CPH [careful with StepReg version]
 
-StepReg vignette: 
+`StepReg` package vignette: 
 
 https://cran.r-project.org/web/packages/StepReg/vignettes/StepReg.html
 
@@ -1349,9 +822,6 @@ survival_vte_tmerge_stepwise %<>%
 #   select(-starts_with("tu_"))
 
 ```
-
-
-
 
 
 ### Training/test set partition and CV
@@ -1603,6 +1073,13 @@ stepwise_cv_cph_final_model %>%
 vif_results = car::vif(stepwise_cv_cph_final_model)
 vif_results
 ```
+
+
+```{r}
+# Multicollinearity
+# rms::vif(all_covariates_td_cph_reg)
+```
+
 
 
 ```{r}
