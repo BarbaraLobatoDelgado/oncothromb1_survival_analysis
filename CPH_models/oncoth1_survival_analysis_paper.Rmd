@@ -1021,25 +1021,13 @@ mean(unlist(stepwise_cv_cindex_results))
 
 
 ```{r}
-# Convert variable from factor to binary
-# stepwise_training_set$mucinous_histology_imp = ifelse(stepwise_training_set$mucinous_histology_imp == "No", 0, 1)
-```
-
-
-```{r}
-# Relevel factor
-# stepwise_training_set$mucinous_histology_imp = relevel(stepwise_training_set$mucinous_histology_imp, ref = "Yes")
-```
-
-
-```{r}
 # Final model with most frequently selected variables
 stepwise_cv_cph_final_model = coxph(
   Surv(time = tstart, 
        time2 = tstop, 
        event = death) ~ 
     cluster(id) + 
-    vte_event + # :vte_recurrence + # 
+    vte_event + 
     performance_status_category_corrected_imp +
     primary_tumor_simplified +
     tnm_stage_two_groups +
@@ -1066,12 +1054,6 @@ vif_results
 ```
 
 
-```{r}
-# Multicollinearity
-# rms::vif(all_covariates_td_cph_reg)
-```
-
-
 
 ```{r}
 # C-index in testing set
@@ -1080,62 +1062,7 @@ concordance(stepwise_cv_cph_final_model, newdata = stepwise_testing_set)
 
 
 ```{r}
-# AIC(final_cph_model)
+# Akaike information criterion (AIC) value
+AIC(stepwise_cv_cph_final_model)
 ```
-
-
-```{r}
-#AICcmodavg::aictab(final_cph_model)
-```
-
-
-```{r}
-# # Predict survival probabilities for different groups
-# # Does not work with models where there is interaction between variables
-# stepwise_model_predicted_survival = survfit(stepwise_cv_cph_final_model)
-# 
-# # Plot survival curves
-# # It cannot be done because I cannot apply survfit() to model with variable's interacions
-# ggsurvplot(
-#   stepwise_model_predicted_survival,
-#   data = stepwise_training_set,
-#   title = "Survival Curves with Interaction",
-#   xlab = "Time",
-#   ylab = "Survival Probability",
-#   risk.table = TRUE,
-#   risk.table.title = "Group Comparison"
-#   )
-```
-
-
-```{r}
-# https://stat.ethz.ch/R-manual/R-devel/library/survival/html/predict.coxph.html
-# Choices are the linear predictor ("lp"), the risk score exp(lp) ("risk"), the expected number of events given the covariates and follow-up time ("expected"), and the terms of the linear predictor ("terms"). The survival probability for a subject is equal to exp(-expected)
-# stepwise_pred = predict(
-#   object = stepwise_cv_cph_final_model, 
-#   newdata = stepwise_testing_set, 
-#   se.fit = TRUE,
-#   type = "survival"
-#   )
-# 
-# # Get probabilities and SE
-# stepwise_testing_set$prob = stepwise_pred$fit
-# stepwise_testing_set$lcl = stepwise_pred$fit - 1.96 * stepwise_pred$se.fit
-# stepwise_testing_set$ucl = stepwise_pred$fit + 1.96 * stepwise_pred$se.fit
-```
-
-
-```{r}
-yhat <- predict(
-  stepwise_cv_cph_final_model,
-  newdata = stepwise_testing_set,
-  se.fit = TRUE,
-  reference = "zero"
-  )
-
-yy <- yhat$fit + outer(yhat$se.fit, c(0, -1.96, 1.96), '*')
-yy
-```
-
-
 
