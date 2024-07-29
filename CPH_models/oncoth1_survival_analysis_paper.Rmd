@@ -765,8 +765,6 @@ plot_ly(
 
 ```{r}
 # Do correlation between CVC and tumor surgically removed with primary tumor
-oncoth1_corr_vars = oncoth1_data %>% 
-  select(id, primary_tumor_simplified, catheter_device, tumor_surgically_removed)
 
 # Calculate Cramér's V
 # Close to 0: Weak or no association.
@@ -777,8 +775,8 @@ oncoth1_corr_vars = oncoth1_data %>%
 
 # Primary tumor and CVC
 contingency_table1 <- table(
-  oncoth1_corr_vars$primary_tumor_simplified,
-  oncoth1_corr_vars$catheter_device
+  oncoth1_data$primary_tumor_simplified,
+  oncoth1_data$catheter_device
   )
 
 cramers_v1 <- round(sqrt(chisq.test(contingency_table1)$statistic / sum(contingency_table1)), digits = 4)
@@ -787,12 +785,23 @@ print(paste("Cramer's V for cancer type and CVC =", cramers_v1))
 
 # Primary tumor and tumor surgically removed
 contingency_table2 <- table(
-  oncoth1_corr_vars$primary_tumor_simplified,
-  oncoth1_corr_vars$tumor_surgically_removed
+  oncoth1_data$primary_tumor_simplified,
+  oncoth1_data$tumor_surgically_removed
   )
 
 cramers_v2 <- round(sqrt(chisq.test(contingency_table2)$statistic / sum(contingency_table2)), digits = 4)
 print(paste("Cramer's V for cancer type and surgical resection of tumor =", cramers_v2))
+
+
+# Family background of VTE and venous insufficiency
+contingency_table3 <- table(
+  oncoth1_data$family_background_vte,
+  oncoth1_data$catheter_device
+  )
+
+cramers_v3 <- round(sqrt(chisq.test(contingency_table3)$statistic / sum(contingency_table3)), digits = 4)
+print(paste("Cramer's V for family background VTE and venous insufficiency =", cramers_v3))
+
 ```
 
 
@@ -913,16 +922,13 @@ for (i in 1:10) {
     # vte_recurrence +
     # vte_event:vte_recurrence +
     age_when_cancer_dx +
-    # age_quartiles + 
-    # age_when_cancer_dx_50 +
-    # age_when_cancer_dx_65 +
     gender +
     bmi_value +
     performance_status_category_corrected_imp +
     # diabetes_mellitus + # Confounder. We know it is associated with pancreatic cancer patients that undergo resection of pancreas
     dyslipidemia +
-    # tobacco_use_imp +
-    tobacco_use_imp_grouped +
+    tobacco_use_imp +
+    # tobacco_use_imp_grouped +
     # copd_imp + # Correlated to tobacco use
     arterial_hypertension +
     # chronic_cardiac_insufficiency + # Low variance
