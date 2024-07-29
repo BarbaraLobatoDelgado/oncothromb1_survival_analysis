@@ -10,6 +10,9 @@ output:
 ```{r}
 # Deactivate scientific notation
 options(scipen = 999, max.print = 10000)
+
+# Seed
+seed = 2828
 ```
 
 
@@ -838,11 +841,6 @@ survival_vte_tmerge_stepwise %<>%
 
 See if there is consistency in variable selection and predictive capability of CV partitions, as well as with test set.
 
-```{r}
-# Set seed for reproducibility and consistency in results
-set.seed(2828)
-```
-
 
 ```{r}
 # Target distribution when event of interest is death
@@ -852,6 +850,9 @@ table(oncoth1_data$patient_status_at_end_study_simplified, useNA = "always")
 
 ```{r}
 # Partition data with repeated rows per patient into training and test set
+
+# Set seed
+set.seed(seed) 
 
 # Get unique IDs
 unique_ids <- unique(survival_vte_tmerge_stepwise$id)
@@ -875,7 +876,7 @@ stopifnot(
 # Create folds for k-fold CV
 
 # Set seed
-set.seed(2828)
+set.seed(seed)
 
 # Number of folds
 k = 10
@@ -897,7 +898,7 @@ stepwise_folds <- cut(folds_shuffled_ids, breaks = k, labels = FALSE)
 
 ```{r}
 # Set seed
-set.seed(2828)
+set.seed(seed)
 
 # Initialize a vector to store the evaluation results
 stepwise_cv_vars_results <- vector("list", length = k)
@@ -915,10 +916,10 @@ for (i in 1:k) {
   training_fold <- stepwise_training_set[!(stepwise_training_set$id %in% validation_ids), ]
   
   # print("Training")
-  # print(head(training_fold, n = 10))
+  # print(head(training_fold, n = k))
   # 
   # print("Validation")
-  # print(head(validation_fold, n = 10))
+  # print(head(validation_fold, n = k))
   
   # Check that IDs are not in training and test sets
   stopifnot(
@@ -932,7 +933,7 @@ for (i in 1:k) {
     age_when_cancer_dx +
     gender +
     bmi_value +
-    # performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection...
+    performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection...
     # diabetes_mellitus + # Confounder. We know it is associated with pancreatic cancer patients that undergo resection of pancreas
     dyslipidemia +
     # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
@@ -944,8 +945,8 @@ for (i in 1:k) {
     # previous_onco_surgery + # Correlated to having had tumor resected
     tumor_surgically_removed + 
     primary_tumor_simplified +
-    tnm_stage_grouped +
-    # tnm_stage_two_groups +
+    # tnm_stage_grouped +
+    tnm_stage_two_groups +
     # histology_type_imp + # Correlated with NSCLC
     mucinous_histology_imp +
     # grade_histological_differentiation_imp + # violates PH assumption
@@ -983,7 +984,7 @@ for (i in 1:k) {
   )
   
   # VIF
-  vif_results = car::vif(fold_cph_model)
+  vif_results = rms::vif(fold_cph_model)
   # print(vif_results)
   
   # Make predictions on the validation fold
