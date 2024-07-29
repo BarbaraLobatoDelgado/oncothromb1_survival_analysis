@@ -932,7 +932,7 @@ for (i in 1:k) {
     age_when_cancer_dx +
     gender +
     bmi_value +
-    performance_status_category_corrected_imp +
+    # performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection...
     # diabetes_mellitus + # Confounder. We know it is associated with pancreatic cancer patients that undergo resection of pancreas
     dyslipidemia +
     # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
