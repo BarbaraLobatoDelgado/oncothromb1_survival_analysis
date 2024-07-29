@@ -17,16 +17,6 @@ seed = 2828
 
 
 ```{r}
-# knitr::knit_hooks$set(output = function(x, options) {
-#    max.lines <- options$max.lines
-#    x <- truncate_to_lines(x, max.lines)
-# 
-#    hook_output_default(x, options)
-# })
-```
-
-
-```{r}
 # Load libraries
 pacman::p_load(
   kableExtra,
@@ -75,22 +65,6 @@ oncoth1_data %<>%
     age_when_cancer_dx >= 70 ~ "70-93"
   ), .after = age_when_cancer_dx) %>%
   mutate(age_quartiles = as.factor(age_quartiles))
-```
-
-
-```{r}
-# Correct ties between death date and DVT date
-# THIS IS NOT NECESSARY IF TIES ARE BETWEEN EVENT AND TDC
-#oncoth1_data %<>%
-#  mutate(follow_up_length_from_cancer_diagnosis_days = case_when(
-#    id == 60 | 
-#      id == 246 | 
-#      id == 248 | 
-#      id == 286 |
-#      id == 296 |
-#      id == 363 |
-#      id == 441 ~ follow_up_length_from_cancer_diagnosis_days + 0.5, 
-#    TRUE ~ follow_up_length_from_cancer_diagnosis_days))
 ```
 
 
@@ -827,13 +801,6 @@ survival_vte_tmerge_stepwise = fastDummies::dummy_cols(survival_vte_tmerge_stepw
 # Rename with proper format
 survival_vte_tmerge_stepwise %<>%
   rename(primary_tumor_simplified_Oesophagogastric = `primary_tumor_simplified_Oesophago-gastric`)
-
-# Delete variables with time until event 
-# They contain NAs that throw an error when training model
-# This did not happen before
-# survival_vte_tmerge_stepwise %<>%
-#   select(-starts_with("tu_"))
-
 ```
 
 
@@ -933,13 +900,13 @@ for (i in 1:k) {
     age_when_cancer_dx +
     gender +
     bmi_value +
-    performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection...
+    performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection in some folds, but models can be trained
     # diabetes_mellitus + # Confounder. We know it is associated with pancreatic cancer patients that undergo resection of pancreas
     dyslipidemia +
     # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
     # copd_imp + # Correlated to tobacco use
     arterial_hypertension +
-    venous_insufficiency_imp + # High GVIF, multicollinearity in some models
+    venous_insufficiency_imp + 
     # khorana_risk_score_imp + # Correlated to pancreatic and esophago-gastric cancers
     # two_groups_krs + # Correlated to pancreatic and esophago-gastric cancers
     # previous_onco_surgery + # Correlated to having had tumor resected
@@ -956,9 +923,6 @@ for (i in 1:k) {
     previous_ate +
     anticoag_tx_currently +
     antiaggreg_tx_currently, 
-    # blood_transfusion + # Correlated to pancreatic cancer and EPO
-    # immobilisation + # Correlated with PS. Also, CONFOUNDER
-    # erythropoietin_tx,
     data = training_fold,
     include = "primary_tumor_simplified",
     selection = "bidirection",
