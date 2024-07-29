@@ -759,6 +759,7 @@ plot_ly(
 - Grade 2 of histological differentitation is negatively correlated to NSCLC. 
 - Stage IV is very correlated to metastases locations (peritoneum, lymph nodes, lung, liver, bones...). 
 - Khorana Risk Score is correlated to pancreatic and esophago-gastric cancers. 
+- Blood transfusion is slightly correlated to pancreatic cancer. Also, somewhat correlated to EPO. 
 
 
 ### Association between categorical variables using Cramer's V
@@ -873,6 +874,8 @@ stopifnot(
 ```{r}
 # Create folds for k-fold CV
 
+k = 10
+
 # Create a grouping variable for each ID
 group_var <- as.numeric(factor(stepwise_training_set$id))
 
@@ -884,17 +887,17 @@ folds_unique_ids <- unique(group_var)
 folds_shuffled_ids <- sample(folds_unique_ids)
 
 # Divide the shuffled IDs into five bins
-stepwise_folds <- cut(folds_shuffled_ids, breaks = 10, labels = FALSE)
+stepwise_folds <- cut(folds_shuffled_ids, breaks = k, labels = FALSE)
 ```
 
 
 ```{r}
 # Initialize a vector to store the evaluation results
-stepwise_cv_vars_results <- vector("list", length = 10)
-stepwise_cv_cindex_results <- vector("list", length = 10)
-stepwise_cv_vif_results <- vector("list", length = 10) # Inspection of GVIF in trained models is necessary to detect multicollinearity issues
+stepwise_cv_vars_results <- vector("list", length = k)
+stepwise_cv_cindex_results <- vector("list", length = k)
+stepwise_cv_vif_results <- vector("list", length = k) # Inspection of GVIF in trained models is necessary to detect multicollinearity issues
 
-for (i in 1:10) {
+for (i in 1:k) {
   # Get the validation IDs
   validation_ids <- unique_ids[stepwise_folds == i]
   
@@ -919,8 +922,6 @@ for (i in 1:10) {
   stepwise_model = StepReg::stepwiseCox(
     formula = Surv(time = tstart, time2 = tstop, event = death) ~
     vte_event +
-    # vte_recurrence +
-    # vte_event:vte_recurrence +
     age_when_cancer_dx +
     gender +
     bmi_value +
@@ -930,16 +931,14 @@ for (i in 1:10) {
     # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
     # copd_imp + # Correlated to tobacco use
     arterial_hypertension +
-    # chronic_cardiac_insufficiency + # Low variance
-    # renal_insufficiency + # Low variance
     venous_insufficiency_imp + # High GVIF, multicollinearity in some models
     # khorana_risk_score_imp + # Correlated to pancreatic and esophago-gastric cancers
     # two_groups_krs + # Correlated to pancreatic and esophago-gastric cancers
     # previous_onco_surgery + # Correlated to having had tumor resected
     tumor_surgically_removed + 
     primary_tumor_simplified +
-    # tnm_stage_grouped +
-    tnm_stage_two_groups +
+    tnm_stage_grouped +
+    # tnm_stage_two_groups +
     # histology_type_imp + # Correlated with NSCLC
     mucinous_histology_imp +
     # grade_histological_differentiation_imp + # violates PH assumption
@@ -949,7 +948,7 @@ for (i in 1:10) {
     previous_ate +
     anticoag_tx_currently +
     antiaggreg_tx_currently, 
-    # blood_transfusion + # CONFOUNDER ?
+    # blood_transfusion + # Correlated to pancreatic cancer and EPO
     # immobilisation + # Correlated with PS. Also, CONFOUNDER
     # erythropoietin_tx,
     data = training_fold,
