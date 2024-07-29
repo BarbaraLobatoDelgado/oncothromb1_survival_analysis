@@ -858,8 +858,27 @@ folds_unique_ids <- unique(group_var)
 # Shuffle the unique IDs randomly
 folds_shuffled_ids <- sample(folds_unique_ids)
 
-# Divide the shuffled IDs into five bins
-stepwise_folds <- cut(folds_shuffled_ids, breaks = k, labels = FALSE)
+# Divide the shuffled IDs into folds
+cv_folds_index <- cut(folds_shuffled_ids, breaks = k, labels = FALSE)
+```
+
+
+```{r}
+# Save IDs in file for reproducibility
+run_datetime = Sys.time()
+
+# Function to append data to the file
+append2file = function(file_name = "./ids_partition_run.csv", data) {
+  write.table(
+    x = data,
+    file = file_name,
+    append = TRUE,
+    sep = "\t",
+    col.names = !file.exists(file_name),
+    row.names = FALSE,
+    quote = FALSE
+    )
+}
 ```
 
 
@@ -868,13 +887,14 @@ stepwise_folds <- cut(folds_shuffled_ids, breaks = k, labels = FALSE)
 set.seed(seed)
 
 # Initialize a vector to store the evaluation results
+stepwise_cv_index_valid <- vector("list", length = k)
 stepwise_cv_vars_results <- vector("list", length = k)
 stepwise_cv_cindex_results <- vector("list", length = k)
 stepwise_cv_vif_results <- vector("list", length = k) # Inspection of GVIF in trained models is necessary to detect multicollinearity issues
 
 for (i in 1:k) {
   # Get the validation IDs
-  validation_ids <- unique_ids[stepwise_folds == i]
+  validation_ids <- unique_ids[cv_folds_index == i]
   
   # Get the validation fold
   validation_fold <- stepwise_training_set[stepwise_training_set$id %in% validation_ids, ]
@@ -962,11 +982,28 @@ for (i in 1:k) {
   # print(fold_cindex$concordance)
   
   # Store the evaluation result
+  stepwise_cv_index_valid[[i]] = validation_ids
   stepwise_cv_vars_results[[i]] = selected_variables
   stepwise_cv_cindex_results[[i]] = fold_cindex$concordance
   stepwise_cv_vif_results[[i]] = as.data.frame(vif_results)
 
 }
+```
+
+```{r}
+# Append info to file for experiment's reproducibility
+  info_df = data.frame(
+    "Run" = run_datetime,
+    "Seed" = seed,
+    "Train_IDs" = paste(train_ids, collapse = ", "),
+    "Test_IDs" = paste(test_ids, collapse = ", "), 
+    "IDs_folds_shuffled" = paste(folds_shuffled_ids, collapse = ", "), 
+    "index_cv_folds" = paste(cv_folds_index, collapse = ", "), 
+    "Validation_IDs" = paste(stepwise_cv_index_valid, collapse = ", ")
+  )
+
+  # Append to CSV file
+  append2file(data = info_df)
 ```
 
 
@@ -1012,7 +1049,7 @@ stepwise_cv_cph_final_model %>%
 
 
 ```{r}
-# Does not work with models where there is interaction between variables
+# Inspect VIF in final model
 vif_results = car::vif(stepwise_cv_cph_final_model)
 vif_results
 ```
