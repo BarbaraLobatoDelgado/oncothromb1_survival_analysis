@@ -185,8 +185,6 @@ stopifnot(n_cat_patients + sum(oncoth1$data$n_appointment_patient_became_case ==
 
 
 ```{r}
-# jpeg("../graphs/paper/CAT_cum_inc.jpeg", width = 6, height = 4, units = 'in', res = 700)
-
 # Plot cumulative incidence curve
 cat_cuminc_with_table = ggsurvplot(
   fit = cat_fit,
@@ -236,8 +234,6 @@ ggsave(
   height = 4,
   units = "in"
   )
-
-# dev.off()
 ```
 
 

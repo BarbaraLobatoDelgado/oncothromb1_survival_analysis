@@ -38,7 +38,9 @@ pacman::p_load(
 
 ```{r}
 # Load DB
-oncoth1 = get_project("oncothr1", version = "0.0.8004")
+# oncoth1 = get_project("oncothr1", version = "0.0.8004")
+load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8004")
+oncoth1 = obj
 ```
 
 
@@ -420,6 +422,7 @@ km_plot_vte$table =
 
 km_plot_vte
 
+# Save plot
 # ggsave(
 #   filename = "../graphs/KM_curve_VTE.jpeg", 
 #   # width = 6.5, 
@@ -456,8 +459,7 @@ km_pval_vte_recurrence = get_robscore_pval(survival_vte_tmerge, covariates = c("
 
 
 ```{r}
-# jpeg("../graphs/paper/KM_cat_recurrence.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-
+# Plot KM curve of patients with no CAT, with a single CAT and CAT recurrence
 km_plot_vte_recurrence = 
   ggsurvplot(
     fit = km_fit_vte_recurrence,
@@ -536,6 +538,14 @@ km_plot_vte_recurrence$plot =
     color = "#FF6600")
 
 km_plot_vte_recurrence
+
+# Save plot
+ggsave(
+  filename = "../graphs/KM_curve_CAT_recurrence.jpeg",
+  width = 6, 
+  height = 4,
+  units = "in"
+  )
 
 # dev.off()
 ```
