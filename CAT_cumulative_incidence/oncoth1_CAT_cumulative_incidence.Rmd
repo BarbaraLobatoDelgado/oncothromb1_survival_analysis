@@ -53,7 +53,9 @@ Cumulative incidence functions are commonly used to compare event rates between 
 
 ```{r}
 # Load DB from an9elproject
-oncoth1 = get_project("oncothr1", version = "0.0.8003")
+# oncoth1 = get_project("oncothr1", version = "0.0.8003")
+load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8003")
+oncoth1 = obj
 ```
 
 
@@ -183,7 +185,7 @@ stopifnot(n_cat_patients + sum(oncoth1$data$n_appointment_patient_became_case ==
 
 
 ```{r}
-# jpeg("../graphs/paper/KM_cuminc_cat_ggsurplot.jpeg", width = 6, height = 4, units = 'in', res = 700)
+# jpeg("../graphs/paper/CAT_cum_inc.jpeg", width = 6, height = 4, units = 'in', res = 700)
 
 # Plot cumulative incidence curve
 cat_cuminc_with_table = ggsurvplot(
@@ -225,6 +227,15 @@ cat_cuminc_with_table$cumevents = cat_cuminc_with_table$cumevents +
   theme(plot.title = element_text(size = 10))
 
 cat_cuminc_with_table
+
+# Save plot
+ggsave(
+  filename = "../graphs/CAT_cum_inc.jpeg",
+  plot = cat_cuminc_with_table$plot, 
+  width = 6, 
+  height = 4,
+  units = "in"
+  )
 
 # dev.off()
 ```
