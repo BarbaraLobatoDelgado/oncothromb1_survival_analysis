@@ -542,7 +542,8 @@ km_plot_vte_recurrence
 # Save plot
 ggsave(
   filename = "../graphs/KM_curve_CAT_recurrence.jpeg",
-  width = 6, 
+  plot = km_plot_vte_recurrence$plot,
+  width = 7, 
   height = 4,
   units = "in"
   )

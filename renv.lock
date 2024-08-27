@@ -3238,7 +3238,7 @@
     },
     "tidycmprsk": {
       "Package": "tidycmprsk",
-      "Version": "1.1.0",
+      "Version": "1.0.0",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -3257,7 +3257,7 @@
         "tibble",
         "tidyr"
       ],
-      "Hash": "62e5e75e469d85b239d9548b04f80059"
+      "Hash": "d8f3923b40814162a768c3b884740b32"
     },
     "tidyr": {
       "Package": "tidyr",
