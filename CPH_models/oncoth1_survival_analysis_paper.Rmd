@@ -496,7 +496,7 @@ n_vte_recurrence = sum(oncoth1_data$vte_recurrence == "VTE recurrence")
 # Customize risk table title 
 km_plot_vte_recurrence$table = 
   km_plot_vte_recurrence$table +
-  theme(plot.title = element_text(size = 10))
+  theme(plot.title = element_text(size = 10), legend.position = "none") 
 
 # Add p-value and n of patient subgroups
 km_plot_vte_recurrence$plot = 
@@ -539,17 +539,39 @@ km_plot_vte_recurrence$plot =
 
 km_plot_vte_recurrence
 
+# # Save plot
+# ggsave(
+#   filename = "../graphs/KM_curve_CAT_recurrence.jpeg",
+#   plot = km_plot_vte_recurrence$plot,
+#   width = 7, 
+#   height = 4,
+#   units = "in"
+#   )
+
+# dev.off()
+```
+
+```{r}
+# Save plot with table
+
+# Combine the main plot and the cumulative events table
+KM_curve_CAT_recurrence_combined_plot <- cowplot::plot_grid(
+  km_plot_vte_recurrence$plot,
+  km_plot_vte_recurrence$table,
+  ncol = 1, 
+  rel_heights = c(1.5, 0.7)  # Adjust heights to fit both plots
+)
+
 # Save plot
 ggsave(
   filename = "../graphs/KM_curve_CAT_recurrence.jpeg",
-  plot = km_plot_vte_recurrence$plot,
+  plot = KM_curve_CAT_recurrence_combined_plot, 
   width = 7, 
   height = 4,
   units = "in"
   )
-
-# dev.off()
 ```
+
 
 
 ```{r}
