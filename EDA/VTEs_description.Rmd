@@ -16,6 +16,7 @@ pacman::p_load(
   gridExtra, 
   ggpval, 
   ggstatsplot,
+  ggsignif,
   RColorBrewer, 
   lubridate, 
   survival, 
@@ -47,8 +48,7 @@ print(n_patients_vte)
 
 ```{r}
 # Get features of interest for the description of VTE episodes/events
-
-tu_vte_data = oncoth1$data %>%
+VTE_data = oncoth1$data %>%
   select(id, 
          patient_group, 
          n_appointment_patient_became_case, 
@@ -59,18 +59,17 @@ tu_vte_data = oncoth1$data %>%
          n_total_vte_along_study,
          n_total_vte_recurrence,
          date_1st_vte_all,
+         # Time until VTE (months) since cancer diagnosis
          tu_1st_vte_all_from_cancer_diagnosis_months,
          tu_1st_vte_all_from_cancer_diagnosis_days,
          tu_2nd_vte_all_from_cancer_diagnosis_months,
          tu_3rd_vte_all_from_cancer_diagnosis_months,
          tu_4th_vte_all_from_cancer_diagnosis_months,
-         tu_5th_vte_all_from_cancer_diagnosis_months,
-         # Corrected times
+         # Corrected times (to avoid having two different events at the same time)
          tu_1st_vte_all_from_cancer_diagnosis_months_corrected, 
          tu_2nd_vte_all_from_cancer_diagnosis_months_corrected,
          tu_3rd_vte_all_from_cancer_diagnosis_months_corrected,
          tu_4th_vte_all_from_cancer_diagnosis_months_corrected,
-         tu_5th_vte_all_from_cancer_diagnosis_months_corrected, 
          tu_1st_rec_vte_from_cancer_diagnosis_months) %>%
   # Get patients with VTE
   filter(patient_group == "Case")
@@ -79,39 +78,43 @@ tu_vte_data = oncoth1$data %>%
 
 ```{r}
 # Check that the number of patients with VTE and df dimensions check out
-stopifnot(dim(tu_vte_data)[1] == n_patients_vte)
+stopifnot(dim(VTE_data)[1] == n_patients_vte)
 ```
 
 
-## Number/proportion of CAT occurrence per month 
+## Number/proportion of VTE events per month 
 
 I am gonna ignore the distinction of incidental and symptomatic for now.  
 
 ```{r}
-# Concatenate all months in which a VTE happens
-all_vtes_freq_by_month = c(
-  tu_vte_data$tu_1st_vte_all_from_cancer_diagnosis_months, 
-  tu_vte_data$tu_2nd_vte_all_from_cancer_diagnosis_months, 
-  tu_vte_data$tu_3rd_vte_all_from_cancer_diagnosis_months,
-  tu_vte_data$tu_4th_vte_all_from_cancer_diagnosis_months,
-  tu_vte_data$tu_5th_vte_all_from_cancer_diagnosis_months,
-  na.rm = TRUE
-)
-
-all_vtes_freq_by_month = as.data.frame(all_vtes_freq_by_month)
-
-all_vtes_freq_by_month %<>%
-  count(all_vtes_freq_by_month) %>%
-  na.omit() %>%
-  mutate(percentage = round(n/sum(n), digits = 2))
+# Get time until VTE (months) for all VTEs
+VTE_events_by_month = VTE_data %>%
+  select(
+    tu_1st_vte_all_from_cancer_diagnosis_months, 
+    tu_2nd_vte_all_from_cancer_diagnosis_months, 
+    tu_3rd_vte_all_from_cancer_diagnosis_months,
+    tu_4th_vte_all_from_cancer_diagnosis_months
+    ) %>%
+  pivot_longer(everything(), values_to = "month") %>%
+  filter(!is.na(month)) %>%
+  group_by(month) %>%
+  summarise(n_VTEs = n()) %>%
+  mutate(percentage = round(n_VTEs/sum(n_VTEs), digits = 2))
 ```
 
 
 ```{r}
+# Sanity check
+stopifnot(sum(VTE_events_by_month$n_VTEs) == 120)
+```
+
+
+
+```{r}
 # Collapsing infomation of months -2, -1 and 0 into one
-all_vtes_freq_by_month_corrected = all_vtes_freq_by_month
-all_vtes_freq_by_month_corrected[3, 2:3] = colSums(all_vtes_freq_by_month[1:3, 2:3])
-all_vtes_freq_by_month_corrected = all_vtes_freq_by_month_corrected[-c(1:2), ]
+VTE_events_by_month_corrected = VTE_events_by_month
+VTE_events_by_month_corrected[3, 2:3] = colSums(VTE_events_by_month[1:3, 2:3])
+VTE_events_by_month_corrected = VTE_events_by_month_corrected[-c(1:2), ]
 ```
 
 
@@ -121,8 +124,8 @@ all_vtes_freq_by_month_corrected = all_vtes_freq_by_month_corrected[-c(1:2), ]
 # Barplot
 # Patients affected by CAT over time
 ggplot(
-  data = all_vtes_freq_by_month, 
-  aes(x = all_vtes_freq_by_month, y = percentage)) +
+  data = VTE_events_by_month, 
+  aes(x = VTE_events_by_month, y = percentage)) +
   geom_bar(stat = "identity", width = 0.8, color = "grey", fill = "lightgrey") +
   geom_line() +
   geom_point() +
@@ -147,8 +150,8 @@ ggplot(
 # Barplot
 # Patients affected by CAT over time
 ggplot(
-  data = all_vtes_freq_by_month_corrected, 
-  aes(x = all_vtes_freq_by_month, y = percentage)) +
+  data = VTE_events_by_month_corrected, 
+  aes(x = VTE_events_by_month, y = percentage)) +
   geom_bar(stat = "identity", width = 0.8, color = "grey", fill = "lightgrey") +
   geom_line() +
   geom_point() +
@@ -167,7 +170,7 @@ ggplot(
 ## Number/proportion of patients affected by CAT per month 
 
 ```{r}
-patients_cat_by_month = tu_vte_data %>% 
+patients_cat_by_month = VTE_data %>% 
   select(
     id, 
     n_all_vte,
@@ -621,6 +624,7 @@ vte_symptoms_per_cancer_type %<>%
 
 
 ```{r}
+# Barplot of incidental and symptomatic VTEs for each cancer type and all types
 ggplot(
   data = vte_symptoms_per_cancer_type, 
   aes(x = primary_tumor_simplified, y = abs_freq, fill = vte_type_sympt)) + 
@@ -648,35 +652,14 @@ ggplot(
     breaks = seq(from = 0, to = 75, by = 10)) +
   scale_fill_brewer(palette = "Set4") 
 
-# Save plot
-ggsave(
-  filename = "../graphs/oncoth1_n_VTEs_symptoms_by_cancer_type.jpeg",
-  width = 6, 
-  height = 4,
-  units = "in"
-  )
+# # Save plot
+# ggsave(
+#   filename = "../graphs/oncoth1_n_VTEs_symptoms_by_cancer_type.jpeg",
+#   width = 6, 
+#   height = 4,
+#   units = "in"
+#   )
 ```
-
-
-```{r}
-ggstatsplot::ggbarstats(
-  data = vte_symptoms_per_cancer_type,
-  x = primary_tumor_simplified,
-  y = abs_freq,
-  fill = vte_type_sympt,
-  counts = abs_freq,          # Specify the frequency column
-  paired = TRUE,              # This indicates that the bars are paired within the levels of x
-  package = "ggsci",          # Optional: Use a color palette from the ggsci package
-  palette = "default_jco",    # Optional: Set a specific palette
-  label = "p.value",          # Adds the p-values to the plot
-  xlab = "Primary Tumor and VTE Type", 
-  ylab = "Frequency",
-  ggtheme = ggplot2::theme_minimal(),  # Apply a minimal theme
-  legend.title = "VTE Type"
-) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Adjust x-axis text angle
-```
-
 
 
 ## Moment when CAT appears according to cancer type 
@@ -685,7 +668,7 @@ ggstatsplot::ggbarstats(
 
 ```{r}
 # Count number of VTE episodes prior or concomitant to cancer diagnosis by cancer type
-cat_prior_or_concomitant_by_cancer_type = tu_vte_data %>%
+cat_prior_or_concomitant_by_cancer_type = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   summarise(n_vte_prior_or_concomitant = sum(n_vte_before_entering_study))
               
@@ -694,10 +677,10 @@ cat_prior_or_concomitant_by_cancer_type = tu_vte_data %>%
 stopifnot(
   sum(cat_prior_or_concomitant_by_cancer_type$n_vte_prior_or_concomitant) ==
     # Sum of time until VTE that happened before month zero
-    sum(tu_vte_data$tu_1st_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) +
-    sum(tu_vte_data$tu_2nd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
-    sum(tu_vte_data$tu_3rd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
-    sum(tu_vte_data$tu_4th_vte_all_from_cancer_diagnosis_months<= 0, na.rm = TRUE)
+    sum(VTE_data$tu_1st_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) +
+    sum(VTE_data$tu_2nd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
+    sum(VTE_data$tu_3rd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
+    sum(VTE_data$tu_4th_vte_all_from_cancer_diagnosis_months<= 0, na.rm = TRUE)
   )
 
 cat_prior_or_concomitant_by_cancer_type
@@ -706,7 +689,7 @@ cat_prior_or_concomitant_by_cancer_type
 
 ```{r}
 # Count number of VTE episodes that are recurrences by cancer type
-cat_recurrences_by_cancer_type = tu_vte_data %>%
+cat_recurrences_by_cancer_type = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   summarise(n_vte_recurrence = sum(n_total_vte_recurrence))
 
@@ -716,7 +699,7 @@ cat_recurrences_by_cancer_type = tu_vte_data %>%
 # stopifnot(
 #   sum(cat_recurrences_by_cancer_type$n_vte_recurrence) ==
 #     # Count non-NA 
-#     sum(!is.na(tu_vte_data$tu_1st_rec_vte_from_cancer_diagnosis_months), na.rm = TRUE)
+#     sum(!is.na(VTE_data$tu_1st_rec_vte_from_cancer_diagnosis_months), na.rm = TRUE)
 #   )
 
 cat_recurrences_by_cancer_type
@@ -725,7 +708,7 @@ cat_recurrences_by_cancer_type
 
 ```{r}
 # Count number of VTE episodes during study by cancer type
-cat_during_study_by_cancer_type = tu_vte_data %>%
+cat_during_study_by_cancer_type = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   summarise(n_vte_during_study = sum(n_total_vte_along_study))
   
@@ -735,12 +718,12 @@ cat_during_study_by_cancer_type = tu_vte_data %>%
 # stopifnot(
 #   sum(cat_during_study_by_cancer_type$n_vte_during_study) ==
 #     # Sum variables of time until VTE that happened after 
-#     sum(tu_vte_data$tu_1st_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_2nd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_3rd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_4th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_5th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) -
-#     sum(tu_vte_data$n_total_vte_recurrence)
+#     sum(VTE_data$tu_1st_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_2nd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_3rd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_4th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_5th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) -
+#     sum(VTE_data$n_total_vte_recurrence)
 #   )
 
 # Careful! Recurrences are included here!
@@ -790,7 +773,7 @@ There are significant differences in VTE episodes depending on cancer type when 
 
 ```{r}
 # Count number of VTE episodes prior or concomitant to cancer diagnosis by cancer type
-cat_prior_or_concomitant_by_cancer_type_patients = tu_vte_data %>%
+cat_prior_or_concomitant_by_cancer_type_patients = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   filter(n_vte_before_entering_study > 0) %>%
   summarise(n_patients = n()) %>%
@@ -802,10 +785,10 @@ cat_prior_or_concomitant_by_cancer_type_patients = tu_vte_data %>%
 # stopifnot(
 #   sum(cat_prior_or_concomitant_by_cancer_type$n_vte_prior_or_concomitant) ==
 #     # Sum of time until VTE that happened before month zero
-#     sum(tu_vte_data$tu_1st_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_2nd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
-#     sum(tu_vte_data$tu_3rd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
-#     sum(tu_vte_data$tu_4th_vte_all_from_cancer_diagnosis_months<= 0, na.rm = TRUE)
+#     sum(VTE_data$tu_1st_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_2nd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
+#     sum(VTE_data$tu_3rd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
+#     sum(VTE_data$tu_4th_vte_all_from_cancer_diagnosis_months<= 0, na.rm = TRUE)
 #   )
 
 cat_prior_or_concomitant_by_cancer_type_patients
@@ -813,7 +796,7 @@ cat_prior_or_concomitant_by_cancer_type_patients
 
 ```{r}
 # Count number of VTE episodes that are recurrences by cancer type
-cat_recurrences_by_cancer_type_patients = tu_vte_data %>%
+cat_recurrences_by_cancer_type_patients = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   filter(n_total_vte_recurrence > 0) %>%
   summarise(n_patients = n()) %>%
@@ -825,7 +808,7 @@ cat_recurrences_by_cancer_type_patients = tu_vte_data %>%
 # stopifnot(
 #   sum(cat_recurrences_by_cancer_type$n_vte_recurrence) ==
 #     # Count non-NA 
-#     sum(!is.na(tu_vte_data$tu_1st_rec_vte_from_cancer_diagnosis_months), na.rm = TRUE)
+#     sum(!is.na(VTE_data$tu_1st_rec_vte_from_cancer_diagnosis_months), na.rm = TRUE)
 #   )
 
 # Add row with zero for NSCLC 
@@ -839,7 +822,7 @@ cat_recurrences_by_cancer_type_patients
 
 ```{r}
 # Count number of VTE episodes during study by cancer type
-cat_during_study_by_cancer_type_patients = tu_vte_data %>%
+cat_during_study_by_cancer_type_patients = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   filter(n_total_vte_along_study > 0) %>% # & n_total_vte_recurrence == 0
   summarise(n_patients = n()) %>%
@@ -851,12 +834,12 @@ cat_during_study_by_cancer_type_patients = tu_vte_data %>%
 # stopifnot(
 #   sum(cat_during_study_by_cancer_type$n_vte_during_study) ==
 #     # Sum variables of time until VTE that happened after 
-#     sum(tu_vte_data$tu_1st_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_2nd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_3rd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_4th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(tu_vte_data$tu_5th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) -
-#     sum(tu_vte_data$n_total_vte_recurrence)
+#     sum(VTE_data$tu_1st_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_2nd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_3rd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_4th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
+#     sum(VTE_data$tu_5th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) -
+#     sum(VTE_data$n_total_vte_recurrence)
 #   )
 
 # Careful! Recurrences are included here!
@@ -935,11 +918,8 @@ test <- fisher.test(table(df1))
 # Do barplot with several statistical test
 ggbarstats(
   df1, vte_type, cancer_type,
-  results.subtitle = TRUE,
-  subtitle = paste0(
-    "Fisher's exact test", ", p-value = ",
-    ifelse(test$p.value < 0.001, "< 0.001", round(test$p.value, 3))
-  )
+  digits.perc = 1,
+  results.subtitle = TRUE
 )
 ```
 
