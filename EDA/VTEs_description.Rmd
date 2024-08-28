@@ -89,7 +89,7 @@ print(paste("There is a total of", n_VTEs, "recorded VTE events."))
 
 
 
-## Number/proportion of VTE events per month 
+## VTE events per month 
 
 I am gonna ignore the distinction of incidental and symptomatic for now.  
 
@@ -131,58 +131,60 @@ stopifnot(sum(VTE_events_by_month_corrected$n_VTEs) == 120 - 1) # there is one V
 
 
 ```{r}
-# jpeg("../graphs/paper/barplot_CAT_ocurrence_per_month.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-
-# Barplot
-# Patients affected by CAT over time
+# Barplot of by CAT over time
 ggplot(
   data = VTE_events_by_month, 
-  aes(x = VTE_events_by_month, y = percentage)) +
+  aes(x = month, y = percentage)) +
   geom_bar(stat = "identity", width = 0.8, color = "grey", fill = "lightgrey") +
   geom_line() +
   geom_point() +
-  ggtitle("CAT occurrence with respect to cancer diagnosis date") + 
+  ggtitle("CAT occurrence by month with respect to cancer diagnosis date") + 
   xlab("Time (months)") + 
-  ylab("CAT event occurrence") + 
+  ylab("Proportion of CAT events") + 
   scale_x_continuous(breaks = seq(from = -2, to = 18, by = 1)) + 
   scale_y_continuous(labels = scales::percent, breaks = scales::pretty_breaks(n = 8)) +
   theme_bw()+
   theme(plot.title = element_text(hjust = 0.5))
 
-# dev.off()
+# Save plot
+ggsave(
+  filename = "../graphs/CAT_events_by_month_since_cancer_dx.jpeg", 
+  width = 10,
+  height = 6
+)
 ```
 
 
-
 ```{r}
-# Corrected plot
-
-# jpeg("../graphs/paper/barplot_CAT_ocurrence_per_month_corrected.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-
-# Barplot
-# Patients affected by CAT over time
+# Barplot of CAT over time (events prior to cancer diagnosis are collapsed into month zero)
 ggplot(
   data = VTE_events_by_month_corrected, 
-  aes(x = VTE_events_by_month, y = percentage)) +
+  aes(x = month, y = percentage)) +
   geom_bar(stat = "identity", width = 0.8, color = "grey", fill = "lightgrey") +
   geom_line() +
   geom_point() +
-  ggtitle("CAT occurrence with respect to cancer diagnosis date") + 
+  ggtitle("CAT occurrence by month with respect to cancer diagnosis date") + 
   xlab("Time (months)") + 
-  ylab("CAT event occurrence") +
+  ylab("Proportion of CAT events") + 
   scale_x_continuous(breaks = seq(from = 0, to = 18, by = 1)) + 
   scale_y_continuous(labels = scales::percent, breaks = scales::pretty_breaks(n = 8)) +
   theme_bw()+
   theme(plot.title = element_text(hjust = 0.5))
 
-# dev.off()
+# Save plot
+ggsave(
+  filename = "../graphs/CAT_events_by_month_since_cancer_dx_corrected.jpeg", 
+  width = 10,
+  height = 6
+)
 ```
 
 
-## Number/proportion of patients affected by CAT per month 
+## Patients affected by CAT per month 
 
 ```{r}
-patients_cat_by_month = VTE_data %>% 
+# Transform data to count patients affected by CAT
+patients_with_CAT_by_month = VTE_data %>% 
   select(
     id, 
     n_all_vte,
@@ -190,31 +192,28 @@ patients_cat_by_month = VTE_data %>%
     tu_1st_vte_all_from_cancer_diagnosis_months
   ) %>%
   arrange(id) %>%
+  # Patients with VTE prior to cancer diagnosis will be assigned time zero
   mutate(tu_1st_vte_all_from_cancer_diagnosis_months = case_when(
     tu_1st_vte_all_from_cancer_diagnosis_months <= 0 ~ 0, 
-    # tu_1st_vte_all_from_cancer_diagnosis_days <= 0 ~ 0,
     TRUE ~ tu_1st_vte_all_from_cancer_diagnosis_months
   )) %>%
   rename(month_VTE_occurrence = tu_1st_vte_all_from_cancer_diagnosis_months) %>%
   # Count VTE ocurrences each month
   count(month_VTE_occurrence) %>%
-  # For some reason, 31 patients are counted but there are 30 patients considered with VTE
-  # prior or concomitant
-  mutate(n = case_when(
-    month_VTE_occurrence == 0 ~ 30, 
-    TRUE ~ n
-  )) %>% 
   mutate(percentage = round(n/n_patients_vte, digits = 2))
 ```
 
 
 ```{r}
-# jpeg("../graphs/paper/barplot_patients_affected_by_CAT_per_month.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+# Sanity check
+stopifnot(sum(patients_with_CAT_by_month$n) == 88) 
+```
 
-# Barplot
-# Patients affected by CAT over time
+
+```{r}
+# Barplot with patients affected by CAT over time
 ggplot(
-  data = patients_cat_by_month, 
+  data = patients_with_CAT_by_month, 
   aes(x = month_VTE_occurrence, y = percentage)) +
   geom_bar(stat = "identity", width = 0.8, color = "grey", fill = "lightgrey") +
   geom_line() +
@@ -227,7 +226,12 @@ ggplot(
   theme_bw()+
   theme(plot.title = element_text(hjust = 0.5))
 
-# dev.off()
+# Save plot
+ggsave(
+  filename = "../graphs/patients_with_CAT_by_month_since_cancer_dx_corrected.jpeg",
+  width = 10,
+  height = 6
+)
 ```
 
 
