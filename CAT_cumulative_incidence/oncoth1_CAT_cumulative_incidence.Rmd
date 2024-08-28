@@ -225,15 +225,26 @@ cat_cuminc_with_table$cumevents = cat_cuminc_with_table$cumevents +
   theme(plot.title = element_text(size = 10))
 
 cat_cuminc_with_table
+```
+
+```{r}
+# Save plot with table
+
+# Combine the main plot and the cumulative events table
+combined_plot <- cowplot::plot_grid(
+  cat_cuminc_with_table$plot,
+  cat_cuminc_with_table$cumevents,
+  ncol = 1, 
+  rel_heights = c(1.5, 0.3)  # Adjust heights to fit both plots
+)
 
 # Save plot
 ggsave(
   filename = "../graphs/CAT_cum_inc.jpeg",
-  plot = cat_cuminc_with_table$plot, 
+  plot = combined_plot, 
   width = 6, 
   height = 4,
   units = "in"
   )
 ```
-
 

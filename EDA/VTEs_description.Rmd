@@ -235,7 +235,7 @@ ggsave(
 ```
 
 
-## Frequency of VTE episode's type by location
+## Frequency of VTE episode's type by location [seguir]
 
 
 ```{r}
