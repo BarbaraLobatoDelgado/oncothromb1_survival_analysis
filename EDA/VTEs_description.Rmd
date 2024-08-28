@@ -722,6 +722,12 @@ ggplot(
     linetype = "dotted",
     color = "grey",
     size = 0.5) +
+  geom_signif(
+    comparisons = list(c("Incidental", "Symptomatic")),
+    annotations = proportion_test_VTE_sympt_cancer_type$p_value,
+    y_position = rep(75, length(proportion_test_VTE_sympt_cancer_type$p_value)),
+    tip_length = 0.03,
+    textsize = 3) +
   theme_bw() +
   ggtitle("VTE symptomatology by cancer type") +
   guides(fill = guide_legend(title = "")) + 
