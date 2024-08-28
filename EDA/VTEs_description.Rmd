@@ -678,15 +678,22 @@ rm(x)
 ```{r}
 # Do barplot with several statistical test
 ggbarstats(
-  VTE_sympt_data_longer, vte_type, cancer_type,
+  data = VTE_sympt_data_longer, 
+  x = vte_type, 
+  y = cancer_type,
+  # fill = vte_type,
   digits.perc = 1,
   label = "both",
   proportion.test = TRUE,
   results.subtitle = TRUE, 
-  bf.message = FALSE
+  bf.message = FALSE, 
+  title = "VTE symptomatology by cancer type", 
+  legend.title = "",
+  xlab = "Cancer type", 
+  ylab = "% of VTEs"
 )
 
-# # Save plot
+# ylab = # # Save plot
 # ggsave(
 #   filename = "../graphs/VTE_symptomatology_by_cancer_type_stats.jpeg",
 #   width = 6, 
