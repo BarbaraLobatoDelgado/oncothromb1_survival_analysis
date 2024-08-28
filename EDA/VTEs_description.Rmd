@@ -235,20 +235,20 @@ ggsave(
 ```
 
 
-## Frequency of VTE episode's type by location [seguir]
+## Frequency of VTE episode's type by location [corregir]
 
 
 ```{r}
 # How many combinations of VTE events by location exist?
-vte_loc = c("CRT", "DVT", "SVT", "PTE", "VT")
-combinations = combn(vte_loc, 2)
+VTE_locs = c("CRT", "DVT", "SVT", "PTE", "VT")
+combinations = combn(VTE_locs, 2)
 print(combinations)
 ```
 
 
 ```{r}
 # Get information on patients with VTE and the location
-vte_by_location = oncoth1$data %>%
+VTE_location = oncoth1$data %>%
   filter(patient_group == "Case") %>%
   select(
     id,
@@ -262,10 +262,10 @@ vte_by_location = oncoth1$data %>%
     ) 
 
 # Check that total number of VTEs is the sum of the different types of VTE by location
-stopifnot(vte_by_location$n_all_vte == vte_by_location$n_total_crt_all + vte_by_location$n_total_dvt_all + vte_by_location$n_total_svt_all + vte_by_location$n_total_pte_all + vte_by_location$n_total_visceral_thromb_all)
+stopifnot(VTE_location$n_all_vte == VTE_location$n_total_crt_all + VTE_location$n_total_dvt_all + VTE_location$n_total_svt_all + VTE_location$n_total_pte_all + VTE_location$n_total_visceral_thromb_all)
 
 # Count number of events by location
-vte_by_location %<>%
+VTE_location %<>%
   # Only CRTs
   mutate(n_crt = case_when(
     n_total_crt_all > 0 &
@@ -426,18 +426,18 @@ vte_by_location %<>%
 
 ```{r}
 # Total number of VTEs
-n_vtes_oncoth1 = sum(vte_by_location$n_all_vte)
+stopifnot(sum(VTE_location$n_all_vte) == n_VTEs)
 ```
 
 
 ```{r}
-print(paste("A total of", nrow(vte_by_location), "patients had", n_vtes_oncoth1, "VTEs"))
+print(paste("A total of", nrow(VTE_location), "patients had", n_VTEs, "VTEs"))
 ```
 
 
 ```{r}
 # Count frequency of patients with one or more types of VTE by location
-summary_n_patients_with_vte_by_location = vte_by_location %>%
+summary_n_patients_with_VTE_location = VTE_location %>%
   select(
     n_crt, 
     n_dvt, 
@@ -468,12 +468,12 @@ summary_n_patients_with_vte_by_location = vte_by_location %>%
   filter(freq_abs != 0)
 
 # Check that there is 88 patients accounted for
-stopifnot(sum(summary_n_patients_with_vte_by_location$freq_abs) == n_patients_vte)
+stopifnot(sum(summary_n_patients_with_VTE_location$freq_abs) == n_patients_vte)
 ```
 
 
 ```{r}
-# jpeg("../graphs/paper/barplot_vte_by_location_corrected.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
+# jpeg("../graphs/paper/barplot_VTE_location_corrected.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
 # —
 mycolors = colorRampPalette(brewer.pal(11, "Paired"))(11)
 
@@ -482,7 +482,7 @@ mycolors = colorRampPalette(brewer.pal(11, "Paired"))(11)
 # colors <- my_palette(11)
 
 ggplot(
-  data = summary_n_patients_with_vte_by_location, 
+  data = summary_n_patients_with_VTE_location, 
   aes(x = reorder(number_patients_with_vte_by_loc, -freq_abs), 
       y = freq_abs,
       fill = number_patients_with_vte_by_loc)) +  
@@ -531,11 +531,11 @@ ggsave(
 ```
 
 
-## Incidental/symptomatic VTE episodes by cancer type
+## VTE symptomatology by cancer type
 
 ```{r}
 # Dataframe with incidental/symptomatic VTEs
-vte_type_sympt = oncoth1$data %>% 
+VTE_symptomatology = oncoth1$data %>% 
   filter(patient_group == "Case") %>%
   select(
     id, 
@@ -569,19 +569,20 @@ vte_type_sympt = oncoth1$data %>%
     visceral_thromb_type_prior_study,            
     visceral_thromb_type_along_study,           
     visceral_thromb_type_recurrence
-  )
-  
-# count the number of times a string appears in multiple columns
-vte_type_sympt_count = vte_type_sympt %>%
+  ) %>%
+  # Count the number of times string "Incidental" appears in multiple columns
   rowwise() %>%
   mutate(count_inc = sum(c_across(where(is.character) | where(is.factor)) == "Incidental", na.rm = TRUE), .after = n_all_vte) %>%
+  # Count the number of times string "Symptomatic" appears in multiple columns
   mutate(count_sympt = sum(c_across(where(is.character) | where(is.factor)) == "Symptomatic", na.rm = TRUE), .after = count_inc) 
+```
 
 
+```{r}
 # Patients where counts do not match
 # Patient id = 258 will show here
 # Patient id = 258 had 1 VT of unknown symptomatology in 2015-10-22
-# xx = vte_type_sympt_count[!(vte_type_sympt_count$n_all_vte == vte_type_sympt_count$count_inc + vte_type_sympt_count$count_sympt), ]
+# xx = VTE_symptomatology_count[!(VTE_symptomatology_count$n_all_vte == VTE_symptomatology_count$count_inc + VTE_symptomatology_count$count_sympt), ]
 
 # Patient (one by one)
 # yy = oncoth1$data %>% filter(id == 397)
@@ -589,16 +590,13 @@ vte_type_sympt_count = vte_type_sympt %>%
 
 # Check that total number of VTEs is the same as the sum of incidental and symptomatic events
 # Patient id = 258 had 1 VT of unknown symptomatology in 2015-10-22
-# stopifnot(vte_type_sympt_count$n_all_vte == vte_type_sympt_count$count_inc + vte_type_sympt_count$count_sympt)
+# stopifnot(VTE_symptomatology_count$n_all_vte == VTE_symptomatology_count$count_inc + VTE_symptomatology_count$count_sympt)
 ```
 
 
 ```{r}
-# vte_symptoms_df = vte_type_sympt_count %>%
-#   select(id, primary_tumor_simplified, count_inc, count_sympt)
-
 # Number of incidental and symptomatic events per cancer type
-vte_symptoms_per_cancer_type = vte_type_sympt_count %>%
+VTE_symptomatology_by_cancer_type = VTE_symptomatology %>%
   select(id, primary_tumor_simplified, count_inc, count_sympt) %>%
   # Count events by cancer type
   group_by(primary_tumor_simplified) %>%
@@ -606,11 +604,11 @@ vte_symptoms_per_cancer_type = vte_type_sympt_count %>%
             total_count_sympt = sum(count_sympt)) 
 
 # Count events for all cancer types
-vte_symptoms_per_cancer_type %<>%
+VTE_symptomatology_by_cancer_type %<>%
   bind_rows(
     data.frame(primary_tumor_simplified = "All",
-               total_count_inc = sum(vte_symptoms_per_cancer_type$total_count_inc),
-               total_count_sympt = sum(vte_symptoms_per_cancer_type$total_count_sympt))
+               total_count_inc = sum(VTE_symptomatology_by_cancer_type$total_count_inc),
+               total_count_sympt = sum(VTE_symptomatology_by_cancer_type$total_count_sympt))
   ) %>%
   # Calculate relative frequencies
   rename(abs_freq_inc = total_count_inc,
@@ -625,14 +623,14 @@ vte_symptoms_per_cancer_type %<>%
   mutate(rel_freq_sympt = round(rel_freq_sympt * 100, digits = 1)) 
 
 # Show table
-vte_symptoms_per_cancer_type %<>%
+VTE_symptomatology_by_cancer_type %<>%
   pivot_longer(cols = contains("freq"), 
                names_to = "vte_type") %>%
-  mutate(vte_type_sympt = ifelse(grepl("_inc", vte_type), "Incidental", "Symptomatic")) %>%
+  mutate(VTE_symptomatology = ifelse(grepl("_inc", vte_type), "Incidental", "Symptomatic")) %>%
   mutate(abs_freq = ifelse(grepl("abs_freq", vte_type), as.numeric(gsub("[^0-9.]", "", value)), NA)) %>%
   mutate(rel_freq = ifelse(grepl("rel_freq", vte_type), as.numeric(gsub("[^0-9.]", "", value)), NA)) %>%
   select(-c(vte_type, value)) %>%
-  group_by(primary_tumor_simplified, vte_type_sympt) %>%
+  group_by(primary_tumor_simplified, VTE_symptomatology) %>%
   mutate(abs_freq = coalesce(abs_freq, na.omit(abs_freq)[1]),
          rel_freq = coalesce(rel_freq, na.omit(rel_freq)[1])) %>%
   distinct()
@@ -640,10 +638,77 @@ vte_symptoms_per_cancer_type %<>%
 
 
 ```{r}
+# Create dataframe with absolute frequencies for incidental and symptomatic events
+# Tests will be applied
+CAT_symp_cancer_type = VTE_symptomatology_by_cancer_type %>% 
+  select(-rel_freq) %>%
+  pivot_wider(names_from = VTE_symptomatology, values_from = abs_freq, values_fill = 0) %>%
+  ungroup() %>%
+  as.data.frame() 
+
+rownames(CAT_symp_cancer_type) = CAT_symp_cancer_type$primary_tumor_simplified
+
+CAT_symp_cancer_type %<>%
+  select(-primary_tumor_simplified)
+```
+
+
+```{r}
+# Fisher test to find differences in incidental/symptomatic VTEs across cancer types
+fisher.test(CAT_symp_cancer_type)
+```
+
+There is an statistically significant difference in proportion of incidental and symptomatic VTEs across cancer types. 
+
+```{r}
+# Create dataframe from contingency table with as many observations as VTE types per cancer 
+# This will be used to inspect differences in proportions with ggstatsplot library
+x <- c()
+for (row in rownames(CAT_symp_cancer_type)) {
+  for (col in colnames(CAT_symp_cancer_type)) {
+    x <- rbind(x, matrix(rep(c(row, col), CAT_symp_cancer_type[row, col]), ncol = 2, byrow = TRUE))
+  }
+}
+VTE_sympt_data_longer <- as.data.frame(x)
+colnames(VTE_sympt_data_longer) <- c("cancer_type", "vte_type")
+```
+
+
+```{r}
+# Do Fisher's exact test to obtain p-value
+fisher_test_VTE_sympt_by_cancer_type <- fisher.test(table(VTE_sympt_data_longer))
+
+# Do barplot with several statistical test
+ggbarstats(
+  VTE_sympt_data_longer, vte_type, cancer_type,
+  digits.perc = 1,
+  label = "both",
+  proportion.test = TRUE,
+  results.subtitle = TRUE, 
+  bf.message = FALSE
+)
+```
+
+
+```{r}
+# Calculate proportion test for each cancer type
+proportion_test_VTE_sympt_cancer_type <- VTE_sympt_data_longer %>%
+  group_by(cancer_type) %>%
+  summarise(
+    test_result = list(prop.test(table(vte_type))),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    p_value = map(test_result, ~ format.pval(.x$p.value, digits = 3))
+  )
+```
+
+
+```{r}
 # Barplot of incidental and symptomatic VTEs for each cancer type and all types
 ggplot(
-  data = vte_symptoms_per_cancer_type, 
-  aes(x = primary_tumor_simplified, y = abs_freq, fill = vte_type_sympt)) + 
+  data = VTE_symptomatology_by_cancer_type, 
+  aes(x = primary_tumor_simplified, y = abs_freq, fill = VTE_symptomatology)) + 
   geom_col(position = "dodge") + 
   geom_text(
     aes(label = paste0(rel_freq, "%")), 
@@ -675,6 +740,14 @@ ggplot(
 #   height = 4,
 #   units = "in"
 #   )
+```
+
+
+
+
+
+```{r}
+aa
 ```
 
 
@@ -810,6 +883,7 @@ cat_prior_or_concomitant_by_cancer_type_patients = VTE_data %>%
 cat_prior_or_concomitant_by_cancer_type_patients
 ```
 
+
 ```{r}
 # Count number of VTE episodes that are recurrences by cancer type
 cat_recurrences_by_cancer_type_patients = VTE_data %>%
@@ -886,58 +960,9 @@ cat_moment_cancer_type_patients
 stopifnot(n_patients_vte == sum(cat_moment_cancer_type_patients))
 ```
 
-
-## Symptomatology of VTE episodes according to cancer type
-
-```{r}
-# Create dataframe with absolute frequencies for incidental and symptomatic events
-# Tests will be applied
-cat_inc_symp = vte_symptoms_per_cancer_type %>% 
-  select(-rel_freq) %>%
-  pivot_wider(names_from = vte_type_sympt, values_from = abs_freq, values_fill = 0) %>%
-  ungroup() %>%
-  as.data.frame() 
-
-rownames(cat_inc_symp) = cat_inc_symp$primary_tumor_simplified
-
-cat_inc_symp %<>%
-  select(-primary_tumor_simplified)
-```
+#### Symptomatology of VTE episodes according to cancer type
 
 
-```{r}
-# Fisher test to find differences in incidental/symptomatic VTEs across cancer types
-fisher.test(cat_inc_symp)
-```
-
-There is an statistically significant difference in proportion of incidental and symptomatic VTEs across cancer types. 
-
-```{r}
-# Create dataframe from contingency table with as many observations as VTE types per cancer 
-# This will be used to inspect differences in proportions with ggstatsplot library
-x <- c()
-for (row in rownames(cat_inc_symp)) {
-  for (col in colnames(cat_inc_symp)) {
-    x <- rbind(x, matrix(rep(c(row, col), cat_inc_symp[row, col]), ncol = 2, byrow = TRUE))
-  }
-}
-df1 <- as.data.frame(x)
-colnames(df1) <- c("cancer_type", "vte_type")
-df1
-```
-
-
-```{r}
-# Do Fisher's exact test to obtain p-value
-test <- fisher.test(table(df1))
-
-# Do barplot with several statistical test
-ggbarstats(
-  df1, vte_type, cancer_type,
-  digits.perc = 1,
-  results.subtitle = TRUE
-)
-```
 
 
 ```{r}
@@ -975,12 +1000,12 @@ Pancreatic cancer patients show by far the highest proportion of VTEs detected p
 # %<>%
 # 
 # yy = left_join(
-#   vte_by_location, 
-#   vte_type_sympt_count, 
+#   VTE_location, 
+#   VTE_symptomatology_count, 
 #   by = c("id", "primary_tumor_simplified", "n_all_vte")
 #   ) # %>%
   
-cancer_vte_loc = vte_by_location %>%
+cancer_vte_loc = VTE_location %>%
   select(c(primary_tumor_simplified, starts_with("n_total_")))
 
 cancer_vte_loc %<>%
@@ -1007,7 +1032,7 @@ stopifnot(
 
 ```{r}
 # Reshape the data into a longer format
-vte_type_sympt_count_long <- vte_type_sympt_count %>%
+VTE_symptomatology_count_long <- VTE_symptomatology_count %>%
   group_by(primary_tumor_simplified) %>%
   pivot_longer(
     cols = contains("type"), 
@@ -1016,7 +1041,7 @@ vte_type_sympt_count_long <- vte_type_sympt_count %>%
   filter(!is.na(Symptomatology))
 
 # Count occurrences for each value
-count_vte_loc_sympt <- vte_type_sympt_count_long %>%
+count_vte_loc_sympt <- VTE_symptomatology_count_long %>%
   group_by(primary_tumor_simplified, column_name, Symptomatology) %>%
   summarise(Count = n()) %>%
   mutate(VTE_loc = case_when(
@@ -1050,7 +1075,7 @@ stopifnot(sum(count_vte_loc_sympt_simplified$number) == n_vtes_oncoth1 - 1)
 
 ```{r}
 # Count number of patients with VTE, distinguishing by location, symptomatology and cancer type
-patients_vte_loc_sympt_cancer_type = vte_type_sympt_count_long %>%
+patients_vte_loc_sympt_cancer_type = VTE_symptomatology_count_long %>%
   group_by(id, primary_tumor_simplified, column_name, Symptomatology) %>%
   mutate(VTE_loc = case_when(
     str_detect(column_name, "crt") ~ "CRT", 
@@ -1145,6 +1170,13 @@ ggbarstats(
   df_cancer_type_vte_type, vte_type, cancer_type
 )
 ```
+
+
+
+
+
+
+
 
 
 
