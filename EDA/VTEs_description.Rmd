@@ -82,6 +82,13 @@ stopifnot(dim(VTE_data)[1] == n_patients_vte)
 ```
 
 
+```{r}
+n_VTEs = sum(VTE_data$n_all_vte)
+print(paste("There is a total of", n_VTEs, "recorded VTE events."))
+```
+
+
+
 ## Number/proportion of VTE events per month 
 
 I am gonna ignore the distinction of incidental and symptomatic for now.  
@@ -105,16 +112,21 @@ VTE_events_by_month = VTE_data %>%
 
 ```{r}
 # Sanity check
-stopifnot(sum(VTE_events_by_month$n_VTEs) == 120)
+stopifnot(sum(VTE_events_by_month$n_VTEs) == 120 - 1) # there is one VTE event with unknown date and symptomatology
 ```
 
 
+```{r}
+# Collapsing information of months -2, -1 and 0 into one
+VTE_events_by_month_corrected <- VTE_events_by_month %>%
+  mutate(across(2:3, ~ ifelse(row_number() == 3, sum(VTE_events_by_month[1:3, cur_column()]), .))) %>%
+  slice(-c(1:2))
+```
+
 
 ```{r}
-# Collapsing infomation of months -2, -1 and 0 into one
-VTE_events_by_month_corrected = VTE_events_by_month
-VTE_events_by_month_corrected[3, 2:3] = colSums(VTE_events_by_month[1:3, 2:3])
-VTE_events_by_month_corrected = VTE_events_by_month_corrected[-c(1:2), ]
+# Sanity check
+stopifnot(sum(VTE_events_by_month_corrected$n_VTEs) == 120 - 1) # there is one VTE event with unknown date and symptomatology
 ```
 
 
