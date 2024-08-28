@@ -722,12 +722,42 @@ ggplot(
     linetype = "dotted",
     color = "grey",
     size = 0.5) +
-  geom_signif(
-    comparisons = list(c("Incidental", "Symptomatic")),
-    annotations = proportion_test_VTE_sympt_cancer_type$p_value,
-    y_position = rep(75, length(proportion_test_VTE_sympt_cancer_type$p_value)),
-    tip_length = 0.03,
-    textsize = 3) +
+  # Manually add brackets and p-values
+  geom_segment(
+    data = proportion_test_VTE_sympt_cancer_type,
+    aes(x = as.numeric(as.factor(primary_tumor_simplified)) - 0.3, 
+        xend = as.numeric(as.factor(primary_tumor_simplified)) + 0.3, 
+        y = y_position, 
+        yend = y_position),
+    color = "black",
+    size = 0.5
+  ) +
+  geom_segment(
+    data = proportion_test_VTE_sympt_cancer_type,
+    aes(x = as.numeric(as.factor(primary_tumor_simplified)) - 0.3, 
+        xend = as.numeric(as.factor(primary_tumor_simplified)) - 0.3, 
+        y = y_position + 5, 
+        yend = y_position),
+    color = "black",
+    size = 0.5
+  ) +
+  geom_segment(
+    data = proportion_test_VTE_sympt_cancer_type,
+    aes(x = as.numeric(as.factor(primary_tumor_simplified)) + 0.3, 
+        xend = as.numeric(as.factor(primary_tumor_simplified)) + 0.3, 
+        y = y_position + 5, 
+        yend = y_position),
+    color = "black",
+    size = 0.5
+  ) +
+  geom_text(
+    data = proportion_test_VTE_sympt_cancer_type,
+    aes(x = as.numeric(as.factor(primary_tumor_simplified)), 
+        y = y_position + 6, 
+        label = paste0("p = ", format.pval(p_value))),
+    size = 3,
+    color = "black"
+  ) +
   theme_bw() +
   ggtitle("VTE symptomatology by cancer type") +
   guides(fill = guide_legend(title = "")) + 
@@ -738,6 +768,7 @@ ggplot(
     limits = c(0, 75),
     breaks = seq(from = 0, to = 75, by = 10)) +
   scale_fill_brewer(palette = "Set4") 
+
 
 # # Save plot
 # ggsave(
