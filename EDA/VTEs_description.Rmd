@@ -681,7 +681,6 @@ ggbarstats(
   data = VTE_sympt_data_longer, 
   x = vte_type, 
   y = cancer_type,
-  # fill = vte_type,
   digits.perc = 1,
   label = "both",
   proportion.test = TRUE,
@@ -690,16 +689,17 @@ ggbarstats(
   title = "VTE symptomatology by cancer type", 
   legend.title = "",
   xlab = "Cancer type", 
-  ylab = "% of VTEs"
+  ylab = "% of VTEs", 
+  palette = "Set2"
 )
 
-# ylab = # # Save plot
-# ggsave(
-#   filename = "../graphs/VTE_symptomatology_by_cancer_type_stats.jpeg",
-#   width = 6, 
-#   height = 4,
-#   units = "in"
-#   )
+# Save plot
+ggsave(
+  filename = "../graphs/VTE_symptomatology_by_cancer_type_stats.jpeg",
+  width = 8,
+  height = 5,
+  units = "in"
+  )
 ```
 
 
