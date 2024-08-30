@@ -235,7 +235,7 @@ ggsave(
 ```
 
 
-## Frequency of VTE episode's type by location [corregir]
+## Frequency of VTE locations
 
 
 ```{r}
@@ -473,14 +473,12 @@ stopifnot(sum(summary_n_patients_with_VTE_location$freq_abs) == n_patients_vte)
 
 
 ```{r}
-# jpeg("../graphs/paper/barplot_VTE_location_corrected.jpeg", width = 6.5, height = 4, units = 'in', res = 700)
-# —
+# Number of patients with VTE locations
+
+# Create custom color palette
 mycolors = colorRampPalette(brewer.pal(11, "Paired"))(11)
 
-# display.brewer.all()
-# my_palette <- colorRampPalette(c("cyan", "lightgreen"))
-# colors <- my_palette(11)
-
+# Plot
 ggplot(
   data = summary_n_patients_with_VTE_location, 
   aes(x = reorder(number_patients_with_vte_by_loc, -freq_abs), 
@@ -526,8 +524,6 @@ ggsave(
   height = 4,
   units = "in"
   )
-
-# dev.off()
 ```
 
 
@@ -638,24 +634,14 @@ VTE_symptomatology_by_cancer_type %<>%
 
 
 ```{r}
-# Create dataframe with absolute frequencies for incidental and symptomatic events
-# Tests will be applied
-CAT_symp_cancer_type = VTE_symptomatology_by_cancer_type %>% 
+# Create contingency table with absolute frequencies for incidental and symptomatic events for applying Fisher's test
+VTE_symptomatology_by_cancer_type %>% 
   select(-rel_freq) %>%
   pivot_wider(names_from = VTE_symptomatology, values_from = abs_freq, values_fill = 0) %>%
   ungroup() %>%
-  as.data.frame() 
-
-rownames(CAT_symp_cancer_type) = CAT_symp_cancer_type$primary_tumor_simplified
-
-CAT_symp_cancer_type %<>%
-  select(-primary_tumor_simplified)
-```
-
-
-```{r}
-# Fisher test to find differences in incidental/symptomatic VTEs across cancer types
-fisher.test(CAT_symp_cancer_type)
+  as.data.frame() %>%
+  column_to_rownames(var = "primary_tumor_simplified") %>%
+  fisher.test()
 ```
 
 There is an statistically significant difference in proportion of incidental and symptomatic VTEs across cancer types. 
@@ -664,9 +650,9 @@ There is an statistically significant difference in proportion of incidental and
 # Create dataframe from contingency table with as many observations as VTE types per cancer
 # This will be used to inspect differences in proportions with ggstatsplot library
 x <- c()
-for (row in rownames(CAT_symp_cancer_type)) {
-  for (col in colnames(CAT_symp_cancer_type)) {
-    x <- rbind(x, matrix(rep(c(row, col), CAT_symp_cancer_type[row, col]), ncol = 2, byrow = TRUE))
+for (row in rownames(contigency_table_VTE_symptomatology_by_cancer_type)) {
+  for (col in colnames(contigency_table_VTE_symptomatology_by_cancer_type)) {
+    x <- rbind(x, matrix(rep(c(row, col), contigency_table_VTE_symptomatology_by_cancer_type[row, col]), ncol = 2, byrow = TRUE))
   }
 }
 VTE_sympt_data_longer <- as.data.frame(x)
