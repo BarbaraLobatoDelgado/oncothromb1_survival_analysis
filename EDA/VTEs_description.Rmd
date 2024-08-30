@@ -1004,121 +1004,17 @@ stopifnot(
 
 
 ```{r}
-# Reshape the data into a longer format
-VTE_symptomatology_count_long <- VTE_symptomatology_count %>%
-  group_by(primary_tumor_simplified) %>%
-  pivot_longer(
-    cols = contains("type"), 
-    values_to = "Symptomatology", 
-    names_to = "column_name") %>%
-  filter(!is.na(Symptomatology))
-
-# Count occurrences for each value
-count_vte_loc_sympt <- VTE_symptomatology_count_long %>%
-  group_by(primary_tumor_simplified, column_name, Symptomatology) %>%
-  summarise(Count = n()) %>%
-  mutate(VTE_loc = case_when(
-    str_detect(column_name, "crt") ~ "CRT", 
-    str_detect(column_name, "dvt") ~ "DVT", 
-    str_detect(column_name, "pte") ~ "PE", 
-    str_detect(column_name, "svt") ~ "SVT", 
-    str_detect(column_name, "visceral_thromb") ~ "VT", 
-    TRUE ~ column_name
-  ), .after = column_name) %>%
-  ungroup() %>%
-  select(-c(column_name))
-
-# Check all VTE events have been accounted for
-# Note that it is unknown the symptomatology for 1 VTE
-stopifnot(sum(count_vte_loc_sympt$Count) == n_vtes_oncoth1 - 1)
-```
-
-
-```{r}
-# Simplified count of incidental/symptomatic VTEs and VTE location per cancer type
-count_vte_loc_sympt_simplified <- count_vte_loc_sympt %>%
-  group_by(primary_tumor_simplified, VTE_loc, Symptomatology) %>%
-  summarise(number = sum(Count)) 
-
-# Check all VTE events have been accounted for
-# Note that it is unknown the symptomatology for 1 VTE
-stopifnot(sum(count_vte_loc_sympt_simplified$number) == n_vtes_oncoth1 - 1)
-```
-
-
-```{r}
-# Count number of patients with VTE, distinguishing by location, symptomatology and cancer type
-patients_vte_loc_sympt_cancer_type = VTE_symptomatology_count_long %>%
-  group_by(id, primary_tumor_simplified, column_name, Symptomatology) %>%
-  mutate(VTE_loc = case_when(
-    str_detect(column_name, "crt") ~ "CRT", 
-    str_detect(column_name, "dvt") ~ "DVT", 
-    str_detect(column_name, "pte") ~ "PE", 
-    str_detect(column_name, "svt") ~ "SVT", 
-    str_detect(column_name, "visceral_thromb") ~ "VT", 
-    TRUE ~ column_name
-  ), .after = column_name) %>%
-  ungroup() %>%
-  select(-c(starts_with("count_"), column_name))
-```
-
-
-```{r}
-# Show counts of patients by VTE location and symptomatology across cancer types
-# Careful! Patient id = 258 is does not appear here due to the symptomatology of VTE being
-# unknown
-# Patient id = 258 had pancreatic cancer and 
-# Remember to manually account for them in paper tables
-patients_vte_loc_combination_cancer = patients_vte_loc_sympt_cancer_type %>%
-  group_by(id, primary_tumor_simplified) %>%
-  summarise(concatenated_VTE_loc = paste(VTE_loc, collapse = "+")) %>%
-  ungroup() %>%
-  mutate(concatenated_VTE_loc = case_when(
-    concatenated_VTE_loc == "CRT+CRT" ~ "CRT", 
-    concatenated_VTE_loc == "DVT+DVT" ~ "DVT", 
-    concatenated_VTE_loc == "DVT+DVT" ~ "DVT",
-    concatenated_VTE_loc == "VT+VT" ~ "VT",
-    concatenated_VTE_loc == "DVT+DVT+VT" ~ "DVT+VT",
-    concatenated_VTE_loc == "PE+DVT+PE+VT" ~ "DVT+PE+VT",
-    TRUE ~ concatenated_VTE_loc
-  )) %>%
-  count(primary_tumor_simplified, concatenated_VTE_loc)
-
-# print(sum(patients_vte_loc_combination_cancer$n))
-
-stopifnot(sum(patients_vte_loc_combination_cancer$n) + 1 == 88)
-```
-
-
-```{r}
-# cancer_type_vte_type = data.frame(
-#   "DVT" = c(8, 4, 4, 11),
-#   "PE" = c(12, 7, 9, 10),
-#   "CRT" = c(6, 0, 1, 1),
-#   "SVT" = c(0, 1, 0, 0),
-#   "VT" = c(9, 1, 3, 25),
-#   "Other" = c(0, 3, 0, 7),
-#   row.names = c("Colorectal",
-#                 "NSCLC",
-#                 "Oesophago-gastric",
-#                 "Pancreatic")
-# )
-# 
-# cancer_type_vte_type
-```
-
-
-```{r}
 # create dataframe from contingency table
 x <- c()
-for (row in rownames(cancer_type_vte_type)) {
-  for (col in colnames(cancer_type_vte_type)) {
-    x <- rbind(x, matrix(rep(c(row, col), cancer_type_vte_type[row, col]), ncol = 2, byrow = TRUE))
+for (row in rownames(VTE_location_by_cancer_type)) {
+  for (col in colnames(VTE_location_by_cancer_type)) {
+    x <- rbind(x, matrix(rep(c(row, col), VTE_location_by_cancer_type[row, col]), ncol = 2, byrow = TRUE))
   }
 }
-df_cancer_type_vte_type <- as.data.frame(x)
-colnames(df_cancer_type_vte_type) <- c("cancer_type", "vte_type")
-df_cancer_type_vte_type
+VTE_location_by_cancer_type_longer <- as.data.frame(x)
+colnames(VTE_location_by_cancer_type_longer) <- c("cancer_type", "vte_type")
+VTE_location_by_cancer_type_longer
+rm(x)
 ```
 
 
@@ -1136,6 +1032,95 @@ ggbarstats(
   df_cancer_type_vte_type, vte_type, cancer_type
 )
 ```
+
+```{r}
+# # Reshape the data into a longer format
+# VTE_symptomatology_count_long <- VTE_symptomatology_count %>%
+#   group_by(primary_tumor_simplified) %>%
+#   pivot_longer(
+#     cols = contains("type"), 
+#     values_to = "Symptomatology", 
+#     names_to = "column_name") %>%
+#   filter(!is.na(Symptomatology))
+# 
+# # Count occurrences for each value
+# count_vte_loc_sympt <- VTE_symptomatology_count_long %>%
+#   group_by(primary_tumor_simplified, column_name, Symptomatology) %>%
+#   summarise(Count = n()) %>%
+#   mutate(VTE_loc = case_when(
+#     str_detect(column_name, "crt") ~ "CRT", 
+#     str_detect(column_name, "dvt") ~ "DVT", 
+#     str_detect(column_name, "pte") ~ "PE", 
+#     str_detect(column_name, "svt") ~ "SVT", 
+#     str_detect(column_name, "visceral_thromb") ~ "VT", 
+#     TRUE ~ column_name
+#   ), .after = column_name) %>%
+#   ungroup() %>%
+#   select(-c(column_name))
+# 
+# # Check all VTE events have been accounted for
+# # Note that it is unknown the symptomatology for 1 VTE
+# stopifnot(sum(count_vte_loc_sympt$Count) == n_vtes_oncoth1 - 1)
+```
+
+
+```{r}
+# # Simplified count of incidental/symptomatic VTEs and VTE location per cancer type
+# count_vte_loc_sympt_simplified <- count_vte_loc_sympt %>%
+#   group_by(primary_tumor_simplified, VTE_loc, Symptomatology) %>%
+#   summarise(number = sum(Count)) 
+# 
+# # Check all VTE events have been accounted for
+# # Note that it is unknown the symptomatology for 1 VTE
+# stopifnot(sum(count_vte_loc_sympt_simplified$number) == n_vtes_oncoth1 - 1)
+```
+
+
+```{r}
+# # Count number of patients with VTE, distinguishing by location, symptomatology and cancer type
+# patients_vte_loc_sympt_cancer_type = VTE_symptomatology_count_long %>%
+#   group_by(id, primary_tumor_simplified, column_name, Symptomatology) %>%
+#   mutate(VTE_loc = case_when(
+#     str_detect(column_name, "crt") ~ "CRT", 
+#     str_detect(column_name, "dvt") ~ "DVT", 
+#     str_detect(column_name, "pte") ~ "PE", 
+#     str_detect(column_name, "svt") ~ "SVT", 
+#     str_detect(column_name, "visceral_thromb") ~ "VT", 
+#     TRUE ~ column_name
+#   ), .after = column_name) %>%
+#   ungroup() %>%
+#   select(-c(starts_with("count_"), column_name))
+```
+
+
+```{r}
+# # Show counts of patients by VTE location and symptomatology across cancer types
+# # Careful! Patient id = 258 is does not appear here due to the symptomatology of VTE being
+# # unknown
+# # Patient id = 258 had pancreatic cancer and 
+# # Remember to manually account for them in paper tables
+# patients_vte_loc_combination_cancer = patients_vte_loc_sympt_cancer_type %>%
+#   group_by(id, primary_tumor_simplified) %>%
+#   summarise(concatenated_VTE_loc = paste(VTE_loc, collapse = "+")) %>%
+#   ungroup() %>%
+#   mutate(concatenated_VTE_loc = case_when(
+#     concatenated_VTE_loc == "CRT+CRT" ~ "CRT", 
+#     concatenated_VTE_loc == "DVT+DVT" ~ "DVT", 
+#     concatenated_VTE_loc == "DVT+DVT" ~ "DVT",
+#     concatenated_VTE_loc == "VT+VT" ~ "VT",
+#     concatenated_VTE_loc == "DVT+DVT+VT" ~ "DVT+VT",
+#     concatenated_VTE_loc == "PE+DVT+PE+VT" ~ "DVT+PE+VT",
+#     TRUE ~ concatenated_VTE_loc
+#   )) %>%
+#   count(primary_tumor_simplified, concatenated_VTE_loc)
+# 
+# # print(sum(patients_vte_loc_combination_cancer$n))
+# 
+# stopifnot(sum(patients_vte_loc_combination_cancer$n) + 1 == 88)
+```
+
+
+
 
 
 
