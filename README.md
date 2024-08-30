@@ -1,2 +1,2 @@
-# oncothromb1_survival_analysis
-Survival analysis of ONCOTHROMB12-01 cohort
+# Survival analysis of ONCOTHROMB12-01 cohort study
+In these analyses, we examine the impact of cancer-associated venous thrombosis (CAT) in the ONCOTHROMB12-01 cohort study, which gathers lung, colorectal, esophageal, gastric and pancreatic cancer patients that were periodically screened for VTE (ClinicalTrial.gov ID: NCT03114618). An exploratory data analysis is carried out for venous thromboembolism (VTE). Overall survival is estimated for patients with and without CAT, and also across different age groups, sex, cancer type, stage and VTE recurrence. In addition, a model is trained using Machine Learning in order to find predictors of survival and quantify their effect.
