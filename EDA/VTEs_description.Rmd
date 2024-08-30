@@ -33,16 +33,27 @@ contigency_table2df_longer = function(df, column_names = c("cancer_type", "vte_t
   
   # Create dataframe with long format from contigency table to pass to ggstatsplot functions
   
+  # Create temporary vector to store information from rows
   tmp_row <- c()
   
+  # Iterate over every cell in contigency table
   for (row in rownames(df)) {
     for (col in colnames(df)) {
-      tmp_row <- rbind(tmp_row, matrix(rep(c(row, col), df[row, col]), ncol = 2, byrow = TRUE))
+      # Create matrix that adds information in each iteration
+      tmp_row <- rbind(
+        tmp_row, 
+        matrix(
+          rep(c(row, col), df[row, col]), # Repeat vector
+          ncol = 2, # Reshape into matrix with 2 columns
+          byrow = TRUE) # Matrix is filled by rows
+        )
       }
   }
   
+  # Convert matrix to dataframe
   df <- as.data.frame(tmp_row)
-  colnames(df) <- column_names
+  colnames(df) <- column_namesç
+  # Remove temporary variable
   rm(tmp_row)
   
   return(df)
