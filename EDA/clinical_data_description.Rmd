@@ -87,6 +87,33 @@ lillie_test_summary <- function(data, columns) {
   return(results)
 }
 
+# Stacked density plot and boxplot 
+stacked_density_plot_and_boxplot = function(data_df, variable_to_plot, plot_title) {
+  
+  outplot = ggplot(data = data_df, 
+                    aes(x = {{variable_to_plot}}, 
+                        y = -1)) + 
+    geom_boxploth(outlier.colour = "red") + 
+    stat_boxplot(geom = "errorbar") +
+    geom_density(aes(x = {{variable_to_plot}}, 
+                     y = stat(scaled)), 
+                 fill = "lightgrey",
+                 inherit.aes = FALSE) +
+    #ylim(range(!!variable_to_plot, na.rm = TRUE)) +
+    labs(title = plot_title, 
+         x = "",
+         y = "") +
+    theme_hc(base_size = 8) + 
+    theme(#axis.line.y = element_blank(),
+          #axis.title.x = element_blank(),
+          #axis.text.x = element_blank(),
+          #axis.ticks.x = element_blank(), 
+          plot.title = element_text(hjust = 0.5), 
+          aspect.ratio = 3/5) + 
+    coord_flip()
+  
+  return(outplot)
+}
 
 # Fancy barplot showing percentages 
 fancy_barplot_percentage = function(dataframe, xcolname) {
@@ -158,6 +185,102 @@ oncoth1_data = oncoth1$data
 
 # Exploratory Data Analysis (EDA) of clinical factors
 
+## Descriptive table
+
+```{r}
+# Transform some variables for better readability
+oncoth1_data = oncoth1_data %>% 
+  mutate(khorana_risk_score_three_categories = case_when(
+    khorana_risk_score == 0 ~ "Low risk", 
+    khorana_risk_score == 1 ~ "Intermediate risk",
+    khorana_risk_score == 2 ~ "Intermediate risk",
+    khorana_risk_score == 3 ~ "High risk",
+    khorana_risk_score == 4 ~ "High risk",
+    khorana_risk_score == 5 ~ "High risk",
+    khorana_risk_score == NA ~ NA_character_), .after = khorana_risk_score) %>%
+  mutate(khorana_risk_score_three_categories = factor(
+    x = khorana_risk_score_three_categories, 
+    levels = c("Low risk", "Intermediate risk", "High risk"), 
+    labels = c("Low risk", "Intermediate risk", "High risk")
+  ))
+```
+
+
+```{r}
+# Select variables
+vars2select = c(
+  "patient_group",
+  "age_when_cancer_dx", 
+  "gender", 
+  "ethnicity",
+  "bmi_category",
+  "performance_status_category_corrected",
+  "n_comorbidities",
+  "arterial_hypertension",
+  "chronic_cardiac_insufficiency",
+  "diabetes_mellitus",
+  "dyslipidemia",
+  "tobacco_use",
+  "copd",
+  "renal_insufficiency", 
+  "venous_insufficiency", 
+  "hormone_therapy", 
+  "antiaggreg_tx_currently",
+  "previous_vte",
+  "previous_ate",
+  "family_background_vte",
+  "khorana_risk_score_three_categories",
+  "primary_tumor", 
+  "tnm_stage_grouped",
+  "grade_histological_differentiation",
+  "tumor_surgically_removed",
+  "catheter_device", 
+  "major_surgery_in_medical_history",
+  "n_times_recent_major_surgery_all_study",
+  "n_times_major_trauma_all_study",
+  "n_times_blood_transfusion_all_study", 
+  "n_times_immobilisation_all_study",
+  "n_times_erythropoietin_tx_all_study"
+  )
+
+oncoth1_subset = oncoth1_data %>%
+  select(all_of(vars2select)) %>%
+  mutate(across(c(
+    n_times_recent_major_surgery_all_study,
+    n_times_major_trauma_all_study,
+    n_times_blood_transfusion_all_study, 
+    n_times_immobilisation_all_study, 
+    n_times_erythropoietin_tx_all_study), ~ as.factor(.x)))
+
+# Make summary table
+oncoth1_st = arsenal::tableby(patient_group ~., data = oncoth1_subset)
+summary(oncoth1_st)
+```
+
+
+```{r}
+# Median and quantiles of age at cancer diagnosis
+
+print("Quantiles of age at cancer diagnosis for all patients:")
+quantile(oncoth1_data$age_when_cancer_dx)
+cat("\n")
+
+print("Quantiles of age at cancer diagnosis for patients with CAT:")
+oncoth1_data %>%
+  filter(patient_group == "Case") %>%
+  select(age_when_cancer_dx) %>%
+  quantile(., na.rm = TRUE)
+cat("\n")
+
+print("Quantiles of age at cancer diagnosis for patients with CAT:")
+oncoth1_data %>%
+  filter(patient_group == "Control") %>%
+  select(age_when_cancer_dx) %>%
+  quantile(., na.rm = TRUE)
+cat("\n")
+```
+
+
 ## Check normality in continous variables
 
 https://stats.stackexchange.com/questions/32168/how-important-is-it-to-transform-variable-for-cox-proportional-hazards
@@ -206,7 +329,6 @@ for (col in names(lillie_results)) {
   cat(col, ":", lillie_results[[col]]$normality, "(p-value =", lillie_results[[col]]$p_value, ")\n")
 }
 ```
-
 
 ## Missing values' proportion
 
@@ -505,20 +627,6 @@ fancy_barplot_percentage(oncoth1_data, grade_histological_differentiation)
 
 
 ```{r}
-# fancy_barplot_percentage(oncoth1_data, metastasis_site) +
-#   scale_x_discrete(limits = c("No metastasis", 
-#                               "Liver", 
-#                               "Peritoneum", 
-#                               "Lung", 
-#                               "Bones", 
-#                               "Adrenal glands",
-#                               "Lymph nodes", 
-#                               "Brain", 
-#                               "Pleura", 
-#                               "Unknown"))
-```
-
-```{r}
 fancy_barplot_percentage(oncoth1_data, catheter_device)
 ```
 
@@ -794,97 +902,6 @@ psych::corPlot(
 
 - Diabetes mellitus is positively correlated with dyslipidemia and, in a lesser degree, with arterial hypertension and cardiac insufficiency.  
 - Chronic cardiac insufficiency is positively correlated with renal insufficiency and, in a lesser extent, with venous insufficiency.  
-
-
-## Descriptive table
-
-```{r}
-oncoth1_data = oncoth1_data %>% 
-  mutate(khorana_risk_score_three_categories = case_when(
-    khorana_risk_score == 0 ~ "Low risk", 
-    khorana_risk_score == 1 ~ "Intermediate risk",
-    khorana_risk_score == 2 ~ "Intermediate risk",
-    khorana_risk_score == 3 ~ "High risk",
-    khorana_risk_score == 4 ~ "High risk",
-    khorana_risk_score == 5 ~ "High risk",
-    khorana_risk_score == NA ~ NA_character_), .after = khorana_risk_score) %>%
-  mutate(khorana_risk_score_three_categories = factor(
-    x = khorana_risk_score_three_categories, 
-    levels = c("Low risk", "Intermediate risk", "High risk"), 
-    labels = c("Low risk", "Intermediate risk", "High risk")
-  ))
-```
-
-
-```{r}
-# Select variables
-vars2select = c(
-  "patient_group",
-  "age_when_cancer_dx", 
-  "gender", 
-  "ethnicity",
-  "bmi_category",
-  "performance_status_category_corrected",
-  "n_comorbidities",
-  "arterial_hypertension",
-  "chronic_cardiac_insufficiency",
-  "diabetes_mellitus",
-  "dyslipidemia",
-  "tobacco_use",
-  "copd",
-  "renal_insufficiency", 
-  "venous_insufficiency", 
-  "hormone_therapy", 
-  "antiaggreg_tx_currently",
-  "previous_vte",
-  "previous_ate",
-  "family_background_vte",
-  "khorana_risk_score_three_categories",
-  "primary_tumor", 
-  "tnm_stage_grouped",
-  "grade_histological_differentiation",
-  "tumor_surgically_removed",
-  "catheter_device", 
-  "major_surgery_in_medical_history",
-  "n_times_recent_major_surgery_all_study",
-  "n_times_major_trauma_all_study",
-  "n_times_blood_transfusion_all_study", 
-  "n_times_immobilisation_all_study",
-  "n_times_erythropoietin_tx_all_study"
-  )
-
-oncoth1_subset = oncoth1_data %>%
-  select(all_of(vars2select)) %>%
-  mutate(across(c(
-    n_times_recent_major_surgery_all_study,
-    n_times_major_trauma_all_study,
-    n_times_blood_transfusion_all_study, 
-    n_times_immobilisation_all_study, 
-    n_times_erythropoietin_tx_all_study), ~ as.factor(.x)))
-
-# Make summary table
-oncoth1_st = arsenal::tableby(patient_group ~., data = oncoth1_subset)
-summary(oncoth1_st)
-```
-
-
-```{r}
-# Separate dataframes according to VTE/no VTE
-oncoth1_case = oncoth1_data %>%
-  filter(patient_group == "Case")
-
-oncoth1_control = oncoth1_data %>%
-  filter(patient_group == "Control")
-```
-
-
-```{r}
-# Median and quantiles according to group
-quantile(oncoth1_data$age_when_cancer_dx)
-quantile(oncoth1_case$age_when_cancer_dx)
-quantile(oncoth1_control$age_when_cancer_dx)
-```
-
 
 
 
