@@ -635,20 +635,25 @@ VTE_symptomatology_by_cancer_type %<>%
 
 ```{r}
 # Create contingency table with absolute frequencies for incidental and symptomatic events for applying Fisher's test
-VTE_symptomatology_by_cancer_type %>% 
+contigency_table_VTE_symptomatology_by_cancer_type = VTE_symptomatology_by_cancer_type %>% 
   select(-rel_freq) %>%
   pivot_wider(names_from = VTE_symptomatology, values_from = abs_freq, values_fill = 0) %>%
   ungroup() %>%
   as.data.frame() %>%
-  column_to_rownames(var = "primary_tumor_simplified") %>%
-  fisher.test()
+  column_to_rownames(var = "primary_tumor_simplified")
+```
+
+
+```{r}
+# Fisher test to find differences in incidental/symptomatic VTEs across cancer types
+fisher.test(contigency_table_VTE_symptomatology_by_cancer_type)
 ```
 
 There is an statistically significant difference in proportion of incidental and symptomatic VTEs across cancer types. 
 
 ```{r}
 # Create dataframe from contingency table with as many observations as VTE types per cancer
-# This will be used to inspect differences in proportions with ggstatsplot library
+# This will be passed to ggstatsplot library
 x <- c()
 for (row in rownames(contigency_table_VTE_symptomatology_by_cancer_type)) {
   for (col in colnames(contigency_table_VTE_symptomatology_by_cancer_type)) {
@@ -743,28 +748,18 @@ ggplot(
 ```
 
 
-
-
-
-```{r}
-aa
-```
-
-
 ## Moment when CAT appears according to cancer type 
-
-### VTE events
 
 ```{r}
 # Count number of VTE episodes prior or concomitant to cancer diagnosis by cancer type
-cat_prior_or_concomitant_by_cancer_type = VTE_data %>%
+CAT_prior_or_concomitant_by_cancer_type = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   summarise(n_vte_prior_or_concomitant = sum(n_vte_before_entering_study))
               
               
 # Check all VTEs before study begins are accounted for
 stopifnot(
-  sum(cat_prior_or_concomitant_by_cancer_type$n_vte_prior_or_concomitant) ==
+  sum(CAT_prior_or_concomitant_by_cancer_type$n_vte_prior_or_concomitant) ==
     # Sum of time until VTE that happened before month zero
     sum(VTE_data$tu_1st_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) +
     sum(VTE_data$tu_2nd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
@@ -772,7 +767,7 @@ stopifnot(
     sum(VTE_data$tu_4th_vte_all_from_cancer_diagnosis_months<= 0, na.rm = TRUE)
   )
 
-cat_prior_or_concomitant_by_cancer_type
+CAT_prior_or_concomitant_by_cancer_type
 ```
 
 
@@ -782,87 +777,62 @@ cat_recurrences_by_cancer_type = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   summarise(n_vte_recurrence = sum(n_total_vte_recurrence))
 
-# sum(!is.na(tu_1st_rec_vte_from_cancer_diagnosis_months), na.rm = TRUE)
-
-# Check all VTEs before study begins are accounted for
-# stopifnot(
-#   sum(cat_recurrences_by_cancer_type$n_vte_recurrence) ==
-#     # Count non-NA 
-#     sum(!is.na(VTE_data$tu_1st_rec_vte_from_cancer_diagnosis_months), na.rm = TRUE)
-#   )
-
 cat_recurrences_by_cancer_type
 ```
 
 
 ```{r}
 # Count number of VTE episodes during study by cancer type
-cat_during_study_by_cancer_type = VTE_data %>%
+CAT_during_study_by_cancer_type = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   summarise(n_vte_during_study = sum(n_total_vte_along_study))
   
-  
-# Check all VTEs during study begins are accounted for
-# This not correct! Do it right!
-# stopifnot(
-#   sum(cat_during_study_by_cancer_type$n_vte_during_study) ==
-#     # Sum variables of time until VTE that happened after 
-#     sum(VTE_data$tu_1st_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(VTE_data$tu_2nd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(VTE_data$tu_3rd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(VTE_data$tu_4th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
-#     sum(VTE_data$tu_5th_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) -
-#     sum(VTE_data$n_total_vte_recurrence)
-#   )
-
 # Careful! Recurrences are included here!
 # We have to substract the number of recurrences calculated prior
-# cat_during_study_by_cancer_type$n_vte_during_study - cat_recurrences_by_cancer_type$n_vte_recurrence
+# CAT_during_study_by_cancer_type$n_vte_during_study - cat_recurrences_by_cancer_type$n_vte_recurrence
 
-cat_during_study_by_cancer_type
+CAT_during_study_by_cancer_type
 ```
 
 
 ```{r}
-# Put together number of episodes by moment of occurrence
-cat_moment_cancer_type = rbind(
-  t(cat_prior_or_concomitant_by_cancer_type$n_vte_prior_or_concomitant), 
-  t(cat_during_study_by_cancer_type$n_vte_during_study), 
+# Put together number of episodes by moment of occurrence in contingency table
+CAT_moment_cancer_type = rbind(
+  t(CAT_prior_or_concomitant_by_cancer_type$n_vte_prior_or_concomitant), 
+  t(CAT_during_study_by_cancer_type$n_vte_during_study), 
   t(cat_recurrences_by_cancer_type$n_vte_recurrence))
 
 # Add column and row names
-colnames(cat_moment_cancer_type) = t(cat_prior_or_concomitant_by_cancer_type)[1,]
-rownames(cat_moment_cancer_type) = c("Prior or concomitant", "Throughout study", "Recurrences")
+colnames(CAT_moment_cancer_type) = t(CAT_prior_or_concomitant_by_cancer_type)[1,]
+rownames(CAT_moment_cancer_type) = c("Prior or concomitant", "Throughout study", "Recurrences")
 
-cat_moment_cancer_type
+CAT_moment_cancer_type
 ```
+
 
 ```{r}
 # Make sure that number of VTE events and sum of all VTEs by moment and cancer type check out
-stopifnot(n_vtes_oncoth1 == sum(cat_moment_cancer_type))
-```
-
-
-```{r}
-print(paste0("The total number of episodes is: ", sum(cat_moment_cancer_type)))
+stopifnot(n_VTEs == sum(CAT_moment_cancer_type))
+print(paste0("The total number of episodes is: ", sum(CAT_moment_cancer_type)))
 ```
 
 
 ```{r}
 # Do Fisher's test to see if there is some category with significantly increased/decreased episodes
 apply(
-  cat_moment_cancer_type,
-  1,
-  function(x) fisher.test(matrix(x[-1], nrow = 2))$p.value)
+  CAT_moment_cancer_type,
+  1, # Apply to rows
+  function(x) fisher.test(matrix(x[-1], nrow = 2))$p.value) # take first 2 elements from table and do Fisher's test
 ```
 
 There are significant differences in VTE episodes depending on cancer type when thrombosis occurs prior or concomitant to cancer diagnosis and in recurrences.
+
 
 ### Number of patients
 
 ```{r}
 # Count number of VTE episodes prior or concomitant to cancer diagnosis by cancer type
-cat_prior_or_concomitant_by_cancer_type_patients = VTE_data %>%
+CAT_prior_or_concomitant_by_cancer_type_patients = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   filter(n_vte_before_entering_study > 0) %>%
   summarise(n_patients = n()) %>%
@@ -872,7 +842,7 @@ cat_prior_or_concomitant_by_cancer_type_patients = VTE_data %>%
 # Check all patients with VTE before study begins are accounted for
 # Incorrect code
 # stopifnot(
-#   sum(cat_prior_or_concomitant_by_cancer_type$n_vte_prior_or_concomitant) ==
+#   sum(CAT_prior_or_concomitant_by_cancer_type$n_vte_prior_or_concomitant) ==
 #     # Sum of time until VTE that happened before month zero
 #     sum(VTE_data$tu_1st_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) +
 #     sum(VTE_data$tu_2nd_vte_all_from_cancer_diagnosis_months <= 0, na.rm = TRUE) + 
@@ -880,7 +850,7 @@ cat_prior_or_concomitant_by_cancer_type_patients = VTE_data %>%
 #     sum(VTE_data$tu_4th_vte_all_from_cancer_diagnosis_months<= 0, na.rm = TRUE)
 #   )
 
-cat_prior_or_concomitant_by_cancer_type_patients
+CAT_prior_or_concomitant_by_cancer_type_patients
 ```
 
 
@@ -912,7 +882,7 @@ cat_recurrences_by_cancer_type_patients
 
 ```{r}
 # Count number of VTE episodes during study by cancer type
-cat_during_study_by_cancer_type_patients = VTE_data %>%
+CAT_during_study_by_cancer_type_patients = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   filter(n_total_vte_along_study > 0) %>% # & n_total_vte_recurrence == 0
   summarise(n_patients = n()) %>%
@@ -922,7 +892,7 @@ cat_during_study_by_cancer_type_patients = VTE_data %>%
 # Check all VTEs during study begins are accounted for
 # This not correct! Do it right!
 # stopifnot(
-#   sum(cat_during_study_by_cancer_type$n_vte_during_study) ==
+#   sum(CAT_during_study_by_cancer_type$n_vte_during_study) ==
 #     # Sum variables of time until VTE that happened after 
 #     sum(VTE_data$tu_1st_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
 #     sum(VTE_data$tu_2nd_vte_all_from_cancer_diagnosis_months > 0, na.rm = TRUE) +
@@ -934,30 +904,30 @@ cat_during_study_by_cancer_type_patients = VTE_data %>%
 
 # Careful! Recurrences are included here!
 # We have to substract the number of recurrences calculated prior
-cat_during_study_by_cancer_type_patients$n_patients = cat_during_study_by_cancer_type_patients$n_patients - cat_recurrences_by_cancer_type_patients$n_patients
+CAT_during_study_by_cancer_type_patients$n_patients = CAT_during_study_by_cancer_type_patients$n_patients - cat_recurrences_by_cancer_type_patients$n_patients
 
-cat_during_study_by_cancer_type_patients
+CAT_during_study_by_cancer_type_patients
 ```
 
 
 ```{r}
 # Put together number of episodes by moment of occurrence
-cat_moment_cancer_type_patients = rbind(
-  t(cat_prior_or_concomitant_by_cancer_type_patients$n_patients), 
-  t(cat_during_study_by_cancer_type_patients$n_patients), 
+CAT_moment_cancer_type_patients = rbind(
+  t(CAT_prior_or_concomitant_by_cancer_type_patients$n_patients), 
+  t(CAT_during_study_by_cancer_type_patients$n_patients), 
   t(cat_recurrences_by_cancer_type_patients$n_patients))
 
 # Add column and row names
-colnames(cat_moment_cancer_type_patients) = t(cat_prior_or_concomitant_by_cancer_type)[1,]
-rownames(cat_moment_cancer_type_patients) = c("Prior or concomitant", "Throughout study", "Recurrences")
+colnames(CAT_moment_cancer_type_patients) = t(CAT_prior_or_concomitant_by_cancer_type)[1,]
+rownames(CAT_moment_cancer_type_patients) = c("Prior or concomitant", "Throughout study", "Recurrences")
 
-cat_moment_cancer_type_patients
+CAT_moment_cancer_type_patients
 ```
 
 
 ```{r}
 # Make sure that number of VTE events and sum of all VTEs by moment and cancer type check out
-stopifnot(n_patients_vte == sum(cat_moment_cancer_type_patients))
+stopifnot(n_patients_vte == sum(CAT_moment_cancer_type_patients))
 ```
 
 #### Symptomatology of VTE episodes according to cancer type
@@ -969,9 +939,9 @@ stopifnot(n_patients_vte == sum(cat_moment_cancer_type_patients))
 # Create dataframe from contingency table with as many observations as VTE types per moment of detection 
 # This will be used to inspect differences in proportions with ggstatsplot library
 x <- c()
-for (row in rownames(cat_moment_cancer_type)) {
-  for (col in colnames(cat_moment_cancer_type)) {
-    x <- rbind(x, matrix(rep(c(row, col), cat_moment_cancer_type[row, col]), ncol = 2, byrow = TRUE))
+for (row in rownames(CAT_moment_cancer_type)) {
+  for (col in colnames(CAT_moment_cancer_type)) {
+    x <- rbind(x, matrix(rep(c(row, col), CAT_moment_cancer_type[row, col]), ncol = 2, byrow = TRUE))
   }
 }
 df2 <- as.data.frame(x)
