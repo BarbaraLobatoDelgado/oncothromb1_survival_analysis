@@ -991,7 +991,8 @@ VTE_location_by_cancer_type = VTE_location %>%
     SVT = n_total_svt_all, 
     PE = n_total_pte_all, 
     VT= n_total_visceral_thromb_all
-    )
+    ) %>%
+  column_to_rownames("primary_tumor_simplified")
 
 # Check that all VTE events have been accounted for
 stopifnot(
@@ -1020,18 +1021,10 @@ rm(x)
 
 ```{r}
 ggbarstats(
-  df_cancer_type_vte_type, cancer_type, vte_type
+  VTE_location_by_cancer_type_longer, cancer_type, vte_type
 )
 ```
 
-
-```{r}
-#test <- fisher.test(table(df_cancer_type_vte_type))
-
-ggbarstats(
-  df_cancer_type_vte_type, vte_type, cancer_type
-)
-```
 
 ```{r}
 # # Reshape the data into a longer format
