@@ -748,7 +748,7 @@ ggplot(
 ```
 
 
-## Moment when CAT appears according to cancer type 
+## Moment of CAT diagnosis by cancer type 
 
 ```{r}
 # Count number of VTE episodes prior or concomitant to cancer diagnosis by cancer type
@@ -940,7 +940,7 @@ for (row in rownames(CAT_moment_cancer_type)) {
   }
 }
 CAT_moment_cancer_type_longer <- as.data.frame(x)
-colnames(df2) <- c("vte_type", "Cancer_type")
+colnames(CAT_moment_cancer_type_longer) <- c("vte_type", "Cancer_type")
 CAT_moment_cancer_type_longer
 rm(x)
 ```
@@ -957,11 +957,10 @@ ggbarstats(
   proportion.test = TRUE,
   results.subtitle = TRUE, 
   bf.message = FALSE,
-  results.subtitle = TRUE,
   title = "CAT moment of diagnosis by cancer type", 
   legend.title = "",
-  xlab = "Cancer type", 
-  ylab = "% of VTEs", 
+  xlab = "Moment of VTE diagnosis", 
+  ylab = "% of VTEs by cancer type", 
   palette = "Set2"
   )
 
@@ -977,25 +976,13 @@ ggsave(
 
 Pancreatic cancer patients show by far the highest proportion of VTEs detected prior or concomitant to cancer diagnosis. This type is also responsible for the most part of VTE recurrences. However, it is colorectal cancer the one that showed the highest number of VTEs during the observation period of the study. 
 
-#### Symptomatology of VTE episodes according to cancer type
 
-
-
+## VTE location by cancer type
 
 ```{r}
-# Get information on VTE types by location and cancer type
-# %<>%
-# 
-# yy = left_join(
-#   VTE_location, 
-#   VTE_symptomatology_count, 
-#   by = c("id", "primary_tumor_simplified", "n_all_vte")
-#   ) # %>%
-  
-cancer_vte_loc = VTE_location %>%
-  select(c(primary_tumor_simplified, starts_with("n_total_")))
-
-cancer_vte_loc %<>%
+# Get VTE location by cancer type
+VTE_location_by_cancer_type = VTE_location %>%
+  select(c(primary_tumor_simplified, starts_with("n_total_"))) %>%
   group_by(primary_tumor_simplified) %>%
   summarise(across(starts_with("n_total_"), sum)) %>%
   rename(
@@ -1006,10 +993,9 @@ cancer_vte_loc %<>%
     VT= n_total_visceral_thromb_all
     )
 
-
 # Check that all VTE events have been accounted for
 stopifnot(
-  n_vtes_oncoth1 == cancer_vte_loc %>%
+  n_VTEs == VTE_location_by_cancer_type %>%
   select_if(is.numeric) %>%
   summarise(across(everything(), sum, na.rm = TRUE)) %>%
   rowSums()
@@ -1101,13 +1087,6 @@ patients_vte_loc_combination_cancer = patients_vte_loc_sympt_cancer_type %>%
 # print(sum(patients_vte_loc_combination_cancer$n))
 
 stopifnot(sum(patients_vte_loc_combination_cancer$n) + 1 == 88)
-```
-
-
-
-
-```{r}
-aa
 ```
 
 
