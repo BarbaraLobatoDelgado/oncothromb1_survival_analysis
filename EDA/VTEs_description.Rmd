@@ -63,8 +63,8 @@ rm(obj)
 
 ```{r}
 # Get number of patients with VTE
-n_patients_vte = unname(table(oncoth1$data$patient_group)[1])
-print(n_patients_vte)
+n_patients_VTE = unname(table(oncoth1$data$patient_group)[1])
+print(n_patients_VTE)
 ```
 
 
@@ -102,7 +102,7 @@ VTE_data = oncoth1$data %>%
 
 ```{r}
 # Check that the number of patients with VTE and df dimensions check out
-stopifnot(dim(VTE_data)[1] == n_patients_vte)
+stopifnot(dim(VTE_data)[1] == n_patients_VTE)
 ```
 
 
@@ -224,7 +224,7 @@ patients_with_CAT_by_month = VTE_data %>%
   rename(month_VTE_occurrence = tu_1st_vte_all_from_cancer_diagnosis_months) %>%
   # Count VTE ocurrences each month
   count(month_VTE_occurrence) %>%
-  mutate(percentage = round(n/n_patients_vte, digits = 2))
+  mutate(percentage = round(n/n_patients_VTE, digits = 2))
 ```
 
 
@@ -492,7 +492,7 @@ summary_n_patients_with_VTE_location = VTE_location %>%
   filter(freq_abs != 0)
 
 # Check that there is 88 patients accounted for
-stopifnot(sum(summary_n_patients_with_VTE_location$freq_abs) == n_patients_vte)
+stopifnot(sum(summary_n_patients_with_VTE_location$freq_abs) == n_patients_VTE)
 ```
 
 
@@ -678,22 +678,6 @@ There is an statistically significant difference in proportion of incidental and
 # Create dataframe from contingency table with as many observations as VTE types per cancer
 # This will be passed to ggstatsplot library
 VTE_sympt_data_longer = contigency_table2df_longer(contigency_table_VTE_symptomatology_by_cancer_type)
-```
-
-
-
-```{r}
-# # Create dataframe from contingency table with as many observations as VTE types per cancer
-# # This will be passed to ggstatsplot library
-# x <- c()
-# for (row in rownames(contigency_table_VTE_symptomatology_by_cancer_type)) {
-#   for (col in colnames(contigency_table_VTE_symptomatology_by_cancer_type)) {
-#     x <- rbind(x, matrix(rep(c(row, col), contigency_table_VTE_symptomatology_by_cancer_type[row, col]), ncol = 2, byrow = TRUE))
-#   }
-# }
-# VTE_sympt_data_longer <- as.data.frame(x)
-# colnames(VTE_sympt_data_longer) <- c("cancer_type", "vte_type")
-# rm(x)
 ```
 
 
@@ -957,7 +941,7 @@ CAT_moment_cancer_type_patients
 
 ```{r}
 # Make sure that number of VTE events and sum of all VTEs by moment and cancer type check out
-stopifnot(n_patients_vte == sum(CAT_moment_cancer_type_patients))
+stopifnot(n_patients_VTE == sum(CAT_moment_cancer_type_patients))
 ```
 
 
@@ -965,23 +949,6 @@ stopifnot(n_patients_vte == sum(CAT_moment_cancer_type_patients))
 # Create dataframe from contingency table with as many observations as VTE types per moment of detection 
 # This will be used to inspect differences in proportions with ggstatsplot library
 CAT_moment_cancer_type_longer <- contigency_table2df_longer(CAT_moment_cancer_type, column_names = c("vte_type", "Cancer_type"))
-```
-
-
-
-```{r}
-# # Create dataframe from contingency table with as many observations as VTE types per moment of detection 
-# # This will be used to inspect differences in proportions with ggstatsplot library
-# x <- c()
-# for (row in rownames(CAT_moment_cancer_type)) {
-#   for (col in colnames(CAT_moment_cancer_type)) {
-#     x <- rbind(x, matrix(rep(c(row, col), CAT_moment_cancer_type[row, col]), ncol = 2, byrow = TRUE))
-#   }
-# }
-# CAT_moment_cancer_type_longer <- as.data.frame(x)
-# colnames(CAT_moment_cancer_type_longer) <- c("vte_type", "Cancer_type")
-# CAT_moment_cancer_type_longer
-# rm(x)
 ```
 
 
@@ -1066,7 +1033,6 @@ ggbarstats(
   ylab = "% of VTEs by cancer type", 
   palette = "Set2"
   )
-
 
 # Save plot
 ggsave(
