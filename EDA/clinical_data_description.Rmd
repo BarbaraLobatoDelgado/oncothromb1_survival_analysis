@@ -39,7 +39,7 @@ pacman::p_load(
   survminer, 
   gridExtra, 
   # ggstance, 
-  # ggthemes, 
+  ggthemes,
   ggpval, 
   ggstatsplot, 
   # GGally, 
@@ -93,7 +93,7 @@ stacked_density_plot_and_boxplot = function(data_df, variable_to_plot, plot_titl
   outplot = ggplot(data = data_df, 
                     aes(x = {{variable_to_plot}}, 
                         y = -1)) + 
-    geom_boxploth(outlier.colour = "red") + 
+    geom_boxplot(outlier.colour = "red") + 
     stat_boxplot(geom = "errorbar") +
     geom_density(aes(x = {{variable_to_plot}}, 
                      y = stat(scaled)), 
@@ -827,49 +827,6 @@ for (variable in categorical_variables[1:79]) {
 }
 
 ```
-
-
-```{r}
-#myplots <- list()  # new empty list
-#for (i in 1:4) {
- #   p1 <- eval(substitute(
-  #      ggplot(data=data.frame(data2),
-   #            aes(x=data2[ ,i])) + 
-    #      geom_histogram(fill="lightgreen") +
-     #     xlab(colnames(data2)[ i]), list(i = i)))
-    #print(i)
-    #print(p1)
-    #myplots[[i]] <- p1  # add each plot into plot list
-#}
-#multiplot(plotlist = myplots, cols = 4)
-```
-
-
-
-## Correlation plot of blood test results
-
-The blood test results should not be taken seriously because for many patients the blood extraction happened after VTE event. 
-
-```{r}
-# Blood test results
-# ggpairs(
-#   data = oncoth1_data, 
-#   columns = c(471, 473, 475, 477, 479, 481, 483, 40, 485, 44)
-#   )
-```
-
-```{r}
-# psych::corPlot(oncoth1_data[, c(471, 473, 475, 477, 479, 481, 483, 40, 485, 44)])
-```
-
-- Albumin and age, hemoglobin, leukocytes, platelets, INR and alkaline phosphatase are positively correlated.  
-- Alkaline phosphatase and bilirrubin are positively correlated. 
-- Bilirubin is positively correlated to INR.  
-- aPTT and aPTT ratio are (obviously) positively correlated.  
-- Leukocytes and platelets are positively correlated.  
-- Alkaline phosphatase and INR are positively correlated.  
-- BMI and creatinine are slightly positively correlated.  
-
 
 ## Correlation plot of comorbidities
 
