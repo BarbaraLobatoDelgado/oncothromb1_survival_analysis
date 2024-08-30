@@ -52,6 +52,8 @@ pacman::p_load(
 
 ```{r}
 # Custom functions
+
+# Run Shapiro-Wilks test on multiple variables
 shapiro_test_summary <- function(data, columns) {
   results <- list()
   
@@ -68,7 +70,7 @@ shapiro_test_summary <- function(data, columns) {
   return(results)
 }
 
-
+# Run Kolmogorov-Smirnov test on multiple variables
 lillie_test_summary <- function(data, columns) {
   results <- list()
   
@@ -147,68 +149,26 @@ for (col in names(shapiro_results)) {
 
 ```{r}
 # Run Shapiro-Wilks normality test 
-shapiro_results <- shapiro_test_summary(oncoth1_data, columns_to_test)
+lillie_results <- lillie_test_summary(oncoth1_data, columns_to_test)
 
 # Print the results
-for (col in names(shapiro_results)) {
-  print("Shapiro-Wilk normality test")
-  cat(col, ":", shapiro_results[[col]]$normality, "(p-value =", shapiro_results[[col]]$p_value, ")\n")
+for (col in names(lillie_results)) {
+  print("Lilliefors (Kolmogorov-Smirnov) normality test")
+  cat(col, ":", lillie_results[[col]]$normality, "(p-value =", lillie_results[[col]]$p_value, ")\n")
 }
 ```
-
-
-
-```{r}
-nortest::lillie.test(oncoth1_data$age_when_cancer_dx) # Normally distributed
-nortest::lillie.test(oncoth1_data$weight) # Not normally distributed
-nortest::lillie.test(oncoth1_data$height) # Not normally distributed
-nortest::lillie.test(oncoth1_data$body_surface_area) # Not normally distributed
-nortest::lillie.test(oncoth1_data$bmi_value) # Not normally distributed
-nortest::lillie.test(oncoth1_data$albumin) # Not normally distributed
-#nortest::lillie.test(oncoth1_data$aptt)
-nortest::lillie.test(oncoth1_data$aptt_ratio) # Not normally distributed
-nortest::lillie.test(oncoth1_data$bilirubin) # Not normally distributed
-nortest::lillie.test(oncoth1_data$creatinine) # Not normally distributed
-nortest::lillie.test(oncoth1_data$alkaline_phosphatase) # Not normally distributed
-nortest::lillie.test(oncoth1_data$hemoglobin) # Not normally distributed
-nortest::lillie.test(oncoth1_data$inr) # Not normally distributed
-nortest::lillie.test(oncoth1_data$leukocytes) # Not normally distributed
-nortest::lillie.test(oncoth1_data$platelets) # Not normally distributed
-```
-
-
-### Transformation into normally distributed data
-
-The effect of non-normality is generally small for measures that rely on the center of the distribution, like means or regression weights, but it could be substantial for estimates like a variance or a percentile. In general, normal imputations appear to be robust against violations of normality.
-
-```{r}
-shapiro.test(oncoth1_data$age_when_cancer_dx) # Normally distributed
-shapiro.test(log10(oncoth1_data$weight)) # Normally distributed
-shapiro.test(sqrt(oncoth1_data$height)) # Not normally distributed
-shapiro.test(oncoth1_data$body_surface_area) # Not normally distributed
-shapiro.test(log10(oncoth1_data$bmi_value)) # Not normally distributed
-shapiro.test(oncoth1_data$albumin) # Not normally distributed
-#shapiro.test(oncoth1_data$aptt)
-shapiro.test(oncoth1_data$aptt_ratio) # Not normally distributed
-shapiro.test(oncoth1_data$bilirubin) # Not normally distributed
-shapiro.test(oncoth1_data$creatinine) # Not normally distributed
-shapiro.test(oncoth1_data$alkaline_phosphatase) # Not normally distributed
-shapiro.test(oncoth1_data$hemoglobin) # Normally distributed
-shapiro.test(oncoth1_data$inr) # Not normally distributed
-shapiro.test(oncoth1_data$leukocytes) # Not normally distributed
-shapiro.test(oncoth1_data$platelets) # Not normally distributed
-```
-
 
 ## Missing values' proportion
 
 
 ```{r}
-n_var_miss(oncoth1_data)
+print(paste("There are", n_var_miss(oncoth1_data), "variables with missing data."))
 ```
 
 
 ```{r, warning=FALSE, fig.height=8, fig.width=7}
+# Visual inspection of proportion of missing values
+# Leave out dates and other columns with a lot of NAs for patients w/o VTE
 oncoth1_data %>%
   select(!c(n_appointment_patient_became_case, 
             patient_left_study, 
@@ -229,11 +189,12 @@ oncoth1_data %>%
   select(!ends_with("_recurrence")) %>%
   select_if( ~ any(is.na(.))) %>%
   gg_miss_var(., show_pct = TRUE)
-
 ```
 
 
 ```{r fig.height=8}
+# Visual inspection of proportion of missing values
+# Leave out dates and other columns with a lot of NAs for patients w/o VTE
 gg_miss_fct(
   oncoth1_data %>%
   select(!contains("reason")) %>%
