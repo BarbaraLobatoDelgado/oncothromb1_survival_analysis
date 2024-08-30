@@ -1,0 +1,893 @@
+---
+title: 'Exploratory Data Analysis of clinical data from ONCOTHROMB12-01 cohort study'
+author: "Bárbara Lobato Delgado"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+
+```{r}
+# Set options for report generation
+knitr::opts_chunk$set(
+ fig.width = 6,
+ fig.asp = 0.8,
+ out.width = "80%"
+)
+```
+
+
+```{r}
+# Deactivate scientific notation
+options(scipen=999)
+```
+
+
+```{r, message=FALSE}
+# Load packages
+pacman::p_load(
+  rlang, 
+  an9elproject, 
+  an9elversions, 
+  magrittr, 
+  tidyverse, 
+  lubridate,
+  naniar, 
+  mice,
+  survival, 
+  survminer, 
+  gridExtra, 
+  # ggstance, 
+  # ggthemes, 
+  ggpval, 
+  ggstatsplot, 
+  # GGally, 
+  install = FALSE, update = FALSE
+  )
+
+# source("http://peterhaschke.com/Code/multiplot.R") #load multiplot function
+```
+
+
+```{r}
+# Custom functions
+shapiro_test_summary <- function(data, columns) {
+  results <- list()
+  
+  for (col in columns) {
+    test_result <- shapiro.test(data[[col]])
+    is_normal <- ifelse(test_result$p.value > 0.05, "Normally distributed", "Not normally distributed")
+    
+    results[[col]] <- list(
+      p_value = test_result$p.value,
+      normality = is_normal
+    )
+  }
+  
+  return(results)
+}
+
+
+```
+
+
+# Load data
+
+```{r}
+# Load database
+# oncoth1 = get_project("oncothr1", version = "0.0.8003")
+load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8003")
+oncoth1 = obj
+rm(obj)
+```
+
+
+```{r}
+# Get data slot
+oncoth1_data = oncoth1$data
+```
+
+
+# Exploratory Data Analysis (EDA) of clinical factors
+
+## Check normality in continous variables
+
+https://stats.stackexchange.com/questions/32168/how-important-is-it-to-transform-variable-for-cox-proportional-hazards
+
+
+```{r}
+# Example usage with your specific data
+columns_to_test <- c(
+  "age_when_cancer_dx", 
+  "weight", 
+  "height", 
+  "body_surface_area", 
+  "bmi_value", 
+  "albumin", 
+  "aptt_ratio", 
+  "bilirubin", 
+  "creatinine", 
+  "alkaline_phosphatase", 
+  "hemoglobin", 
+  "inr", 
+  "leukocytes", 
+  "platelets"
+)
+
+# Call the function
+shapiro_results <- shapiro_test_summary(oncoth1_data, columns_to_test)
+
+# Print the results
+for (col in names(shapiro_results)) {
+  cat(col, ":", shapiro_results[[col]]$normality, "(p-value =", shapiro_results[[col]]$p_value, ")\n")
+}
+```
+
+
+```{r}
+shapiro.test(oncoth1_data$age_when_cancer_dx) # Normally distributed
+shapiro.test(oncoth1_data$weight) # Not normally distributed
+shapiro.test(oncoth1_data$height) # Not normally distributed
+shapiro.test(oncoth1_data$body_surface_area) # Not normally distributed
+shapiro.test(oncoth1_data$bmi_value) # Not normally distributed
+shapiro.test(oncoth1_data$albumin) # Not normally distributed
+#shapiro.test(oncoth1_data$aptt)
+shapiro.test(oncoth1_data$aptt_ratio) # Not normally distributed
+shapiro.test(oncoth1_data$bilirubin) # Not normally distributed
+shapiro.test(oncoth1_data$creatinine) # Not normally distributed
+shapiro.test(oncoth1_data$alkaline_phosphatase) # Not normally distributed
+shapiro.test(oncoth1_data$hemoglobin) # Normally distributed
+shapiro.test(oncoth1_data$inr) # Not normally distributed
+shapiro.test(oncoth1_data$leukocytes) # Not normally distributed
+shapiro.test(oncoth1_data$platelets) # Not normally distributed
+```
+
+
+```{r}
+nortest::lillie.test(oncoth1_data$age_when_cancer_dx) # Normally distributed
+nortest::lillie.test(oncoth1_data$weight) # Not normally distributed
+nortest::lillie.test(oncoth1_data$height) # Not normally distributed
+nortest::lillie.test(oncoth1_data$body_surface_area) # Not normally distributed
+nortest::lillie.test(oncoth1_data$bmi_value) # Not normally distributed
+nortest::lillie.test(oncoth1_data$albumin) # Not normally distributed
+#nortest::lillie.test(oncoth1_data$aptt)
+nortest::lillie.test(oncoth1_data$aptt_ratio) # Not normally distributed
+nortest::lillie.test(oncoth1_data$bilirubin) # Not normally distributed
+nortest::lillie.test(oncoth1_data$creatinine) # Not normally distributed
+nortest::lillie.test(oncoth1_data$alkaline_phosphatase) # Not normally distributed
+nortest::lillie.test(oncoth1_data$hemoglobin) # Not normally distributed
+nortest::lillie.test(oncoth1_data$inr) # Not normally distributed
+nortest::lillie.test(oncoth1_data$leukocytes) # Not normally distributed
+nortest::lillie.test(oncoth1_data$platelets) # Not normally distributed
+```
+
+
+### Transformation into normally distributed data
+
+The effect of non-normality is generally small for measures that rely on the center of the distribution, like means or regression weights, but it could be substantial for estimates like a variance or a percentile. In general, normal imputations appear to be robust against violations of normality.
+
+```{r}
+shapiro.test(oncoth1_data$age_when_cancer_dx) # Normally distributed
+shapiro.test(log10(oncoth1_data$weight)) # Normally distributed
+shapiro.test(sqrt(oncoth1_data$height)) # Not normally distributed
+shapiro.test(oncoth1_data$body_surface_area) # Not normally distributed
+shapiro.test(log10(oncoth1_data$bmi_value)) # Not normally distributed
+shapiro.test(oncoth1_data$albumin) # Not normally distributed
+#shapiro.test(oncoth1_data$aptt)
+shapiro.test(oncoth1_data$aptt_ratio) # Not normally distributed
+shapiro.test(oncoth1_data$bilirubin) # Not normally distributed
+shapiro.test(oncoth1_data$creatinine) # Not normally distributed
+shapiro.test(oncoth1_data$alkaline_phosphatase) # Not normally distributed
+shapiro.test(oncoth1_data$hemoglobin) # Normally distributed
+shapiro.test(oncoth1_data$inr) # Not normally distributed
+shapiro.test(oncoth1_data$leukocytes) # Not normally distributed
+shapiro.test(oncoth1_data$platelets) # Not normally distributed
+```
+
+
+## Missing values' proportion
+
+
+```{r}
+n_var_miss(oncoth1_data)
+```
+
+
+```{r, warning=FALSE, fig.height=8, fig.width=7}
+oncoth1_data %>%
+  select(!c(n_appointment_patient_became_case, 
+            patient_left_study, 
+            anticoag_tx_lmwh_dosage, 
+            anticoag_tx_vte_drugs, 
+            vte_before_entering_study)) %>%
+  select(!contains("reason")) %>%
+  select(!contains("date")) %>%
+  select(!ends_with("_levels")) %>%
+  select(!starts_with("other_thromb_")) %>%
+  select(!starts_with("type_")) %>%
+  select(!starts_with("cancer_concomitant_")) %>%
+  select(!starts_with("eval_")) %>%
+  select(!starts_with("rec_")) %>%
+  select(!starts_with("tu_")) %>%
+  select(!ends_with("_prior_study")) %>%
+  select(!ends_with("_along_study")) %>%
+  select(!ends_with("_recurrence")) %>%
+  select_if( ~ any(is.na(.))) %>%
+  gg_miss_var(., show_pct = TRUE)
+
+```
+
+
+```{r fig.height=8}
+gg_miss_fct(
+  oncoth1_data %>%
+  select(!contains("reason")) %>%
+  select(!contains("date")) %>%
+  select(!ends_with("_levels")) %>%
+  select(!starts_with("other_thromb_")) %>%
+  select(!starts_with("type_")) %>%
+  select(!starts_with("cancer_concomitant_")) %>%
+  select(!starts_with("eval_")) %>%
+  select(!starts_with("rec_")) %>%
+  select(!starts_with("tu_")) %>%
+  select(!ends_with("_prior_study")) %>%
+  select(!ends_with("_along_study")) %>%
+  select(!ends_with("_recurrence")),
+  fct = patient_group)
+```
+
+
+```{r}
+#sumtable(oncoth1[["data"]], out = "csv", file = "./out_file_sumbtable.csv")
+```
+
+
+## Univariate plots
+
+```{r}
+# Get data slot from an9leproject
+clinical_data = oncoth1_data
+```
+
+
+```{r}
+# Proportion of patient with VTE vs no VTE
+fancy_barplot_percentage(clinical_data, patient_group)
+```
+
+
+```{r}
+# Age and VTE
+ggbetweenstats(
+  data = clinical_data,
+  x = patient_group,
+  y = age_when_cancer_dx,
+  type = "barplot",
+  messages = FALSE  # Set to TRUE to display additional messages
+)
+```
+
+
+```{r}
+ggpiestats(
+  data = clinical_data,
+  x = gender,
+  y = patient_group,
+  # palette = "Royal1",
+  # title = "Dataset: Motor Trend Car Road Tests",
+  # legend.title = "Sex"
+)
+```
+
+
+```{r}
+# fancy_barplot_percentage(clinical_data, ethnicity)
+
+ggpiestats(
+  data = clinical_data,
+  x = ethnicity,
+  y = patient_group,
+  type = "nonparametric"
+  # palette = "Royal1",
+  # title = "Dataset: Motor Trend Car Road Tests",
+  # legend.title = "Sex"
+)
+```
+
+```{r}
+# fancy_barplot_percentage(clinical_data, menopausal_status)
+
+ggpiestats(
+  data = clinical_data,
+  x = menopausal_status,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+The 64.95% of the data in this variable (NAs) corresponds to men. 
+
+https://aosmith.rbind.io/2019/05/13/small-multiples-plot/
+
+
+```{r}
+hist_plot = ggplot(clinical_data, aes(x = age_when_cancer_dx)) + 
+  geom_histogram(aes(y = (..count..)/sum(..count..)), 
+                 breaks = seq(from = 25, to = 100, by = 5)) + 
+  xlab("") + 
+  ylab("Proportion") + 
+  scale_x_continuous(breaks = seq(from = 20, to = 100, by = 10))
+
+boxplot = ggplot(clinical_data, aes(x = age_when_cancer_dx)) + 
+  geom_boxplot() + 
+  theme(axis.text.y = element_blank(), 
+        axis.ticks = element_blank(), 
+        plot.margin = unit(c(0.0001, 0.25, 1, 1), "cm")) + 
+  scale_x_continuous(breaks = seq(from = 20, to = 100, by = 10))
+
+
+ggpubr::ggarrange(hist_plot, boxplot, 
+                  ncol = 1, nrow = 2, 
+                  #heights = c(1, 0.5),
+                  align = "v")
+```
+
+
+```{r}
+# fancy_barplot_percentage(clinical_data, bmi_category)
+
+ggpiestats(
+  data = clinical_data,
+  x = bmi_category,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+```{r}
+# fancy_barplot_percentage(clinical_data, performance_status_category) + 
+#   theme(legend.position = "none", 
+#         legend.title = element_blank(), 
+#         legend.background = element_blank(),
+#         legend.text=element_text(size = 10)) 
+
+ggpiestats(
+  data = clinical_data,
+  x = performance_status_category,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+```{r}
+# Personal background by VTE
+ggpiestats(
+  data = clinical_data,
+  x = personal_background,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+```{r}
+# Major surgery in medical history by VTE
+ggpiestats(
+  data = clinical_data,
+  x = major_surgery_in_medical_history,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+
+```{r}
+# fancy_barplot_percentage(clinical_data, hormone_therapy)
+
+ggpiestats(
+  data = clinical_data,
+  x = hormone_therapy,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+
+```{r}
+# fancy_barplot_percentage(clinical_data, pregnancy)
+
+ggpiestats(
+  data = clinical_data,
+  x = pregnancy,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+```{r}
+# fancy_barplot_percentage(clinical_data, oral_contraceptive_tx)
+
+ggpiestats(
+  data = clinical_data,
+  x = oral_contraceptive_tx,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+
+```{r}
+# fancy_barplot_percentage(clinical_data, diabetes_mellitus)
+
+ggpiestats(
+  data = clinical_data,
+  x = diabetes_mellitus,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, dyslipidemia)
+```
+
+
+```{r}
+fancy_barplot_percentage(clinical_data, tobacco_use)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, copd)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, arterial_hypertension)
+```
+
+
+```{r}
+fancy_barplot_percentage(clinical_data, chronic_cardiac_insufficiency)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, renal_insufficiency)
+```
+
+
+```{r}
+fancy_barplot_percentage(clinical_data, previous_onco_surgery) + 
+  xlab("Previous Oncologic Surgery")
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, primary_tumor) + 
+  theme(axis.text.x = element_text(size = 9))
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, tumor_surgically_removed)
+```
+
+
+```{r}
+fancy_barplot_percentage(clinical_data, progression_according_to_clinical_stage) + 
+  theme(axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(), 
+        legend.position = c(0.5, 0.8), 
+        legend.title = element_blank(), 
+        legend.background = element_blank(),
+        legend.text=element_text(size = 11))
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, tnm_stage) 
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, t_stage)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, n_stage)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, m_stage)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, histology_type)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, mucinous_histology)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, grade_histological_differentiation)
+```
+
+
+```{r}
+# fancy_barplot_percentage(clinical_data, metastasis_site) +
+#   scale_x_discrete(limits = c("No metastasis", 
+#                               "Liver", 
+#                               "Peritoneum", 
+#                               "Lung", 
+#                               "Bones", 
+#                               "Adrenal glands",
+#                               "Lymph nodes", 
+#                               "Brain", 
+#                               "Pleura", 
+#                               "Unknown"))
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, catheter_device)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, venous_insufficiency)
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, family_background_vte_all_relatives) +
+  xlab("Family background - VTE") + 
+  scale_x_discrete(limits = c("No relatives", 
+                              "Father", 
+                              "Mother", 
+                              "Siblings",
+                              "Others",
+                              "Offspring", 
+                              "Two relatives"))
+```
+
+
+```{r}
+fancy_barplot_percentage(clinical_data, previous_vte)
+```
+
+
+```{r}
+fancy_barplot_percentage(clinical_data, previous_ate_type) +
+  xlab("Type of Previous ATE") + 
+  scale_x_discrete(limits = c("No ATE", 
+                              "Myocardial infarction", 
+                              "CVA", 
+                              "PAD", 
+                              "TIA", 
+                              "Other"))
+```
+```{r}
+fancy_barplot_percentage(clinical_data, anticoag_tx_vte) + 
+  xlab("Anticoagulant treatment due to previous VTE")
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, anticoag_tx_reason) + 
+  xlab("Reason of prescription of anticoagulants") + 
+  scale_x_discrete(limits = c("VTE", 
+                              "Cardiopathy", 
+                              "Others", 
+                              NA))
+```
+```{r}
+fancy_barplot_percentage(clinical_data, anticoag_tx_vte_drugs) + 
+  xlab("Drugs used in anticoagulant treatments") + 
+  scale_x_discrete(limits = c("LMWH", 
+                              "Vit K antagonists", 
+                              "Dabigatran", 
+                              NA))
+```
+
+```{r}
+fancy_barplot_percentage(clinical_data, anticoag_tx_currently)
+```
+
+
+```{r}
+fancy_barplot_percentage(clinical_data, cancer_diagnosed_due_to_thrombosis)
+```
+
+
+```{r}
+fancy_barplot_percentage(clinical_data, vte_dx_during_cancer_follow_up)
+```
+
+```{r}
+stacked_density_plot_and_boxplot(clinical_data, height, "Height")
+```
+
+
+## Bivariate plots (no VTE *vs* VTE)
+
+Use Phi coefficient to see correlation between two categorical variables, both of them adopting binary values. `psych::phi()`
+
+In case the categorical variables have more than 2 unique values, use Crammer's V. `questionr::cramer.v()`
+
+
+```{r}
+#categorical_variables = c(variable.names(Filter(f = is.character, x = clinical_data)), 
+                          #variable.names(Filter(f = is.factor, x = clinical_data)))
+
+categorical_variables = c(
+  "gender", 
+  "ethnicity", 
+  "menopausal_status", 
+  "bmi_category", 
+  "performance_status_category", 
+  "leukocytosis", 
+  "thrombocytosis", 
+  "low_hemoglobin", 
+  "personal_background", 
+  # "other_personal_background", 
+  "major_surgery_in_medical_history", 
+  "hormone_therapy", 
+  "pregnancy", 
+  "oral_contraceptive_tx", 
+  "diabetes_mellitus", 
+  "dyslipidemia", 
+  "tobacco_use", 
+  "copd", 
+  "arterial_hypertension", 
+  "chronic_cardiac_insufficiency", 
+  "renal_insufficiency", 
+  "previous_onco_surgery", 
+  "primary_tumor_simplified", 
+  "tumor_surgically_removed", 
+  "progression_according_to_clinical_stage", 
+  "tnm_stage", 
+  "tnm_stage_detailed", 
+  "tnm_stage_grouped", 
+  "t_stage", 
+  "n_stage", 
+  "m_stage", 
+  "histology_type", 
+  "mucinous_histology", 
+  "grade_histological_differentiation", 
+  "metastasis_dx", 
+  "metastasis_adrenal_glands", 
+  "metastasis_bones",                             
+  "metastasis_brain",                               
+  "metastasis_liver",                               
+  "metastasis_lung",                                
+  "metastasis_lymph_nodes",                         
+  "metastasis_peritoneum",                          
+  "metastasis_pleura",                              
+  "metastasis_skin",                                
+  "metastasis_soft_tissues",                        
+  "other_metastases",
+  "catheter_device", 
+  "krs_category",
+  "two_groups_krs", 
+  "tic_onco", 
+  "venous_insufficiency", 
+  "family_background_VTE_father",    
+  "family_background_VTE_mother",  
+  "family_background_VTE_siblings", 
+  "family_background_VTE_offspring", 
+  "family_background_VTE_other_relatives", 
+  "previous_vte", 
+  "previous_ate",
+  "cva_ate",
+  "myocardial_infarction_ate", 
+  "pad_ate", 
+  "tia_ate", 
+  "other_thromb_ate", 
+  "anticoag_tx_vte",                                
+  "anticoag_tx_vte_drugs",                          
+  "anticoag_tx_cardiopathy",
+  "anticoag_tx_other_causes", 
+  "anticoag_tx_reason", 
+  "anticoag_tx_apixaban",                           
+  "anticoag_tx_dabigatran",                         
+  "anticoag_tx_lmwh",                               
+  "anticoag_tx_lmwh_dosage",                        
+  "anticoag_tx_vit_k_antag",                        
+  "anticoag_tx_other_drugs",                        
+  "anticoag_tx_currently",                          
+  "antiaggreg_tx_cardiopathy",                      
+  "antiaggreg_tx_cva",                              
+  "antiaggreg_tx_other_causes",
+  "antiaggreg_tx_currently", 
+  "vte_before_entering_study", 
+  "cancer_associated_crt_vte", 
+  "cancer_associated_ledvt_vte", 
+  "cancer_associated_uedvt_vte", 
+  "cancer_associated_pte_vte", 
+  "cancer_associated_svt_vte", 
+  "cancer_associated_visceral_thromb_vte", 
+  "cancer_associated_other_thromb_vte"
+)
+
+```
+
+
+```{r}
+
+# Empty list to save ggbarstats plots
+ggbarstats_plots = list()
+
+for (variable in categorical_variables[1:79]) { 
+  plot_i = ggbarstats(data = clinical_data,
+                        x = patient_group,
+                        y = !!variable, 
+                        type = "nonparametric") +
+             labs(caption = NULL)
+  
+  # Print plot
+  print(plot_i)
+  
+  # Save plot in list
+  ggbarstats_plots[[variable]] = plot_i
+}
+
+```
+
+
+```{r}
+#myplots <- list()  # new empty list
+#for (i in 1:4) {
+ #   p1 <- eval(substitute(
+  #      ggplot(data=data.frame(data2),
+   #            aes(x=data2[ ,i])) + 
+    #      geom_histogram(fill="lightgreen") +
+     #     xlab(colnames(data2)[ i]), list(i = i)))
+    #print(i)
+    #print(p1)
+    #myplots[[i]] <- p1  # add each plot into plot list
+#}
+#multiplot(plotlist = myplots, cols = 4)
+```
+
+
+
+## Correlation plot of blood test results
+
+The blood test results should not be taken seriously because for many patients the blood extraction happened after VTE event. 
+
+```{r}
+# Blood test results
+# ggpairs(
+#   data = oncoth1_data, 
+#   columns = c(471, 473, 475, 477, 479, 481, 483, 40, 485, 44)
+#   )
+```
+
+```{r}
+# psych::corPlot(oncoth1_data[, c(471, 473, 475, 477, 479, 481, 483, 40, 485, 44)])
+```
+
+- Albumin and age, hemoglobin, leukocytes, platelets, INR and alkaline phosphatase are positively correlated.  
+- Alkaline phosphatase and bilirrubin are positively correlated. 
+- Bilirubin is positively correlated to INR.  
+- aPTT and aPTT ratio are (obviously) positively correlated.  
+- Leukocytes and platelets are positively correlated.  
+- Alkaline phosphatase and INR are positively correlated.  
+- BMI and creatinine are slightly positively correlated.  
+
+
+## Correlation plot of comorbidities
+
+```{r}
+# Get comorbidities features
+comordibities = clinical_data %>%
+  select(
+    diabetes_mellitus, 
+    dyslipidemia, 
+    copd, 
+    arterial_hypertension, 
+    chronic_cardiac_insufficiency,
+    renal_insufficiency, 
+    venous_insufficiency
+    ) %>%
+  mutate_all( ~ ifelse(.x == "Yes", 1, 0)) %>%
+  drop_na() %>% 
+  as.matrix()
+```
+
+
+```{r}
+# Correlation plot for comorbidities
+psych::corPlot(
+  comordibities, 
+  show.legend = TRUE, 
+  symmetric = TRUE
+  )
+```
+
+- Diabetes mellitus is positively correlated with dyslipidemia and, in a lesser degree, with arterial hypertension and cardiac insufficiency.  
+- Chronic cardiac insufficiency is positively correlated with renal insufficiency and, in a lesser extent, with venous insufficiency.  
+
+
+## Descriptive table
+
+```{r}
+oncoth1_data = oncoth1_data %>% 
+  mutate(khorana_risk_score_three_categories = case_when(
+    khorana_risk_score == 0 ~ "Low risk", 
+    khorana_risk_score == 1 ~ "Intermediate risk",
+    khorana_risk_score == 2 ~ "Intermediate risk",
+    khorana_risk_score == 3 ~ "High risk",
+    khorana_risk_score == 4 ~ "High risk",
+    khorana_risk_score == 5 ~ "High risk",
+    khorana_risk_score == NA ~ NA_character_), .after = khorana_risk_score) %>%
+  mutate(khorana_risk_score_three_categories = factor(
+    x = khorana_risk_score_three_categories, 
+    levels = c("Low risk", "Intermediate risk", "High risk"), 
+    labels = c("Low risk", "Intermediate risk", "High risk")
+  ))
+```
+
+
+```{r}
+# Select variables
+vars2select = c(
+  "patient_group",
+  "age_when_cancer_dx", 
+  "gender", 
+  "ethnicity",
+  "bmi_category",
+  "performance_status_category_corrected",
+  "n_comorbidities",
+  "arterial_hypertension",
+  "chronic_cardiac_insufficiency",
+  "diabetes_mellitus",
+  "dyslipidemia",
+  "tobacco_use",
+  "copd",
+  "renal_insufficiency", 
+  "venous_insufficiency", 
+  "hormone_therapy", 
+  "antiaggreg_tx_currently",
+  "previous_vte",
+  "previous_ate",
+  "family_background_vte",
+  "khorana_risk_score_three_categories",
+  "primary_tumor", 
+  "tnm_stage_grouped",
+  "grade_histological_differentiation",
+  "tumor_surgically_removed",
+  "catheter_device", 
+  "major_surgery_in_medical_history",
+  "n_times_recent_major_surgery_all_study",
+  "n_times_major_trauma_all_study",
+  "n_times_blood_transfusion_all_study", 
+  "n_times_immobilisation_all_study",
+  "n_times_erythropoietin_tx_all_study"
+  )
+
+oncoth1_subset = oncoth1_data %>%
+  select(all_of(vars2select)) %>%
+  mutate(across(c(
+    n_times_recent_major_surgery_all_study,
+    n_times_major_trauma_all_study,
+    n_times_blood_transfusion_all_study, 
+    n_times_immobilisation_all_study, 
+    n_times_erythropoietin_tx_all_study), ~ as.factor(.x)))
+
+# Make summary table
+oncoth1_st = arsenal::tableby(patient_group ~., data = oncoth1_subset)
+summary(oncoth1_st)
+```
+
+
+```{r}
+# Separate dataframes according to VTE/no VTE
+oncoth1_case = oncoth1_data %>%
+  filter(patient_group == "Case")
+
+oncoth1_control = oncoth1_data %>%
+  filter(patient_group == "Control")
+```
+
+
+```{r}
+# Median and quantiles according to group
+quantile(oncoth1_data$age_when_cancer_dx)
+quantile(oncoth1_case$age_when_cancer_dx)
+quantile(oncoth1_control$age_when_cancer_dx)
+```
+
+
+
+
