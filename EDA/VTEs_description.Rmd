@@ -827,7 +827,6 @@ apply(
 
 There are significant differences in VTE episodes depending on cancer type when thrombosis occurs prior or concomitant to cancer diagnosis and in recurrences.
 
-
 ### Number of patients
 
 ```{r}
@@ -856,7 +855,7 @@ CAT_prior_or_concomitant_by_cancer_type_patients
 
 ```{r}
 # Count number of VTE episodes that are recurrences by cancer type
-cat_recurrences_by_cancer_type_patients = VTE_data %>%
+CAT_recurrences_by_cancer_type_patients = VTE_data %>%
   group_by(primary_tumor_simplified) %>%
   filter(n_total_vte_recurrence > 0) %>%
   summarise(n_patients = n()) %>%
@@ -872,11 +871,11 @@ cat_recurrences_by_cancer_type_patients = VTE_data %>%
 #   )
 
 # Add row with zero for NSCLC 
-cat_recurrences_by_cancer_type_patients %<>%
+CAT_recurrences_by_cancer_type_patients %<>%
   add_row(primary_tumor_simplified = "NSCLC", n_patients = 0) %>%
   arrange(primary_tumor_simplified)
 
-cat_recurrences_by_cancer_type_patients
+CAT_recurrences_by_cancer_type_patients
 ```
 
 
@@ -904,7 +903,7 @@ CAT_during_study_by_cancer_type_patients = VTE_data %>%
 
 # Careful! Recurrences are included here!
 # We have to substract the number of recurrences calculated prior
-CAT_during_study_by_cancer_type_patients$n_patients = CAT_during_study_by_cancer_type_patients$n_patients - cat_recurrences_by_cancer_type_patients$n_patients
+CAT_during_study_by_cancer_type_patients$n_patients = CAT_during_study_by_cancer_type_patients$n_patients - CAT_recurrences_by_cancer_type_patients$n_patients
 
 CAT_during_study_by_cancer_type_patients
 ```
@@ -915,7 +914,7 @@ CAT_during_study_by_cancer_type_patients
 CAT_moment_cancer_type_patients = rbind(
   t(CAT_prior_or_concomitant_by_cancer_type_patients$n_patients), 
   t(CAT_during_study_by_cancer_type_patients$n_patients), 
-  t(cat_recurrences_by_cancer_type_patients$n_patients))
+  t(CAT_recurrences_by_cancer_type_patients$n_patients))
 
 # Add column and row names
 colnames(CAT_moment_cancer_type_patients) = t(CAT_prior_or_concomitant_by_cancer_type)[1,]
@@ -930,10 +929,6 @@ CAT_moment_cancer_type_patients
 stopifnot(n_patients_vte == sum(CAT_moment_cancer_type_patients))
 ```
 
-#### Symptomatology of VTE episodes according to cancer type
-
-
-
 
 ```{r}
 # Create dataframe from contingency table with as many observations as VTE types per moment of detection 
@@ -944,25 +939,47 @@ for (row in rownames(CAT_moment_cancer_type)) {
     x <- rbind(x, matrix(rep(c(row, col), CAT_moment_cancer_type[row, col]), ncol = 2, byrow = TRUE))
   }
 }
-df2 <- as.data.frame(x)
+CAT_moment_cancer_type_longer <- as.data.frame(x)
 colnames(df2) <- c("vte_type", "Cancer_type")
-df2
+CAT_moment_cancer_type_longer
+rm(x)
 ```
 
 
 ```{r}
-# Plot proportion of cancer types according to moment of VTE detection
+# Barplot proportion of cancer types according to moment of VTE detection and statistical tests
 ggbarstats(
-  df2, Cancer_type, vte_type,
+  data = CAT_moment_cancer_type_longer, 
+  x = Cancer_type, 
+  y = vte_type,
+  digits.perc = 1,
+  label = "both",
+  proportion.test = TRUE,
+  results.subtitle = TRUE, 
+  bf.message = FALSE,
   results.subtitle = TRUE,
-  subtitle = paste0(
-    "Fisher's exact test", ", p-value = ",
-    ifelse(test$p.value < 0.001, "< 0.001", round(test$p.value, 3))
+  title = "CAT moment of diagnosis by cancer type", 
+  legend.title = "",
+  xlab = "Cancer type", 
+  ylab = "% of VTEs", 
+  palette = "Set2"
   )
-)
+
+
+# Save plot
+ggsave(
+  filename = "../graphs/CAT_moment_by_cancer_type_stats.jpeg",
+  width = 8,
+  height = 5,
+  units = "in"
+  )
 ```
 
 Pancreatic cancer patients show by far the highest proportion of VTEs detected prior or concomitant to cancer diagnosis. This type is also responsible for the most part of VTE recurrences. However, it is colorectal cancer the one that showed the highest number of VTEs during the observation period of the study. 
+
+#### Symptomatology of VTE episodes according to cancer type
+
+
 
 
 ```{r}
