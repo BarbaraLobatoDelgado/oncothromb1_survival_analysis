@@ -87,6 +87,55 @@ lillie_test_summary <- function(data, columns) {
   return(results)
 }
 
+
+# Fancy barplot showing percentages 
+fancy_barplot_percentage = function(dataframe, xcolname) {
+  
+  outplot = ggplot(dataframe, 
+                   aes(x = {{xcolname}}, #
+                       fill = {{xcolname}})) + # 
+    geom_bar(aes(y = (..count..)/sum(..count..)), colour = "black") + 
+    geom_text(aes(label = scales::percent((..count..)/sum(..count..)), 
+                  y = (..count..)/sum(..count..)), 
+              stat = "count", 
+              vjust = -0.5) + 
+    theme_bw() +
+    theme(legend.position = "none", 
+          axis.text.x = element_text(colour = "black", size = 10), 
+          axis.text.y = element_text(colour = "black")) + 
+    scale_y_continuous(labels = scales::percent, limits = c(0, 1)) + 
+    # xlab(
+    #   str_to_title(
+    #     str_replace_all(
+    #       substitute(xcolname), pattern = "_", replacement = " "))) + 
+    ylab("%") +
+    scale_fill_brewer(palette = "Set3")
+    
+  return(outplot)
+}
+
+
+# Fancy barplot for categorical variable with controls vs cases
+fancy_barplot_ctrls_vs_cs = function (dataframe, xcolname) {
+  
+  outplot = ggplot(dataframe, aes(x = {{xcolname}}, fill = patient_group)) + 
+  geom_bar(aes(y = (..count..)/sum(..count..)), 
+           colour = "black", 
+           position = "dodge") + 
+    theme_bw() +
+    labs(fill = "Experimental group") +
+    theme(axis.text.x = element_text(colour = "black", size = 10), 
+          axis.text.y = element_text(colour = "black")) + 
+    scale_y_continuous(labels = scales::percent, limits = c(0, 1)) + 
+    xlab(
+      str_to_title(
+        str_replace_all(
+          substitute(xcolname), pattern = "_", replacement = " "))) + 
+    ylab("%") +
+    scale_fill_brewer(palette = "Set3")
+  
+  return(outplot)
+}
 ```
 
 
@@ -158,8 +207,8 @@ for (col in names(lillie_results)) {
 }
 ```
 
-## Missing values' proportion
 
+## Missing values' proportion
 
 ```{r}
 print(paste("There are", n_var_miss(oncoth1_data), "variables with missing data."))
@@ -213,88 +262,26 @@ gg_miss_fct(
 ```
 
 
-```{r}
-#sumtable(oncoth1[["data"]], out = "csv", file = "./out_file_sumbtable.csv")
-```
-
-
 ## Univariate plots
-
-```{r}
-# Get data slot from an9leproject
-clinical_data = oncoth1_data
-```
 
 
 ```{r}
 # Proportion of patient with VTE vs no VTE
-fancy_barplot_percentage(clinical_data, patient_group)
+table(oncoth1_data$patient_group, useNA = "ifany")
 ```
-
-
-```{r}
-# Age and VTE
-ggbetweenstats(
-  data = clinical_data,
-  x = patient_group,
-  y = age_when_cancer_dx,
-  type = "barplot",
-  messages = FALSE  # Set to TRUE to display additional messages
-)
-```
-
-
-```{r}
-ggpiestats(
-  data = clinical_data,
-  x = gender,
-  y = patient_group,
-  # palette = "Royal1",
-  # title = "Dataset: Motor Trend Car Road Tests",
-  # legend.title = "Sex"
-)
-```
-
-
-```{r}
-# fancy_barplot_percentage(clinical_data, ethnicity)
-
-ggpiestats(
-  data = clinical_data,
-  x = ethnicity,
-  y = patient_group,
-  type = "nonparametric"
-  # palette = "Royal1",
-  # title = "Dataset: Motor Trend Car Road Tests",
-  # legend.title = "Sex"
-)
-```
-
-```{r}
-# fancy_barplot_percentage(clinical_data, menopausal_status)
-
-ggpiestats(
-  data = clinical_data,
-  x = menopausal_status,
-  y = patient_group,
-  type = "nonparametric"
-)
-```
-
-The 64.95% of the data in this variable (NAs) corresponds to men. 
 
 https://aosmith.rbind.io/2019/05/13/small-multiples-plot/
 
 
 ```{r}
-hist_plot = ggplot(clinical_data, aes(x = age_when_cancer_dx)) + 
+hist_plot = ggplot(oncoth1_data, aes(x = age_when_cancer_dx)) + 
   geom_histogram(aes(y = (..count..)/sum(..count..)), 
                  breaks = seq(from = 25, to = 100, by = 5)) + 
   xlab("") + 
   ylab("Proportion") + 
   scale_x_continuous(breaks = seq(from = 20, to = 100, by = 10))
 
-boxplot = ggplot(clinical_data, aes(x = age_when_cancer_dx)) + 
+boxplot = ggplot(oncoth1_data, aes(x = age_when_cancer_dx)) + 
   geom_boxplot() + 
   theme(axis.text.y = element_blank(), 
         axis.ticks = element_blank(), 
@@ -310,44 +297,85 @@ ggpubr::ggarrange(hist_plot, boxplot,
 
 
 ```{r}
-# fancy_barplot_percentage(clinical_data, bmi_category)
+# Age and VTE
+ggbetweenstats(
+  data = oncoth1_data,
+  x = patient_group,
+  y = age_when_cancer_dx,
+  xlab = "Patient group",
+  ylab = "Age at cancer diagnosis",
+  type = "barplot",
+  messages = FALSE  # Set to TRUE to display additional messages
+)
+```
 
+
+```{r}
 ggpiestats(
-  data = clinical_data,
+  data = oncoth1_data,
+  x = gender,
+  y = patient_group
+)
+```
+
+
+```{r}
+ggpiestats(
+  data = oncoth1_data,
+  x = ethnicity,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+
+```{r}
+ggpiestats(
+  data = oncoth1_data,
+  x = menopausal_status,
+  y = patient_group,
+  type = "nonparametric"
+)
+```
+
+The 64.95% of the data in this variable (NAs) corresponds to men. 
+
+
+```{r}
+ggpiestats(
+  data = oncoth1_data,
   x = bmi_category,
   y = patient_group,
   type = "nonparametric"
 )
 ```
 
-```{r}
-# fancy_barplot_percentage(clinical_data, performance_status_category) + 
-#   theme(legend.position = "none", 
-#         legend.title = element_blank(), 
-#         legend.background = element_blank(),
-#         legend.text=element_text(size = 10)) 
 
+```{r}
 ggpiestats(
-  data = clinical_data,
+  data = oncoth1_data,
   x = performance_status_category,
   y = patient_group,
   type = "nonparametric"
 )
 ```
 
+
 ```{r}
 # Personal background by VTE
 ggpiestats(
-  data = clinical_data,
+  data = oncoth1_data,
   x = personal_background,
   y = patient_group,
   type = "nonparametric"
 )
 ```
+
+
 ```{r}
 # Major surgery in medical history by VTE
 ggpiestats(
-  data = clinical_data,
+  data = oncoth1_data,
   x = major_surgery_in_medical_history,
   y = patient_group,
   type = "nonparametric"
@@ -356,10 +384,8 @@ ggpiestats(
 
 
 ```{r}
-# fancy_barplot_percentage(clinical_data, hormone_therapy)
-
 ggpiestats(
-  data = clinical_data,
+  data = oncoth1_data,
   x = hormone_therapy,
   y = patient_group,
   type = "nonparametric"
@@ -368,21 +394,18 @@ ggpiestats(
 
 
 ```{r}
-# fancy_barplot_percentage(clinical_data, pregnancy)
-
 ggpiestats(
-  data = clinical_data,
+  data = oncoth1_data,
   x = pregnancy,
   y = patient_group,
   type = "nonparametric"
 )
 ```
 
-```{r}
-# fancy_barplot_percentage(clinical_data, oral_contraceptive_tx)
 
+```{r}
 ggpiestats(
-  data = clinical_data,
+  data = oncoth1_data,
   x = oral_contraceptive_tx,
   y = patient_group,
   type = "nonparametric"
@@ -391,60 +414,59 @@ ggpiestats(
 
 
 ```{r}
-# fancy_barplot_percentage(clinical_data, diabetes_mellitus)
-
 ggpiestats(
-  data = clinical_data,
+  data = oncoth1_data,
   x = diabetes_mellitus,
   y = patient_group,
   type = "nonparametric"
 )
 ```
 
+
 ```{r}
-fancy_barplot_percentage(clinical_data, dyslipidemia)
+fancy_barplot_percentage(oncoth1_data, dyslipidemia)
 ```
 
 
 ```{r}
-fancy_barplot_percentage(clinical_data, tobacco_use)
+fancy_barplot_percentage(oncoth1_data, tobacco_use)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, copd)
+fancy_barplot_percentage(oncoth1_data, copd)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, arterial_hypertension)
-```
-
-
-```{r}
-fancy_barplot_percentage(clinical_data, chronic_cardiac_insufficiency)
-```
-
-```{r}
-fancy_barplot_percentage(clinical_data, renal_insufficiency)
+fancy_barplot_percentage(oncoth1_data, arterial_hypertension)
 ```
 
 
 ```{r}
-fancy_barplot_percentage(clinical_data, previous_onco_surgery) + 
+fancy_barplot_percentage(oncoth1_data, chronic_cardiac_insufficiency)
+```
+
+```{r}
+fancy_barplot_percentage(oncoth1_data, renal_insufficiency)
+```
+
+
+```{r}
+fancy_barplot_percentage(oncoth1_data, previous_onco_surgery) + 
   xlab("Previous Oncologic Surgery")
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, primary_tumor) + 
+fancy_barplot_percentage(oncoth1_data, primary_tumor) + 
   theme(axis.text.x = element_text(size = 9))
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, tumor_surgically_removed)
+fancy_barplot_percentage(oncoth1_data, tumor_surgically_removed)
 ```
 
 
 ```{r}
-fancy_barplot_percentage(clinical_data, progression_according_to_clinical_stage) + 
+fancy_barplot_percentage(oncoth1_data, progression_according_to_clinical_stage) + 
   theme(axis.text.x = element_blank(), 
         axis.ticks.x = element_blank(), 
         legend.position = c(0.5, 0.8), 
@@ -454,36 +476,36 @@ fancy_barplot_percentage(clinical_data, progression_according_to_clinical_stage)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, tnm_stage) 
+fancy_barplot_percentage(oncoth1_data, tnm_stage) 
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, t_stage)
+fancy_barplot_percentage(oncoth1_data, t_stage)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, n_stage)
+fancy_barplot_percentage(oncoth1_data, n_stage)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, m_stage)
+fancy_barplot_percentage(oncoth1_data, m_stage)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, histology_type)
+fancy_barplot_percentage(oncoth1_data, histology_type)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, mucinous_histology)
+fancy_barplot_percentage(oncoth1_data, mucinous_histology)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, grade_histological_differentiation)
+fancy_barplot_percentage(oncoth1_data, grade_histological_differentiation)
 ```
 
 
 ```{r}
-# fancy_barplot_percentage(clinical_data, metastasis_site) +
+# fancy_barplot_percentage(oncoth1_data, metastasis_site) +
 #   scale_x_discrete(limits = c("No metastasis", 
 #                               "Liver", 
 #                               "Peritoneum", 
@@ -497,15 +519,15 @@ fancy_barplot_percentage(clinical_data, grade_histological_differentiation)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, catheter_device)
+fancy_barplot_percentage(oncoth1_data, catheter_device)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, venous_insufficiency)
+fancy_barplot_percentage(oncoth1_data, venous_insufficiency)
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, family_background_vte_all_relatives) +
+fancy_barplot_percentage(oncoth1_data, family_background_vte_all_relatives) +
   xlab("Family background - VTE") + 
   scale_x_discrete(limits = c("No relatives", 
                               "Father", 
@@ -518,12 +540,12 @@ fancy_barplot_percentage(clinical_data, family_background_vte_all_relatives) +
 
 
 ```{r}
-fancy_barplot_percentage(clinical_data, previous_vte)
+fancy_barplot_percentage(oncoth1_data, previous_vte)
 ```
 
 
 ```{r}
-fancy_barplot_percentage(clinical_data, previous_ate_type) +
+fancy_barplot_percentage(oncoth1_data, previous_ate_type) +
   xlab("Type of Previous ATE") + 
   scale_x_discrete(limits = c("No ATE", 
                               "Myocardial infarction", 
@@ -533,12 +555,12 @@ fancy_barplot_percentage(clinical_data, previous_ate_type) +
                               "Other"))
 ```
 ```{r}
-fancy_barplot_percentage(clinical_data, anticoag_tx_vte) + 
+fancy_barplot_percentage(oncoth1_data, anticoag_tx_vte) + 
   xlab("Anticoagulant treatment due to previous VTE")
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, anticoag_tx_reason) + 
+fancy_barplot_percentage(oncoth1_data, anticoag_tx_reason) + 
   xlab("Reason of prescription of anticoagulants") + 
   scale_x_discrete(limits = c("VTE", 
                               "Cardiopathy", 
@@ -546,7 +568,7 @@ fancy_barplot_percentage(clinical_data, anticoag_tx_reason) +
                               NA))
 ```
 ```{r}
-fancy_barplot_percentage(clinical_data, anticoag_tx_vte_drugs) + 
+fancy_barplot_percentage(oncoth1_data, anticoag_tx_vte_drugs) + 
   xlab("Drugs used in anticoagulant treatments") + 
   scale_x_discrete(limits = c("LMWH", 
                               "Vit K antagonists", 
@@ -555,21 +577,21 @@ fancy_barplot_percentage(clinical_data, anticoag_tx_vte_drugs) +
 ```
 
 ```{r}
-fancy_barplot_percentage(clinical_data, anticoag_tx_currently)
+fancy_barplot_percentage(oncoth1_data, anticoag_tx_currently)
 ```
 
 
 ```{r}
-fancy_barplot_percentage(clinical_data, cancer_diagnosed_due_to_thrombosis)
+fancy_barplot_percentage(oncoth1_data, cancer_diagnosed_due_to_thrombosis)
 ```
 
 
 ```{r}
-fancy_barplot_percentage(clinical_data, vte_dx_during_cancer_follow_up)
+fancy_barplot_percentage(oncoth1_data, vte_dx_during_cancer_follow_up)
 ```
 
 ```{r}
-stacked_density_plot_and_boxplot(clinical_data, height, "Height")
+stacked_density_plot_and_boxplot(oncoth1_data, height, "Height")
 ```
 
 
@@ -581,8 +603,8 @@ In case the categorical variables have more than 2 unique values, use Crammer's 
 
 
 ```{r}
-#categorical_variables = c(variable.names(Filter(f = is.character, x = clinical_data)), 
-                          #variable.names(Filter(f = is.factor, x = clinical_data)))
+#categorical_variables = c(variable.names(Filter(f = is.character, x = oncoth1_data)), 
+                          #variable.names(Filter(f = is.factor, x = oncoth1_data)))
 
 categorical_variables = c(
   "gender", 
@@ -683,7 +705,7 @@ categorical_variables = c(
 ggbarstats_plots = list()
 
 for (variable in categorical_variables[1:79]) { 
-  plot_i = ggbarstats(data = clinical_data,
+  plot_i = ggbarstats(data = oncoth1_data,
                         x = patient_group,
                         y = !!variable, 
                         type = "nonparametric") +
@@ -745,7 +767,7 @@ The blood test results should not be taken seriously because for many patients t
 
 ```{r}
 # Get comorbidities features
-comordibities = clinical_data %>%
+comordibities = oncoth1_data %>%
   select(
     diabetes_mellitus, 
     dyslipidemia, 
