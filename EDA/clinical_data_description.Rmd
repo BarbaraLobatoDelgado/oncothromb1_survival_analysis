@@ -69,6 +69,22 @@ shapiro_test_summary <- function(data, columns) {
 }
 
 
+lillie_test_summary <- function(data, columns) {
+  results <- list()
+  
+  for (col in columns) {
+    test_result <- nortest::lillie.test(data[[col]])
+    is_normal <- ifelse(test_result$p.value > 0.05, "Normally distributed", "Not normally distributed")
+    
+    results[[col]] <- list(
+      p_value = test_result$p.value,
+      normality = is_normal
+    )
+  }
+  
+  return(results)
+}
+
 ```
 
 
@@ -114,34 +130,32 @@ columns_to_test <- c(
   "leukocytes", 
   "platelets"
 )
+```
 
-# Call the function
+
+```{r}
+# Run Shapiro-Wilks normality test 
 shapiro_results <- shapiro_test_summary(oncoth1_data, columns_to_test)
 
 # Print the results
 for (col in names(shapiro_results)) {
+  print("Shapiro-Wilk normality test")
   cat(col, ":", shapiro_results[[col]]$normality, "(p-value =", shapiro_results[[col]]$p_value, ")\n")
 }
 ```
 
 
 ```{r}
-shapiro.test(oncoth1_data$age_when_cancer_dx) # Normally distributed
-shapiro.test(oncoth1_data$weight) # Not normally distributed
-shapiro.test(oncoth1_data$height) # Not normally distributed
-shapiro.test(oncoth1_data$body_surface_area) # Not normally distributed
-shapiro.test(oncoth1_data$bmi_value) # Not normally distributed
-shapiro.test(oncoth1_data$albumin) # Not normally distributed
-#shapiro.test(oncoth1_data$aptt)
-shapiro.test(oncoth1_data$aptt_ratio) # Not normally distributed
-shapiro.test(oncoth1_data$bilirubin) # Not normally distributed
-shapiro.test(oncoth1_data$creatinine) # Not normally distributed
-shapiro.test(oncoth1_data$alkaline_phosphatase) # Not normally distributed
-shapiro.test(oncoth1_data$hemoglobin) # Normally distributed
-shapiro.test(oncoth1_data$inr) # Not normally distributed
-shapiro.test(oncoth1_data$leukocytes) # Not normally distributed
-shapiro.test(oncoth1_data$platelets) # Not normally distributed
+# Run Shapiro-Wilks normality test 
+shapiro_results <- shapiro_test_summary(oncoth1_data, columns_to_test)
+
+# Print the results
+for (col in names(shapiro_results)) {
+  print("Shapiro-Wilk normality test")
+  cat(col, ":", shapiro_results[[col]]$normality, "(p-value =", shapiro_results[[col]]$p_value, ")\n")
+}
 ```
+
 
 
 ```{r}
