@@ -163,23 +163,6 @@ cat_cuminc_customised <- cat_cuminc %>%
 cat_cuminc_customised
 ```
 
-```{r}
-# CAT cumulative incidence at given times
-# Time in days
-twelve_months_in_days <- 12 * 30
-eighteen_months_in_days <- 18 * 30
-window_size <- 20
-
-# 12-month CAT cumulative incidence
-cat_cuminc_customised %>%
-  filter(time >= (twelve_months_in_days - window_size) & time <= (twelve_months_in_days + window_size))
-
-# 18-month CAT cumulative incidence
-cat_cuminc_customised %>%
-  filter(time >= (eighteen_months_in_days - window_size) & time <= (eighteen_months_in_days + window_size))
-```
-
-
 
 ```{r}
 # Estimation of cumulative incidence with competing risks
@@ -198,8 +181,41 @@ cat_fit <- survfit(
 
 # I can use this table to 
 cat_fit_summary = surv_summary(cat_fit)
-cat_fit_summary
+cat_fit_summary 
 ```
+
+```{r}
+
+```
+
+
+
+```{r}
+# CAT cumulative incidence at given times
+# Time in days
+twelve_months_in_days <- 12 * 30.25
+eighteen_months_in_days <- 18 * 30.25
+window_size <- 10
+
+# 12-month CAT cumulative incidence
+cat_cuminc_12month_stats <- cat_fit_summary %>% 
+  filter(n.event == 1) %>%
+  slice(which.min(abs(time - twelve_months_in_days)))
+# cat_cuminc_12month_stats
+
+print(paste("12-month CAT cumulative incidence for ONCOTHROMB1 cohort is", round(1 - cat_cuminc_12month_stats$surv, digits = 4), "(CI", round(1 - cat_cuminc_12month_stats$upper, digits = 4), "-", round(1 - cat_cuminc_12month_stats$lower, digits = 4), ")"))
+
+
+# 18-month CAT cumulative incidence
+cat_cuminc_18month_stats <- cat_fit_summary %>% 
+  filter(n.event == 1) %>%
+  filter(time >= (eighteen_months_in_days - window_size) & time <= (eighteen_months_in_days + window_size))
+# cat_cuminc_18month_stats
+
+print(paste("18-month CAT cumulative incidence for ONCOTHROMB1 cohort is", round(1 - cat_cuminc_18month_stats$surv, digits = 4), "(CI", round(1 - cat_cuminc_18month_stats$upper, digits = 4), "-", round(1 - cat_cuminc_18month_stats$lower, digits = 4), ")"))
+```
+
+
 
 
 ```{r}
@@ -353,6 +369,16 @@ cat_cuminc_customised_colorectal <- cat_cuminc_colorectal %>%
 cat_cuminc_customised_colorectal
 ```
 
+```{r}
+# CAT cumulative incidence at given times for colorectal cancer patients
+# Time in days
+
+# 12-month CAT cumulative incidence
+# Inspect table and choose incidence approximate to specific time
+cat_cuminc_customised_colorectal 
+```
+
+For colorectal cancer patients, the 12-month CAT cumulative incidence is 11.61% (CI ??) and the 18-month cumulative incidence is 12.94% (CI ??). 
 
 ```{r}
 # Estimation of cumulative incidence with competing risks for colorectal cancer patients
