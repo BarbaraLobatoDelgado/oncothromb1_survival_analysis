@@ -159,12 +159,26 @@ cat_cuminc_customised <- cat_cuminc %>%
 #   # Select event of interest, in this case, CAT
 #   filter(id == "CAT")  
 
-
-
-
 # All time points in CAT CIF estimation
 cat_cuminc_customised
 ```
+
+```{r}
+# CAT cumulative incidence at given times
+# Time in days
+twelve_months_in_days <- 12 * 30
+eighteen_months_in_days <- 18 * 30
+window_size <- 20
+
+# 12-month CAT cumulative incidence
+cat_cuminc_customised %>%
+  filter(time >= (twelve_months_in_days - window_size) & time <= (twelve_months_in_days + window_size))
+
+# 18-month CAT cumulative incidence
+cat_cuminc_customised %>%
+  filter(time >= (eighteen_months_in_days - window_size) & time <= (eighteen_months_in_days + window_size))
+```
+
 
 
 ```{r}
@@ -268,7 +282,160 @@ ggsave(
 
 ## CAT cumulative incidence per cancer type
 
+We want to estimate CAT cumulative incidence for each type of cancer. 
+
+```{r}
+# Account for patients with concomitant VTEs per cancer type
+conc_VTE_per_cancer_type <- table(oncoth1$data$primary_tumor_simplified, oncoth1$data$vte_before_entering_study)
+conc_VTE_per_cancer_type <- as.data.frame(conc_VTE_per_cancer_type)
+colnames(conc_VTE_per_cancer_type) <- c("cancer_type", "conc_VTE", "n_patients_conc_VTE")
+conc_VTE_per_cancer_type %<>% 
+  select(-conc_VTE)
+conc_VTE_per_cancer_type
+```
 
 
+### Colorectal cancer
 
+```{r}
+# Subset patients with colorectal cancer
+cat_cuminc_data_colorectal <- cat_cuminc_data %>%
+  filter(primary_tumor_simplified == "Colorectal")
+```
+
+
+```{r}
+# Estimate CAT and death cumulative incidence functions from competing risks data
+cat_cuminc_colorectal <- cuminc(
+  ftime = cat_cuminc_data_colorectal$tu_event, 
+  fstatus = cat_cuminc_data_colorectal$event_status, 
+  cencode = 0 # censored patients are encoded as zero
+  )
+
+# $est: cumulative incidence estimates at different time points for each type of event (days)
+# i is the group index and j is the event
+# $var: variances of the cumulative incidence estimates
+cat_cuminc_colorectal
+```
+
+These are the cumulative incidence functions (CIFs) for developing CAT (1 1) and dying without CAT (1 2) and their respective variances for cancer patients in ONCOTHROMB1. In spite of the notation, patients are not grouped. 
+
+```{r}
+# Estimate CAT and death cumulative estimates functions (CIFs) for group of patients with CAT and w/o CAT
+# Get Tests
+cat_cuminc_test_colorectal <- cuminc(
+  ftime = cat_cuminc_data_colorectal$tu_event, 
+  fstatus = cat_cuminc_data_colorectal$event_status, 
+  group = cat_cuminc_data_colorectal$event_status, # patients with CAT vs patients dead w/o CAT
+  cencode = 0)[["Tests"]]
+
+# Show the test statistic value, the p-value and the degrees of freedom resulting from comparison of CIFs between groups
+cat_cuminc_test_colorectal
+```
+
+Group 1 are colorectal cancer patients with CAT and group 2 are patients that die w/o CAT. 
+
+```{r}
+# Show results in a more intelligible way
+cat_cuminc_customised_colorectal <- cat_cuminc_colorectal %>%
+  # Apply a function to each element of the list or atomic vector and show in a dataframe
+  map_df(`[`, c("time", "est"), .id = "id") %>%
+  # Add a simplified name for groups using case_match()
+  mutate(id = case_match(
+    id, 
+    "1 1" ~ "CAT",
+    "1 2" ~ "Death w/o CAT"
+  )) %>%
+  # Select event of interest, in this case, CAT
+  filter(id == "CAT")
+
+# All time points in CAT CIF estimation
+cat_cuminc_customised_colorectal
+```
+
+
+```{r}
+# Estimation of cumulative incidence with competing risks for colorectal cancer patients
+# Similar information as above, but providing standard error and 95% CI
+tidycmprsk::cuminc(Surv(tu_event, as.factor(event_status)) ~ 1, cat_cuminc_data_colorectal)
+```
+
+```{r}
+# Create survival curve for CAT in competing risks
+# Covariates are not being treated as time-dependent
+cat_fit_colorectal <- survfit(
+  Surv(tu_event, event_status == 1) ~ 1 + cluster(id), 
+  data = cat_cuminc_data_colorectal
+)
+
+# I can use this table to 
+cat_fit_summary_colorectal = surv_summary(cat_fit_colorectal)
+cat_fit_summary_colorectal
+```
+
+
+```{r}
+# Count number of patients affected by CAT 
+n_cat_colorectal_patients = sum(cat_fit_summary_colorectal$n.event)
+
+print(paste("A total", n_cat_colorectal_patients, "colorectal cancer patients suffered CAT. Remind that VTE concomitant to cancer diagnosis is not accounted for in the cumulative incidence estimation."))
+
+# There is a total of 88 patients that suffered CAT in the ONCOTHROMB1 cohort.
+# Thirty patients are excluded for the cumulative incidence estimation
+# However, the rest must be accounted for
+stopifnot(n_cat_colorectal_patients + sum(cat_cuminc_data$n_appointment_patient_became_case == "Beginning of study") == sum(cat_cuminc_data$patient_group == "Case"))
+```
+
+
+```{r}
+# Plot cumulative incidence curve
+cat_cuminc_colorectal_with_table = ggsurvplot(
+  fit = cat_fit_colorectal,
+  data = cat_cuminc_data_colorectal,
+  fun = "event",
+  censor = FALSE,
+  conf.int = FALSE,
+  xscale = 30,
+  break.time.by = 60,
+  surv.plot.height = 1.5,
+  cumevents = TRUE,
+  cumevents.y.text = FALSE,
+  cumevents.height = 0.15,
+  #tables.col = "strata",
+  fontsize = 3.5,
+  tables.y.text = FALSE, # color rectangle instead of text with strata name
+  tables.theme = theme_cleantable(),
+  legend = "none",
+  xlab = "Time (months)",
+  ylab = "Cumulative incidence of CAT", 
+  title = "CAT cumulative incidence for colorectal cancer patients",
+  # Extend until month 20 so that all 59 VTE events can be seen in plot table
+  xlim = c(0, 600), # 540
+  ylim = c(0, 0.2),
+  ggtheme = theme_bw(),
+  palette = "red"
+  ) 
+
+# Add percentages in y axis
+cat_cuminc_colorectal_with_table$plot = cat_cuminc_colorectal_with_table$plot +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 0.2))
+
+# Customize risk table title 
+# Add new title to table
+cat_cuminc_colorectal_with_table$cumevents$labels$title = "Cumulative number of colorectal cancer patients affected by CAT"
+# Change table title font size
+cat_cuminc_colorectal_with_table$cumevents = cat_cuminc_colorectal_with_table$cumevents +
+  theme(plot.title = element_text(size = 10))
+
+cat_cuminc_colorectal_with_table
+```
+
+
+### NSCLC
+
+
+### Esophago-gastric cancer
+
+
+### Pancreatic cancer
 
