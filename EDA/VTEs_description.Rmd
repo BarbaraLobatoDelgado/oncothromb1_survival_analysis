@@ -52,7 +52,7 @@ contigency_table2df_longer = function(df, column_names = c("cancer_type", "vte_t
   
   # Convert matrix to dataframe
   df <- as.data.frame(tmp_row)
-  colnames(df) <- column_namesç
+  colnames(df) <- column_names
   # Remove temporary variable
   rm(tmp_row)
   
@@ -877,6 +877,23 @@ CAT_prior_or_concomitant_by_cancer_type_patients = VTE_data %>%
 
 CAT_prior_or_concomitant_by_cancer_type_patients
 ```
+
+```{r}
+# Checking patient count by moment of VTE diagnosis, including patients with VTE recurrence
+patients_VTE_conc = VTE_data %>%
+  select(id, primary_tumor_simplified, n_all_vte, n_vte_before_entering_study, n_total_vte_along_study, n_total_vte_recurrence) %>%
+  group_by(primary_tumor_simplified) %>% 
+  filter(n_vte_before_entering_study != 0)
+
+patients_VTE_study = VTE_data %>%
+  select(id, primary_tumor_simplified, n_all_vte, n_vte_before_entering_study, n_total_vte_along_study, n_total_vte_recurrence) %>%
+  group_by(primary_tumor_simplified) %>% 
+  filter(n_total_vte_along_study != 0)
+
+# This is the count of patients with VTE diagnosed during study (not concomitant VTEs)
+table(patients_VTE_study$primary_tumor_simplified)
+```
+
 
 
 ```{r}
