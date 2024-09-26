@@ -64,6 +64,7 @@ oncoth1 = obj
 cat_cuminc_data = oncoth1$data %>% 
   select(id, 
          patient_group,
+         primary_tumor_simplified,
          n_appointment_patient_became_case,
          date_cancer_dx, 
          date_dropout, 
@@ -131,19 +132,35 @@ Group 1 are patients with CAT and group 2 are patients that die w/o CAT.
 
 ```{r}
 # Show results in a more intelligible way
-cat_cuminc_customised = cat_cuminc %>% 
-  # Remove Tests from list
-  list_modify("Tests" = NULL) %>% 
-  # Apply a function to each element of list or atomic vector and show in a dataframe
-  # Subset "time" and "est" and add id column
-  map_df(`[`, c("time", "est"), .id = "id") %>% 
-  # Add name to groups
-  mutate(id = recode(
+cat_cuminc_customised <- cat_cuminc %>%
+  # Apply a function to each element of the list or atomic vector and show in a dataframe
+  map_df(`[`, c("time", "est"), .id = "id") %>%
+  # Add a simplified name for groups using case_match()
+  mutate(id = case_match(
     id, 
-    "1 1" = "CAT", 
-    "1 2" = "Death w/o CAT")) %>% 
+    "1 1" ~ "CAT",
+    "1 2" ~ "Death w/o CAT"
+  )) %>%
   # Select event of interest, in this case, CAT
-  filter(id == "CAT")  
+  filter(id == "CAT")
+
+
+# cat_cuminc_customised = cat_cuminc %>% 
+#   # Remove Tests from list
+#   list_modify("Tests" = NULL) %>% 
+#   # Apply a function to each element of list or atomic vector and show in a dataframe
+#   # Subset "time" and "est" and add id column
+#   map_df(`[`, c("time", "est"), .id = "id") %>% 
+#   # Add name to groups
+#   mutate(id = recode(
+#     id, 
+#     "1 1" = "CAT", 
+#     "1 2" = "Death w/o CAT")) %>% 
+#   # Select event of interest, in this case, CAT
+#   filter(id == "CAT")  
+
+
+
 
 # All time points in CAT CIF estimation
 cat_cuminc_customised
@@ -247,4 +264,11 @@ ggsave(
   units = "in"
   )
 ```
+
+
+## CAT cumulative incidence per cancer type
+
+
+
+
 
