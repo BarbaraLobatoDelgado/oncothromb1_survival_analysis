@@ -973,14 +973,14 @@ cat_cuminc_pancreatic_with_table = ggsurvplot(
   title = "CAT cumulative incidence for pancreatic cancer patients",
   # Extend until month 20 so that all 59 VTE events can be seen in plot table
   xlim = c(0, 600), # 540
-  ylim = c(0, 0.2),
+  ylim = c(0, 0.4),
   ggtheme = theme_bw(),
   palette = "red"
   ) 
 
 # Add percentages in y axis
 cat_cuminc_pancreatic_with_table$plot = cat_cuminc_pancreatic_with_table$plot +
-  scale_y_continuous(labels = scales::percent, limits = c(0, 0.2))
+  scale_y_continuous(labels = scales::percent, limits = c(0, 0.4))
 
 # Customize risk table title 
 # Add new title to table
@@ -1013,3 +1013,5 @@ ggsave(
   units = "in"
   )
 ```
+
+
