@@ -185,9 +185,34 @@ cat_fit_summary
 ```
 
 ```{r}
-
+get_cumulative_incidence = function(fit_summary, event_code = 1){
+  
+  # CAT cumulative incidence at given times
+  # Time in days
+  twelve_months_in_days <- 12 * 30.25
+  eighteen_months_in_days <- 18 * 30.25
+  window_size <- 10
+  
+  # 12-month CAT cumulative incidence
+  cuminc_12month_stats <- fit_summary %>% 
+    filter(n.event == event_code) %>%
+    slice(which.min(abs(time - twelve_months_in_days)))
+  
+  print(paste("12-month CAT cumulative incidence for ONCOTHROMB1 cohort is", round(1 - cuminc_12month_stats$surv, digits = 4), "(CI", round(1 - cuminc_12month_stats$upper, digits = 4), "-", round(1 - cuminc_12month_stats$lower, digits = 4), ")"))
+  
+  
+  # 18-month CAT cumulative incidence
+  cuminc_18month_stats <- fit_summary %>% 
+    filter(n.event == event_code) %>%
+    filter(time >= (eighteen_months_in_days - window_size) & time <= (eighteen_months_in_days + window_size))
+  
+  print(paste("18-month CAT cumulative incidence for ONCOTHROMB1 cohort is", round(1 - cuminc_18month_stats$surv, digits = 4), "(CI", round(1 - cuminc_18month_stats$upper, digits = 4), "-", round(1 - cuminc_18month_stats$lower, digits = 4), ")"))
+}
 ```
 
+```{r}
+get_cumulative_incidence(cat_fit_summary)
+```
 
 
 ```{r}
