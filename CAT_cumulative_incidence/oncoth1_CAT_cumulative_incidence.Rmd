@@ -187,6 +187,9 @@ cat_fit_summary
 ```{r}
 get_cumulative_incidence = function(fit_summary, event_code = 1){
   
+  # Function to print the cumulative incidence and 95% confidence interval
+  # of CAT from summary of fit object
+  
   # CAT cumulative incidence at given times
   # Time in days
   twelve_months_in_days <- 12 * 30.25
@@ -198,15 +201,15 @@ get_cumulative_incidence = function(fit_summary, event_code = 1){
     filter(n.event == event_code) %>%
     slice(which.min(abs(time - twelve_months_in_days)))
   
-  print(paste("12-month CAT cumulative incidence for ONCOTHROMB1 cohort is", round(1 - cuminc_12month_stats$surv, digits = 4) * 100, "% (CI", round(1 - cuminc_12month_stats$upper, digits = 4) * 100, "% -", round(1 - cuminc_12month_stats$lower, digits = 4) * 100, "%)"))
+  print(paste("12-month CAT cumulative incidence is", round(1 - cuminc_12month_stats$surv, digits = 4) * 100, "% (CI", round(1 - cuminc_12month_stats$upper, digits = 4) * 100, "% -", round(1 - cuminc_12month_stats$lower, digits = 4) * 100, "%)"))
   
   
   # 18-month CAT cumulative incidence
   cuminc_18month_stats <- fit_summary %>% 
     filter(n.event == event_code) %>%
-    filter(time >= (eighteen_months_in_days - window_size) & time <= (eighteen_months_in_days + window_size))
+    slice(which.min(abs(time - eighteen_months_in_days)))
   
-  print(paste("18-month CAT cumulative incidence for ONCOTHROMB1 cohort is", round(1 - cuminc_18month_stats$surv, digits = 4) * 100, "% (CI", round(1 - cuminc_18month_stats$upper, digits = 4) * 100, "% -", round(1 - cuminc_18month_stats$lower, digits = 4) * 100, "%)"))
+  print(paste("18-month CAT cumulative incidence is", round(1 - cuminc_18month_stats$surv, digits = 4) * 100, "% (CI", round(1 - cuminc_18month_stats$upper, digits = 4) * 100, "% -", round(1 - cuminc_18month_stats$lower, digits = 4) * 100, "%)"))
 }
 ```
 
@@ -251,7 +254,7 @@ cat_cuminc_with_table = ggsurvplot(
   legend = "none",
   xlab = "Time (months)",
   ylab = "Cumulative incidence of CAT", 
-  title = "",
+  title = "CAT cumulative incidence for ONCOTHROMB12-01 cohort",
   # Extend until month 20 so that all 59 VTE events can be seen in plot table
   xlim = c(0, 600), # 540
   ylim = c(0, 0.2),
@@ -308,7 +311,6 @@ conc_VTE_per_cancer_type %<>%
   select(-conc_VTE)
 conc_VTE_per_cancer_type
 ```
-
 
 ### Colorectal cancer
 
@@ -398,6 +400,13 @@ cat_fit_summary_colorectal
 ```
 
 ```{r}
+cat_fit_summary_colorectal %>% 
+  filter(n.event == 1)
+```
+
+
+
+```{r}
 # Print CAT cumulative incidence at 12 and 18 months for colorectal cancer patients in ONCOTHROMB1 cohort
 get_cumulative_incidence(cat_fit_summary_colorectal)
 ```
@@ -459,12 +468,548 @@ cat_cuminc_colorectal_with_table$cumevents = cat_cuminc_colorectal_with_table$cu
 cat_cuminc_colorectal_with_table
 ```
 
+```{r}
+# Save plot with table
+
+# Combine the main plot and the cumulative events table
+cat_cum_inc_colorectal_combined_plot <- cowplot::plot_grid(
+  cat_cuminc_colorectal_with_table$plot,
+  cat_cuminc_colorectal_with_table$cumevents,
+  ncol = 1, 
+  rel_heights = c(1.5, 0.3)  # Adjust heights to fit both plots
+)
+
+# Save plot
+ggsave(
+  filename = "../graphs/CAT_cum_inc_colorectal.jpeg",
+  plot = cat_cum_inc_colorectal_combined_plot, 
+  width = 6, 
+  height = 4,
+  units = "in"
+  )
+```
+
 
 ### NSCLC
+
+```{r}
+# Subset patients with NSCLC
+cat_cuminc_data_nsclc <- cat_cuminc_data %>%
+  filter(primary_tumor_simplified == "NSCLC")
+```
+
+
+```{r}
+# Estimate CAT and death cumulative incidence functions from competing risks data
+cat_cuminc_nsclc <- cuminc(
+  ftime = cat_cuminc_data_nsclc$tu_event, 
+  fstatus = cat_cuminc_data_nsclc$event_status, 
+  cencode = 0 # censored patients are encoded as zero
+  )
+
+# $est: cumulative incidence estimates at different time points for each type of event (days)
+# i is the group index and j is the event
+# $var: variances of the cumulative incidence estimates
+cat_cuminc_nsclc
+```
+
+These are the cumulative incidence functions (CIFs) for developing CAT (1 1) and dying without CAT (1 2) and their respective variances for cancer patients in ONCOTHROMB1. In spite of the notation, patients are not grouped. 
+
+```{r}
+# Estimate CAT and death cumulative estimates functions (CIFs) for group of patients with CAT and w/o CAT
+# Get Tests
+cat_cuminc_test_nsclc <- cuminc(
+  ftime = cat_cuminc_data_nsclc$tu_event, 
+  fstatus = cat_cuminc_data_nsclc$event_status, 
+  group = cat_cuminc_data_nsclc$event_status, # patients with CAT vs patients dead w/o CAT
+  cencode = 0)[["Tests"]]
+
+# Show the test statistic value, the p-value and the degrees of freedom resulting from comparison of CIFs between groups
+cat_cuminc_test_nsclc
+```
+
+Group 1 are NSCLC patients with CAT and group 2 are patients that die w/o CAT. 
+
+```{r}
+# Show results in a more intelligible way
+cat_cuminc_customised_nsclc <- cat_cuminc_nsclc %>%
+  # Apply a function to each element of the list or atomic vector and show in a dataframe
+  map_df(`[`, c("time", "est"), .id = "id") %>%
+  # Add a simplified name for groups using case_match()
+  mutate(id = case_match(
+    id, 
+    "1 1" ~ "CAT",
+    "1 2" ~ "Death w/o CAT"
+  )) %>%
+  # Select event of interest, in this case, CAT
+  filter(id == "CAT")
+
+# All time points in CAT CIF estimation
+cat_cuminc_customised_nsclc
+```
+
+
+```{r}
+# CAT cumulative incidence at given times for NSCLC patients
+# Time in days
+
+# 12-month CAT cumulative incidence
+# Inspect table and choose incidence approximate to specific time
+cat_cuminc_customised_nsclc 
+```
+
+
+```{r}
+# Estimation of cumulative incidence with competing risks for NSCLC patients
+# Similar information as above, but providing standard error and 95% CI
+tidycmprsk::cuminc(Surv(tu_event, as.factor(event_status)) ~ 1, cat_cuminc_data_nsclc)
+```
+
+
+```{r}
+# Create survival curve for CAT in competing risks
+# Covariates are not being treated as time-dependent
+cat_fit_nsclc <- survfit(
+  Surv(tu_event, event_status == 1) ~ 1 + cluster(id), 
+  data = cat_cuminc_data_nsclc
+)
+
+# I can use this table to 
+cat_fit_summary_nsclc = surv_summary(cat_fit_nsclc)
+cat_fit_summary_nsclc
+```
+
+
+```{r}
+# Print CAT cumulative incidence at 12 and 18 months for NSCLC patients in ONCOTHROMB1 cohort
+get_cumulative_incidence(cat_fit_summary_nsclc)
+```
+
+
+```{r}
+# Count number of patients affected by CAT 
+n_cat_nsclc_patients = sum(cat_fit_summary_nsclc$n.event)
+
+print(paste("A total", n_cat_nsclc_patients, "NSCLC patients suffered CAT. Remind that VTE concomitant to cancer diagnosis is not accounted for in the cumulative incidence estimation."))
+
+# There is a total of 88 patients that suffered CAT in the ONCOTHROMB1 cohort.
+# Thirty patients are excluded for the cumulative incidence estimation
+# However, the rest must be accounted for
+stopifnot(n_cat_nsclc_patients + conc_VTE_per_cancer_type %>%filter(cancer_type == "NSCLC") %>% select(n_patients_conc_VTE) %>% unname() == sum(cat_cuminc_data$patient_group == "Case"))
+```
+
+
+```{r}
+# Plot cumulative incidence curve
+cat_cuminc_nsclc_with_table = ggsurvplot(
+  fit = cat_fit_nsclc,
+  data = cat_cuminc_data_nsclc,
+  fun = "event",
+  censor = FALSE,
+  conf.int = FALSE,
+  xscale = 30,
+  break.time.by = 60,
+  surv.plot.height = 1.5,
+  cumevents = TRUE,
+  cumevents.y.text = FALSE,
+  cumevents.height = 0.15,
+  #tables.col = "strata",
+  fontsize = 3.5,
+  tables.y.text = FALSE, # color rectangle instead of text with strata name
+  tables.theme = theme_cleantable(),
+  legend = "none",
+  xlab = "Time (months)",
+  ylab = "Cumulative incidence of CAT", 
+  title = "CAT cumulative incidence for NSCLC cancer patients",
+  # Extend until month 20 so that all 59 VTE events can be seen in plot table
+  xlim = c(0, 600), # 540
+  ylim = c(0, 0.2),
+  ggtheme = theme_bw(),
+  palette = "red"
+  ) 
+
+# Add percentages in y axis
+cat_cuminc_nsclc_with_table$plot = cat_cuminc_nsclc_with_table$plot +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 0.2))
+
+# Customize risk table title 
+# Add new title to table
+cat_cuminc_nsclc_with_table$cumevents$labels$title = "Cumulative number of NSCLC patients affected by CAT"
+# Change table title font size
+cat_cuminc_nsclc_with_table$cumevents = cat_cuminc_nsclc_with_table$cumevents +
+  theme(plot.title = element_text(size = 10))
+
+cat_cuminc_nsclc_with_table
+```
+
+
+```{r}
+# Save plot with table
+
+# Combine the main plot and the cumulative events table
+cat_cum_inc_nsclc_combined_plot <- cowplot::plot_grid(
+  cat_cuminc_nsclc_with_table$plot,
+  cat_cuminc_nsclc_with_table$cumevents,
+  ncol = 1, 
+  rel_heights = c(1.5, 0.3)  # Adjust heights to fit both plots
+)
+
+# Save plot
+ggsave(
+  filename = "../graphs/CAT_cum_inc_nsclc.jpeg",
+  plot = cat_cum_inc_nsclc_combined_plot, 
+  width = 6, 
+  height = 4,
+  units = "in"
+  )
+```
 
 
 ### Esophago-gastric cancer
 
+```{r}
+# Subset patients with esophagogastric cancer
+cat_cuminc_data_esophagogastric <- cat_cuminc_data %>%
+  filter(primary_tumor_simplified == "Oesophago-gastric")
+```
+
+
+```{r}
+# Estimate CAT and death cumulative incidence functions from competing risks data
+cat_cuminc_esophagogastric <- cuminc(
+  ftime = cat_cuminc_data_esophagogastric$tu_event, 
+  fstatus = cat_cuminc_data_esophagogastric$event_status, 
+  cencode = 0 # censored patients are encoded as zero
+  )
+
+# $est: cumulative incidence estimates at different time points for each type of event (days)
+# i is the group index and j is the event
+# $var: variances of the cumulative incidence estimates
+cat_cuminc_esophagogastric
+```
+
+These are the cumulative incidence functions (CIFs) for developing CAT (1 1) and dying without CAT (1 2) and their respective variances for esophago-gastric cancer patients in ONCOTHROMB1. In spite of the notation, patients are not grouped. 
+
+```{r}
+# Estimate CAT and death cumulative estimates functions (CIFs) for group of patients with CAT and w/o CAT
+# Get Tests
+cat_cuminc_test_esophagogastric <- cuminc(
+  ftime = cat_cuminc_data_esophagogastric$tu_event, 
+  fstatus = cat_cuminc_data_esophagogastric$event_status, 
+  group = cat_cuminc_data_esophagogastric$event_status, # patients with CAT vs patients dead w/o CAT
+  cencode = 0)[["Tests"]]
+
+# Show the test statistic value, the p-value and the degrees of freedom resulting from comparison of CIFs between groups
+cat_cuminc_test_esophagogastric
+```
+
+Group 1 are esophago-gastric cancer patients with CAT and group 2 are patients that die w/o CAT. 
+
+```{r}
+# Show results in a more intelligible way
+cat_cuminc_customised_esophagogastric <- cat_cuminc_esophagogastric %>%
+  # Apply a function to each element of the list or atomic vector and show in a dataframe
+  map_df(`[`, c("time", "est"), .id = "id") %>%
+  # Add a simplified name for groups using case_match()
+  mutate(id = case_match(
+    id, 
+    "1 1" ~ "CAT",
+    "1 2" ~ "Death w/o CAT"
+  )) %>%
+  # Select event of interest, in this case, CAT
+  filter(id == "CAT")
+
+# All time points in CAT CIF estimation
+cat_cuminc_customised_esophagogastric
+```
+
+```{r}
+# CAT cumulative incidence at given times for esophago-gastric cancer patients
+# Time in days
+
+# 12-month CAT cumulative incidence
+# Inspect table and choose incidence approximate to specific time
+cat_cuminc_customised_esophagogastric 
+```
+
+
+```{r}
+# Estimation of cumulative incidence with competing risks for esophago-gastric cancer patients
+# Similar information as above, but providing standard error and 95% CI
+tidycmprsk::cuminc(Surv(tu_event, as.factor(event_status)) ~ 1, cat_cuminc_data_esophagogastric)
+```
+
+
+```{r}
+# Create survival curve for CAT in competing risks
+# Covariates are not being treated as time-dependent
+cat_fit_esophagogastric <- survfit(
+  Surv(tu_event, event_status == 1) ~ 1 + cluster(id), 
+  data = cat_cuminc_data_esophagogastric
+)
+
+# I can use this table to 
+cat_fit_summary_esophagogastric = surv_summary(cat_fit_esophagogastric)
+cat_fit_summary_esophagogastric
+```
+
+
+```{r}
+# Print CAT cumulative incidence at 12 and 18 months for esophago-gastric cancer patients in ONCOTHROMB1 cohort
+get_cumulative_incidence(cat_fit_summary_esophagogastric)
+```
+
+
+```{r}
+# Count number of patients affected by CAT 
+n_cat_esophagogastric_patients = sum(cat_fit_summary_esophagogastric$n.event)
+
+print(paste("A total", n_cat_esophagogastric_patients, "esophago-gastric cancer patients suffered CAT. Remind that VTE concomitant to cancer diagnosis is not accounted for in the cumulative incidence estimation."))
+
+# There is a total of 88 patients that suffered CAT in the ONCOTHROMB1 cohort.
+# Thirty patients are excluded for the cumulative incidence estimation
+# However, the rest must be accounted for
+stopifnot(n_cat_esophagogastric_patients + conc_VTE_per_cancer_type %>%filter(cancer_type == "Oesophago-gastric") %>% select(n_patients_conc_VTE) %>% unname() == sum(cat_cuminc_data$patient_group == "Case"))
+```
+
+
+```{r}
+# Plot cumulative incidence curve
+cat_cuminc_esophagogastric_with_table = ggsurvplot(
+  fit = cat_fit_esophagogastric,
+  data = cat_cuminc_data_esophagogastric,
+  fun = "event",
+  censor = FALSE,
+  conf.int = FALSE,
+  xscale = 30,
+  break.time.by = 60,
+  surv.plot.height = 1.5,
+  cumevents = TRUE,
+  cumevents.y.text = FALSE,
+  cumevents.height = 0.15,
+  #tables.col = "strata",
+  fontsize = 3.5,
+  tables.y.text = FALSE, # color rectangle instead of text with strata name
+  tables.theme = theme_cleantable(),
+  legend = "none",
+  xlab = "Time (months)",
+  ylab = "Cumulative incidence of CAT", 
+  title = "CAT cumulative incidence for esophago-gastric cancer patients",
+  # Extend until month 20 so that all 59 VTE events can be seen in plot table
+  xlim = c(0, 600), # 540
+  ylim = c(0, 0.2),
+  ggtheme = theme_bw(),
+  palette = "red"
+  ) 
+
+# Add percentages in y axis
+cat_cuminc_esophagogastric_with_table$plot = cat_cuminc_esophagogastric_with_table$plot +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 0.2))
+
+# Customize risk table title 
+# Add new title to table
+cat_cuminc_esophagogastric_with_table$cumevents$labels$title = "Cumulative number of esophago-gastric cancer patients affected by CAT"
+# Change table title font size
+cat_cuminc_esophagogastric_with_table$cumevents = cat_cuminc_esophagogastric_with_table$cumevents +
+  theme(plot.title = element_text(size = 10))
+
+cat_cuminc_esophagogastric_with_table
+```
+
+
+```{r}
+# Save plot with table
+
+# Combine the main plot and the cumulative events table
+cat_cum_inc_esophagogastric_combined_plot <- cowplot::plot_grid(
+  cat_cuminc_esophagogastric_with_table$plot,
+  cat_cuminc_esophagogastric_with_table$cumevents,
+  ncol = 1, 
+  rel_heights = c(1.5, 0.3)  # Adjust heights to fit both plots
+)
+
+# Save plot
+ggsave(
+  filename = "../graphs/CAT_cum_inc_esophagogastric.jpeg",
+  plot = cat_cum_inc_esophagogastric_combined_plot, 
+  width = 6, 
+  height = 4,
+  units = "in"
+  )
+```
+
+
 
 ### Pancreatic cancer
 
+```{r}
+# Subset patients with pancreatic cancer
+cat_cuminc_data_pancreatic <- cat_cuminc_data %>%
+  filter(primary_tumor_simplified == "Pancreatic")
+```
+
+
+```{r}
+# Estimate CAT and death cumulative incidence functions from competing risks data
+cat_cuminc_pancreatic <- cuminc(
+  ftime = cat_cuminc_data_pancreatic$tu_event, 
+  fstatus = cat_cuminc_data_pancreatic$event_status, 
+  cencode = 0 # censored patients are encoded as zero
+  )
+
+# $est: cumulative incidence estimates at different time points for each type of event (days)
+# i is the group index and j is the event
+# $var: variances of the cumulative incidence estimates
+cat_cuminc_pancreatic
+```
+
+These are the cumulative incidence functions (CIFs) for developing CAT (1 1) and dying without CAT (1 2) and their respective variances for pancreatic cancer patients in ONCOTHROMB1. In spite of the notation, patients are not grouped. 
+
+```{r}
+# Estimate CAT and death cumulative estimates functions (CIFs) for group of patients with CAT and w/o CAT
+# Get Tests
+cat_cuminc_test_pancreatic <- cuminc(
+  ftime = cat_cuminc_data_pancreatic$tu_event, 
+  fstatus = cat_cuminc_data_pancreatic$event_status, 
+  group = cat_cuminc_data_pancreatic$event_status, # patients with CAT vs patients dead w/o CAT
+  cencode = 0)[["Tests"]]
+
+# Show the test statistic value, the p-value and the degrees of freedom resulting from comparison of CIFs between groups
+cat_cuminc_test_pancreatic
+```
+
+Group 1 are pancreatic cancer patients with CAT and group 2 are patients that die w/o CAT. 
+
+```{r}
+# Show results in a more intelligible way
+cat_cuminc_customised_pancreatic <- cat_cuminc_pancreatic %>%
+  # Apply a function to each element of the list or atomic vector and show in a dataframe
+  map_df(`[`, c("time", "est"), .id = "id") %>%
+  # Add a simplified name for groups using case_match()
+  mutate(id = case_match(
+    id, 
+    "1 1" ~ "CAT",
+    "1 2" ~ "Death w/o CAT"
+  )) %>%
+  # Select event of interest, in this case, CAT
+  filter(id == "CAT")
+
+# All time points in CAT CIF estimation
+cat_cuminc_customised_pancreatic
+```
+
+
+```{r}
+# CAT cumulative incidence at given times for pancreatic cancer patients
+# Time in days
+
+# 12-month CAT cumulative incidence
+# Inspect table and choose incidence approximate to specific time
+cat_cuminc_customised_pancreatic 
+```
+
+
+```{r}
+# Estimation of cumulative incidence with competing risks for pancreatic cancer patients
+# Similar information as above, but providing standard error and 95% CI
+tidycmprsk::cuminc(Surv(tu_event, as.factor(event_status)) ~ 1, cat_cuminc_data_pancreatic)
+```
+
+
+```{r}
+# Create survival curve for CAT in competing risks
+# Covariates are not being treated as time-dependent
+cat_fit_pancreatic <- survfit(
+  Surv(tu_event, event_status == 1) ~ 1 + cluster(id), 
+  data = cat_cuminc_data_pancreatic
+)
+
+# I can use this table to 
+cat_fit_summary_pancreatic = surv_summary(cat_fit_pancreatic)
+cat_fit_summary_pancreatic
+```
+
+
+```{r}
+# Print CAT cumulative incidence at 12 and 18 months for pancreatic cancer patients in ONCOTHROMB1 cohort
+get_cumulative_incidence(cat_fit_summary_pancreatic)
+```
+
+
+```{r}
+# Count number of patients affected by CAT 
+n_cat_pancreatic_patients = sum(cat_fit_summary_pancreatic$n.event)
+
+print(paste("A total", n_cat_pancreatic_patients, "pancreatic cancer patients suffered CAT. Remind that VTE concomitant to cancer diagnosis is not accounted for in the cumulative incidence estimation."))
+
+# There is a total of 88 patients that suffered CAT in the ONCOTHROMB1 cohort.
+# Thirty patients are excluded for the cumulative incidence estimation
+# However, the rest must be accounted for
+stopifnot(n_cat_pancreatic_patients + conc_VTE_per_cancer_type %>%filter(cancer_type == "Pancreatic") %>% select(n_patients_conc_VTE) %>% unname() == sum(cat_cuminc_data$patient_group == "Case"))
+```
+
+
+```{r}
+# Plot cumulative incidence curve
+cat_cuminc_pancreatic_with_table = ggsurvplot(
+  fit = cat_fit_pancreatic,
+  data = cat_cuminc_data_pancreatic,
+  fun = "event",
+  censor = FALSE,
+  conf.int = FALSE,
+  xscale = 30,
+  break.time.by = 60,
+  surv.plot.height = 1.5,
+  cumevents = TRUE,
+  cumevents.y.text = FALSE,
+  cumevents.height = 0.15,
+  #tables.col = "strata",
+  fontsize = 3.5,
+  tables.y.text = FALSE, # color rectangle instead of text with strata name
+  tables.theme = theme_cleantable(),
+  legend = "none",
+  xlab = "Time (months)",
+  ylab = "Cumulative incidence of CAT", 
+  title = "CAT cumulative incidence for pancreatic cancer patients",
+  # Extend until month 20 so that all 59 VTE events can be seen in plot table
+  xlim = c(0, 600), # 540
+  ylim = c(0, 0.2),
+  ggtheme = theme_bw(),
+  palette = "red"
+  ) 
+
+# Add percentages in y axis
+cat_cuminc_pancreatic_with_table$plot = cat_cuminc_pancreatic_with_table$plot +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 0.2))
+
+# Customize risk table title 
+# Add new title to table
+cat_cuminc_pancreatic_with_table$cumevents$labels$title = "Cumulative number of pancreatic cancer patients affected by CAT"
+# Change table title font size
+cat_cuminc_pancreatic_with_table$cumevents = cat_cuminc_pancreatic_with_table$cumevents +
+  theme(plot.title = element_text(size = 10))
+
+cat_cuminc_pancreatic_with_table
+```
+
+
+```{r}
+# Save plot with table
+
+# Combine the main plot and the cumulative events table
+cat_cum_inc_pancreatic_combined_plot <- cowplot::plot_grid(
+  cat_cuminc_pancreatic_with_table$plot,
+  cat_cuminc_pancreatic_with_table$cumevents,
+  ncol = 1, 
+  rel_heights = c(1.5, 0.3)  # Adjust heights to fit both plots
+)
+
+# Save plot
+ggsave(
+  filename = "../graphs/CAT_cum_inc_pancreatic.jpeg",
+  plot = cat_cum_inc_pancreatic_combined_plot, 
+  width = 6, 
+  height = 4,
+  units = "in"
+  )
+```
