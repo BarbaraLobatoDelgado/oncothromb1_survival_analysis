@@ -895,7 +895,6 @@ table(patients_VTE_study$primary_tumor_simplified)
 ```
 
 
-
 ```{r}
 # Count number of VTE episodes that are recurrences by cancer type
 CAT_recurrences_by_cancer_type_patients = VTE_data %>%
