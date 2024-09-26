@@ -218,34 +218,6 @@ get_cumulative_incidence(cat_fit_summary)
 
 
 ```{r}
-# CAT cumulative incidence at given times
-# Time in days
-twelve_months_in_days <- 12 * 30.25
-eighteen_months_in_days <- 18 * 30.25
-window_size <- 10
-
-# 12-month CAT cumulative incidence
-cat_cuminc_12month_stats <- cat_fit_summary %>% 
-  filter(n.event == 1) %>%
-  slice(which.min(abs(time - twelve_months_in_days)))
-# cat_cuminc_12month_stats
-
-print(paste("12-month CAT cumulative incidence for ONCOTHROMB1 cohort is", round(1 - cat_cuminc_12month_stats$surv, digits = 4), "(CI", round(1 - cat_cuminc_12month_stats$upper, digits = 4), "-", round(1 - cat_cuminc_12month_stats$lower, digits = 4), ")"))
-
-
-# 18-month CAT cumulative incidence
-cat_cuminc_18month_stats <- cat_fit_summary %>% 
-  filter(n.event == 1) %>%
-  filter(time >= (eighteen_months_in_days - window_size) & time <= (eighteen_months_in_days + window_size))
-# cat_cuminc_18month_stats
-
-print(paste("18-month CAT cumulative incidence for ONCOTHROMB1 cohort is", round(1 - cat_cuminc_18month_stats$surv, digits = 4), "(CI", round(1 - cat_cuminc_18month_stats$upper, digits = 4), "-", round(1 - cat_cuminc_18month_stats$lower, digits = 4), ")"))
-```
-
-
-
-
-```{r}
 # Count number of patients affected by CAT 
 n_cat_patients = sum(cat_fit_summary$n.event)
 
@@ -405,7 +377,6 @@ cat_cuminc_customised_colorectal
 cat_cuminc_customised_colorectal 
 ```
 
-For colorectal cancer patients, the 12-month CAT cumulative incidence is 11.61% (CI ??) and the 18-month cumulative incidence is 12.94% (CI ??). 
 
 ```{r}
 # Estimation of cumulative incidence with competing risks for colorectal cancer patients
@@ -426,6 +397,11 @@ cat_fit_summary_colorectal = surv_summary(cat_fit_colorectal)
 cat_fit_summary_colorectal
 ```
 
+```{r}
+# Print CAT cumulative incidence at 12 and 18 months for colorectal cancer patients in ONCOTHROMB1 cohort
+get_cumulative_incidence(cat_fit_summary_colorectal)
+```
+
 
 ```{r}
 # Count number of patients affected by CAT 
@@ -436,7 +412,7 @@ print(paste("A total", n_cat_colorectal_patients, "colorectal cancer patients su
 # There is a total of 88 patients that suffered CAT in the ONCOTHROMB1 cohort.
 # Thirty patients are excluded for the cumulative incidence estimation
 # However, the rest must be accounted for
-stopifnot(n_cat_colorectal_patients + sum(cat_cuminc_data$n_appointment_patient_became_case == "Beginning of study") == sum(cat_cuminc_data$patient_group == "Case"))
+stopifnot(n_cat_colorectal_patients + conc_VTE_per_cancer_type %>%filter(cancer_type == "Colorectal") %>% select(n_patients_conc_VTE) %>% unname() == sum(cat_cuminc_data$patient_group == "Case"))
 ```
 
 
