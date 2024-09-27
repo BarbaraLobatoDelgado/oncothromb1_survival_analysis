@@ -140,7 +140,7 @@ covariates_df = oncoth1_data %>%
          metastasis_soft_tissues,                        
          other_metastases,
          catheter_device_imp,
-         venous_insufficiency_imp,
+         venous_insufficiency_imp, 
          n_comorbidities,
          family_background_vte,
          family_background_vte_n,
@@ -959,7 +959,7 @@ for (i in 1:k) {
     # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
     # copd_imp + # Correlated to tobacco use
     arterial_hypertension +
-    venous_insufficiency_imp + 
+    # venous_insufficiency_imp +  # remove as suggested by Andrés Muñoz (bad definition of variable, information may refer to different conditions)
     # khorana_risk_score_imp + # Correlated to pancreatic and esophago-gastric cancers
     # two_groups_krs + # Correlated to pancreatic and esophago-gastric cancers
     # previous_onco_surgery + # Correlated to having had tumor resected
@@ -971,7 +971,7 @@ for (i in 1:k) {
     mucinous_histology_imp +
     # grade_histological_differentiation_imp + # violates PH assumption
     # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
-    # family_background_vte + # High GVIF, multicollinearity with venous insufficiency in some folds
+    # family_background_vte + # High GVIF, multicollinearity with venous insufficiency in some folds. When selected, not clear if it is risk or protective factor, due to lack of information when recruiting patients
     previous_vte +
     previous_ate +
     anticoag_tx_currently +
@@ -1061,13 +1061,19 @@ stepwise_cv_cph_final_model = coxph(
        time2 = tstop, 
        event = death) ~ 
     cluster(id) + 
-    vte_event + 
     performance_status_category_corrected_imp +
     primary_tumor_simplified +
     tnm_stage_two_groups +
     tumor_surgically_removed +
-    venous_insufficiency_imp +
-    mucinous_histology_imp,
+    vte_event +
+    mucinous_histology_imp, # after removing venous insufficiency
+    # vte_event + 
+    # performance_status_category_corrected_imp +
+    # primary_tumor_simplified +
+    # tnm_stage_two_groups +
+    # tumor_surgically_removed +
+    # venous_insufficiency_imp +
+    # mucinous_histology_imp,
   id = id,
   data = stepwise_training_set
   )
