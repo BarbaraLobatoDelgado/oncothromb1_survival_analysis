@@ -225,7 +225,6 @@ survival_data = oncoth1_data %>%
 table(survival_data$censored_patient, useNA = "ifany")
 ```
 
-
 ```{r}
 # Create object tmerge for managing time-dependant covariates 
 # Add time until death/censoring and time until VTE
@@ -270,6 +269,37 @@ survival_vte_tmerge = tmerge(
   erythropoietin_tx = tdc(tu_2nd_erythropoietin_tx_from_cancer_diagnosis_days),
   erythropoietin_tx = tdc(tu_3rd_erythropoietin_tx_from_cancer_diagnosis_days)
   )
+```
+
+
+# Power calculations
+
+```{r}
+# Power calculation for CPH regression with two covariates with epidemiological studies
+powerEpi(
+  X1 = survival_data$censored_patient, 
+  X2 = ifelse(survival_data$patient_group == "Case", 1, 0), 
+  failureFlag = 1,
+  n = nrow(oncoth1_data),
+  theta = 2, # we want to observe that VTE increases twice the risk of death
+  alpha = 0.05 # allowing a 5% chance of a Type I error (rejecting the null hypothesis when true)
+)
+```
+
+
+```{r}
+# Calculation of sample size to have statistical power 80%
+sample_size_CPH <- ssizeEpi(
+  X1 = survival_data$censored_patient, 
+  X2 = ifelse(survival_data$patient_group == "Case", 1, 0), 
+  failureFlag = 1, 
+  power = 0.8, 
+  theta = 2, # we want to observe that VTE increases twice the risk of death
+  alpha = 0.05 # allowing a 5% chance of a Type I error (rejecting the null hypothesis when true)
+  ) 
+
+sample_size_CPH %>%
+  unlist()
 ```
 
 
