@@ -170,10 +170,10 @@ fancy_barplot_ctrls_vs_cs = function (dataframe, xcolname) {
 
 ```{r}
 # Load database
-# oncoth1 = get_project("oncothr1", version = "0.0.8003")
-load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8003")
-oncoth1 = obj
-rm(obj)
+oncoth1 = get_project("oncothr1", version = "0.0.8003")
+# load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8003")
+# oncoth1 = obj
+# rm(obj)
 ```
 
 

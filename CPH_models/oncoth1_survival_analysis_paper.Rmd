@@ -221,6 +221,12 @@ survival_data = oncoth1_data %>%
 
 
 ```{r}
+# How many patients experienced death and how many were right-censored?
+table(survival_data$censored_patient, useNA = "ifany")
+```
+
+
+```{r}
 # Create object tmerge for managing time-dependant covariates 
 # Add time until death/censoring and time until VTE
 # For interval censored data, the status indicator is 
