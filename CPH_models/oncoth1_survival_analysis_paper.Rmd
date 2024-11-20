@@ -799,10 +799,10 @@ KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, c
     n_cat_vte <- clinical_data %>% 
       filter(.data[[covariate]] == cat, .data[[patient_group]] == "Case") %>% nrow()
     
-    # Print counts for debugging
-    print(paste("Category:", cat))
-    print(paste("No VTE:", n_cat_no_vte))
-    print(paste("VTE:", n_cat_vte))
+    # # Print counts for debugging
+    # print(paste("Category:", cat))
+    # print(paste("No VTE:", n_cat_no_vte))
+    # print(paste("VTE:", n_cat_vte))
     
     # Filter the survival data for this category
     filtered_data <- survival_data %>% filter(.data[[covariate]] == cat)
