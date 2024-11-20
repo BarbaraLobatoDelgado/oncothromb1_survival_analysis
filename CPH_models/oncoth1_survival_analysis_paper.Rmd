@@ -210,7 +210,7 @@ KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, c
 ```{r}
 # Load DB
 tryCatch({
-  oncoth1 <- get_project("oncothr1", version = "0.0.8005")
+  oncoth1 <- get_project("oncothr1", version = "0.0.8005") # "0.0.8004"
   }, 
   warning = function(w) {
     "Cannot open an9elobject project"
@@ -247,6 +247,10 @@ oncoth1_data %<>%
     age_when_cancer_dx >= 70 ~ "70-93"
   ), .after = age_when_cancer_dx) %>%
   mutate(age_quartiles = as.factor(age_quartiles))
+
+# # Correct time until 1st VTE
+# oncoth1_data %<>%
+#   mutate(tu_1st_vte_all_from_cancer_diagnosis_days_corrected = as.Date(date_1st_vte_all) - as.Date(date_cancer_dx))
 ```
 
 
@@ -471,11 +475,23 @@ print(paste("With the number of patients in ONCOTHROMB1 cohort and values of cov
 
 ```{r}
 table(oncoth1_data$tu_1st_vte_all_days)
+table(oncoth1_data$patient_group)
+sum(oncoth1_data$tu_1st_vte_all_days < 0, na.rm = TRUE)
+table(oncoth1_data$patient_group, oncoth1_data$tu_1st_vte_all_days)
 table(oncoth1$data$tu_1st_vte_all_from_cancer_diagnosis_days_corrected)
 
 yy = oncoth1_data[oncoth1_data$tu_1st_vte_all_days < 0, ]
 oncoth1_vte_t0 <- oncoth1_data %>% filter(id %in% unique(yy$id))
+
+patient_no_VTE_but_tu1vte <- oncoth1_data %>% filter(patient_group == "Control") %>% filter(tu_1st_vte_all_days != 0)
 ```
+
+
+```{r}
+oncoth1_v5 <- get_project("oncothr1")
+```
+
+
 
 
 # Survival curves 
