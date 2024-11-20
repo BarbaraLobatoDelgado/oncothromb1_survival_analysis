@@ -308,7 +308,141 @@ sample_size_CPH %>%
 
 # Survival curves 
 
+```{r}
+univariate_km_log_rank_test = function(tu_var, event_var, dataset, detailed_summary = FALSE, plot_curve = TRUE) {
+  
+  # Make sure inputs are entered properly
+  if (!(tu_var %in% names(dataset) && event_var %in% names(dataset))) {
+    stop("The specified variables are not present in the dataset.")
+  }
+  
+  # Define survival object
+  surv_object = Surv(time = dataset[[tu_var]], event = dataset[[event_var]])
+
+  # Create survfit object
+  # It estimates the survival function (probability of survival) over time for censored data
+  # Calculations in months
+  survfit_object = survfit(formula = surv_object ~ 1, data = dataset)
+  
+  # Show summary of survival function (in months)
+  cat("Summary of KM fitted survival curve:")
+  cat("\n")
+  print(summary(survfit_object)$table/30.25)
+  cat("\n")
+  
+  # Overall survival at 18 months
+  cat("OS rate at 18 months:")
+  cat("\n")
+  time_in_months = 18 # Use consistent time units
+  print(summary(survfit_object, times = time_in_months * 30.25))
+  cat("\n")
+  
+  
+  # Summary in df, with nicer format (in days)
+  if (detailed_summary) {
+    cat("Nice summary of KM fitted survival curve:")
+    cat("\n")
+    print(surv_summary(survfit_object, data = dataset))
+    cat("\n")
+  }
+  
+  # Since no curves are being compare, log-rank test cannot be applied
+  cat("There is no stratification of survival estimates. Log-rank test cannot be applied.")
+  
+  # Return survfit object, needed to plot the survival curve
+  if (plot_curve) {
+
+    km_plot = ggsurvplot(
+      fit = surv_fit(formula = surv_object ~ 1, data = dataset),  
+      data = dataset,
+      break.time.by = 60,
+      censor = FALSE,
+      palette = "black",
+      conf.int = TRUE,
+      pval = FALSE,
+      xscale = 30,
+      xlim = c(0, 540),
+      # surv.plot.height = 1.25,
+      risk.table.height = 0.3,
+      risk.table = "abs_pct",
+      risk.table.y.text.col = TRUE,
+      fontsize = 2.75,
+      xlab = "Time (months)",
+      ylab = "OS Probability",
+      ggtheme = theme_bw()
+      )
+
+    # Customize risk table title
+    km_plot$table =
+      km_plot$table +
+      theme(plot.title = element_text(size = 10))
+
+    return(km_plot)
+  } else {
+    return(NULL)
+  }
+    
+}
+```
+
+
 We will fit several survival curves using the Kaplan-Meier estimator. 
+
+## All patients
+
+```{r}
+# Fit Kaplan-Meier estimator 
+km_fit_oncoth1 = survfit(
+  Surv(time = tstart, time2 = tstop, event = death) ~ cluster(id), # ensures that the survival estimates account for the correlation within individuals, providing more robust results in the presence of repeated measurements
+  data = survival_vte_tmerge)
+
+km_fit_oncoth1
+```
+
+
+```{r}
+# Plot KM curve for all patients in ONCOTHROMB12-01
+km_plot = ggsurvplot(
+  fit = km_fit_oncoth1,  
+  data = survival_vte_tmerge,
+  break.time.by = 60,
+  censor = FALSE,
+  palette = "black",
+  conf.int = TRUE,
+  pval = FALSE,
+  xscale = 30,
+  xlim = c(0, 540),
+  # surv.plot.height = 1.25,
+  risk.table.height = 0.3,
+  risk.table = "abs_pct",
+  risk.table.y.text.col = TRUE,
+  fontsize = 2.75,
+  xlab = "Time (months)",
+  ylab = "OS Probability",
+  ggtheme = theme_bw()
+  )
+
+# Customize risk table title
+km_plot$table =
+  km_plot$table +
+  theme(plot.title = element_text(size = 10))
+
+km_plot
+```
+
+
+```{r}
+# Do KM fit of survival and log rank test for all patients in oncothromb1
+surv_curve_oncoth1 = univariate_km_log_rank_test(
+  tu_var = "follow_up_length_from_cancer_diagnosis_days", 
+  event_var = "censored_patient", 
+  dataset = oncoth1$data, 
+  # detailed_summary = TRUE,
+  plot_curve = TRUE
+  )
+
+surv_curve_oncoth1$plot
+```
 
 ## VTE
 
@@ -461,15 +595,6 @@ km_plot_vte$table =
 
 km_plot_vte
 
-# Save plot
-ggsave(
-  filename = "../graphs/KM_curve_VTE.jpeg",
-  # width = 6.5,
-  # height = 4,
-  units = 'in',
-  dpi = 700
-  )
-
 # dev.off()
 ```
 
@@ -488,6 +613,7 @@ km_fit_vte_sex <- survfit(cox_fit)
 
 km_fit_vte_sex
 ```
+
 
 ```{r, include=FALSE}
 # We perform the log-rank test separately, because we need to manually insert the
@@ -519,8 +645,8 @@ fit1_log_rank_test_pval = format(
 # Calculate separate p-values for different values of gender
 
 # Men
-man_td_survival_analysis = td_survival_analysis %>%
-  filter(gender == "Man") 
+man_td_survival_analysis = survival_vte_tmerge %>%
+  filter(gender == "Male") 
 
 cph_tests_summary_fit1_man = summary(coxph(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
     data = man_td_survival_analysis))
@@ -534,8 +660,8 @@ fit1_man_log_rank_test_pval = format(
 
 
 # Women
-woman_td_survival_analysis = td_survival_analysis %>%
-  filter(gender == "Woman") 
+woman_td_survival_analysis = survival_vte_tmerge %>%
+  filter(gender == "Female") 
 
 cph_tests_summary_fit1_woman = summary(coxph(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
     data = woman_td_survival_analysis))
@@ -553,8 +679,8 @@ fit1_woman_log_rank_test_pval = format(
 ```{r}
 #jpeg("./graphs/time_dependent_covariate_analysis/vte_td_KM_curve_gender_conf_int.jpeg", width = 8, height = 4, units = 'in', res = 700)
 
-n_man = as.numeric(sum(oncoth1[["data"]]$gender == "Man"))
-n_woman = as.numeric(sum(oncoth1[["data"]]$gender == "Woman"))
+n_man = as.numeric(sum(oncoth1[["data"]]$gender == "Male"))
+n_woman = as.numeric(sum(oncoth1[["data"]]$gender == "Female"))
 
 # A data frame with labels for each facet
 f_labels_gender <- data.frame(gender = c("Man", "Woman"), 
@@ -568,8 +694,8 @@ f_labels_gender_logrank_pval = data.frame(gender = c("Man", "Woman"),
 
 # Survival according to gender
 ggsurvplot_facet(
-    survival_clinical_factors_fit1,
-    td_survival_analysis,
+    km_fit_vte_sex,
+    survival_vte_tmerge,
     censor = FALSE,
     xscale = 30, 
     break.x.by = 60,
@@ -610,7 +736,7 @@ ggsurvplot_facet(
 # Survival at 18 months patients with no VTE vs patients with VTE by gender
 summary(survfit(
     Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
-  data = td_survival_analysis_months), times = 18)
+  data = survival_vte_tmerge), times = 18)
 ```
 
 
