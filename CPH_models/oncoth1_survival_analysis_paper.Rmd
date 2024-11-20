@@ -26,6 +26,7 @@ pacman::p_load(
   magrittr,
   survival,
   survminer, 
+  powerSurvEpi,
   car,
   StepReg,
   plotly,
@@ -461,15 +462,155 @@ km_plot_vte$table =
 km_plot_vte
 
 # Save plot
-# ggsave(
-#   filename = "../graphs/KM_curve_VTE.jpeg", 
-#   # width = 6.5, 
-#   # height = 4, 
-#   units = 'in', 
-#   dpi = 700
-#   )
+ggsave(
+  filename = "../graphs/KM_curve_VTE.jpeg",
+  # width = 6.5,
+  # height = 4,
+  units = 'in',
+  dpi = 700
+  )
 
 # dev.off()
+```
+
+## VTE stratified by sex
+
+
+```{r, include=FALSE}
+# Fit Cox model to work around the problem of survfit() not accepting cluster(id)
+cox_fit <- coxph(
+  Surv(tstart, tstop, death) ~ vte_event + gender + cluster(id),
+  data = survival_vte_tmerge
+)
+
+# Fit Kaplan-Meier estimator
+km_fit_vte_sex <- survfit(cox_fit)
+
+km_fit_vte_sex
+```
+
+```{r, include=FALSE}
+# We perform the log-rank test separately, because we need to manually insert the
+# p-value into the KM plot
+cph_fit1 = coxph(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
+    data = survival_vte_tmerge)
+
+cph_tests_summary_fit1 = summary(cph_fit1)
+
+#cph_tests_summary_fit1
+
+fit1_log_rank_test_pval = format(
+  cph_tests_summary_fit1$sctest["pvalue"], 
+  digits = 2, 
+  scientific = TRUE)
+
+
+# # Perform log-rank test and obtain p-value
+# logrank_test <- survdiff(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
+#     data = td_survival_analysis)
+# p_value <- 1 - pchisq(logrank_test$chisq, length(logrank_test$n) - 1)
+# 
+# # Print p-value
+# print(p_value)
+```
+
+
+```{r, include=FALSE}
+# Calculate separate p-values for different values of gender
+
+# Men
+man_td_survival_analysis = td_survival_analysis %>%
+  filter(gender == "Man") 
+
+cph_tests_summary_fit1_man = summary(coxph(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
+    data = man_td_survival_analysis))
+
+print(cph_tests_summary_fit1_man)
+
+fit1_man_log_rank_test_pval = format(
+  cph_tests_summary_fit1_man$sctest["pvalue"], 
+  digits = 2, 
+  scientific = TRUE)
+
+
+# Women
+woman_td_survival_analysis = td_survival_analysis %>%
+  filter(gender == "Woman") 
+
+cph_tests_summary_fit1_woman = summary(coxph(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
+    data = woman_td_survival_analysis))
+
+print(cph_tests_summary_fit1_woman)
+
+fit1_woman_log_rank_test_pval = format(
+  cph_tests_summary_fit1_woman$sctest["pvalue"], 
+  digits = 2, 
+  scientific = TRUE)
+
+```
+
+
+```{r}
+#jpeg("./graphs/time_dependent_covariate_analysis/vte_td_KM_curve_gender_conf_int.jpeg", width = 8, height = 4, units = 'in', res = 700)
+
+n_man = as.numeric(sum(oncoth1[["data"]]$gender == "Man"))
+n_woman = as.numeric(sum(oncoth1[["data"]]$gender == "Woman"))
+
+# A data frame with labels for each facet
+f_labels_gender <- data.frame(gender = c("Man", "Woman"), 
+                              label = c(
+                                paste0("n=", n_man), 
+                                paste0("n=", n_woman)))
+
+f_labels_gender_logrank_pval = data.frame(gender = c("Man", "Woman"), 
+                                   label = c(fit1_man_log_rank_test_pval, 
+                                             fit1_woman_log_rank_test_pval))
+
+# Survival according to gender
+ggsurvplot_facet(
+    survival_clinical_factors_fit1,
+    td_survival_analysis,
+    censor = FALSE,
+    xscale = 30, 
+    break.x.by = 60,
+    conf.int = TRUE,
+    conf.int.alpha = 0.15,
+    xlim = c(0, 540),
+    xlab = "Time to death (months)",
+    ylab = "Overall survival probability",
+    facet.by = c("gender"),
+    ggtheme = theme_bw(),
+    palette = c("black", "red"),
+    legend.title = " ",
+    legend.labs = c("No VTE", "VTE"),
+    surv.median.line = "hv",
+    short.panel.labs = TRUE) + 
+  geom_text(
+    x = 500, 
+    y = 1, 
+    aes(label = label), 
+    data = f_labels_gender) + 
+  annotate(
+    geom = "text", 
+    x = 60,
+    y = 0.2,
+    label = "Log-rank",
+    color = "black") + 
+  geom_text(
+    x = 62, 
+    y = 0.12, 
+    aes(label = label), 
+    data = f_labels_gender_logrank_pval)
+
+#dev.off()
+```
+
+
+```{r, include=FALSE}
+# Survival at 18 months patients with no VTE vs patients with VTE by gender
+summary(survfit(
+    Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
+  data = td_survival_analysis_months), times = 18)
 ```
 
 
