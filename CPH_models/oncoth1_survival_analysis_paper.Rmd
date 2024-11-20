@@ -35,6 +35,79 @@ pacman::p_load(
 ```
 
 
+```{r}
+###########################################
+## Customised ggplot for survfit objects ##
+###########################################
+
+survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, legend_labels, line_colours) {
+  
+  if (logrank_pval < 0.0001) {
+    logrank_pval = as.character("< 0.001")
+  } else if (logrank_pval < 0.01) {
+    logrank_pval = as.character("< 0.01")
+  }
+  
+  median_survival_days = surv_median(survfit_obj)[2, 2]
+  
+  p = autoplot(
+  survfit_obj, 
+  censor = FALSE, 
+  conf.int = FALSE) +
+  theme_bw() +
+  labs(
+    x = "Time (months)", 
+    y = "OS probability", 
+    title = title) +
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    legend.title = element_blank()) +
+  scale_x_continuous(
+    limits = c(0, 605), 
+    breaks = seq(from = 0, to = 600, by = 60), 
+    labels = seq(from = 0, to = 20, by = 2)) +
+  scale_color_manual(
+    labels = legend_labels, 
+    values = line_colours) + 
+  # Log-rank p-value
+  annotate(
+    geom = "text", 
+    x = 50,
+    y = 0.24,
+    label = "Log-rank",
+    color = "black") + 
+  annotate(
+    geom = "text",
+    x = 50, 
+    y = 0.19, 
+    label = logrank_pval) +
+  # n stratified by CAT
+  annotate(
+    geom = "text", 
+    x = 600,
+    y = 1,
+    label = paste0("n=", n_no_vte),
+    color = "black") +
+  annotate(
+    geom = "text", 
+    x = 600,
+    y = 0.95,
+    label = paste0("n=", n_vte),
+    color = "red") + 
+  # Median survival line
+  geom_segment(
+    aes(x = 0, y = 0.5, xend = median_survival_days, yend = 0.5), 
+    linetype = "dashed", 
+    size = 0.4) +
+  geom_segment(
+    aes(x = median_survival_days, y = 0, xend = median_survival_days, yend = 0.5), 
+    linetype = "dashed", 
+    size = 0.5)  
+  
+  return(p)
+}
+```
+
 # Load data
 
 ```{r}
@@ -643,58 +716,147 @@ km_pval_vte_sex_female <- get_robscore_pval(data = survival_vte_tmerge %>% filte
 
 
 ```{r}
+# KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, covariate, patient_group = "patient_group", VTE = "vte_event") {
+#   
+#   # Sanity check -- make sure covariate is factor
+#   stopifnot(class(clinical_data[[covariate]]) == "factor")
+#   
+#   # Get categories of covariate
+#   cat1 <- levels(clinical_data[[covariate]])[1]
+#   cat2 <- levels(clinical_data[[covariate]])[2]
+#   
+#   print(cat1)
+#   print(cat2)
+#   
+#   
+#   # Count number of patients with VTE/no VTE and categories
+#   n_cat1_no_vte <- clinical_data %>% 
+#     filter(.data[[covariate]] == cat1, .data[[patient_group]] == "Control") %>% nrow()
+#   n_cat1_vte <- clinical_data %>% 
+#     filter(.data[[covariate]] == cat1, .data[[patient_group]] == "Case") %>% nrow()
+#   n_cat2_no_vte <- clinical_data %>% 
+#     filter(.data[[covariate]] == cat2, .data[[patient_group]] == "Control") %>% nrow()
+#   n_cat2_vte <- clinical_data %>% 
+#     filter(.data[[covariate]] == cat2, .data[[patient_group]] == "Case") %>% nrow()
+#   
+#   # print(counts)
+#   print(n_cat1_no_vte)
+#   print(n_cat2_no_vte)
+#   
+#   # Construct formula
+#   km_formula <- as.formula(
+#     paste("Surv(time = tstart, time2 = tstop, event = death) ~ ", VTE, " + ", covariate, " + ",  "cluster(id)"))
+#   
+#   print(km_formula)
+#   
+#   # KM fit
+#   km_fit_VTE_cat1 <- survfit(km_formula,
+#     id = id,
+#     data = survival_data %>% filter(.data[[covariate]] == cat1))
+#   
+#   # Get p-value for KM curve with VTE only for men
+#   km_pval_vte_cat1 <- get_robscore_pval(data = survival_data %>% filter(.data[[covariate]] == cat1),
+#                                             covariates = c(VTE, covariate))
+#   
+#   # KM plot 1
+#   km_plot_VTE_cat1 = survplot_custom(
+#     km_fit_VTE_cat1, 
+#     title = cat1, 
+#     n_no_vte = n_cat1_no_vte, 
+#     n_vte = n_cat1_vte, 
+#     legend_labels = c("No VTE", "VTE"), 
+#     line_colours = c("black", "red"),
+#     logrank_pval = km_pval_vte_cat1) + 
+#     theme(legend.position = "none")
+#   
+#   km_plot_VTE_cat1
+# }
+```
+
+
+
+```{r}
 KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, covariate, patient_group = "patient_group", VTE = "vte_event") {
   
   # Sanity check -- make sure covariate is factor
   stopifnot(class(clinical_data[[covariate]]) == "factor")
   
-  # Get categories of covariate
-  cat1 <- levels(clinical_data[[covariate]])[1]
-  cat2 <- levels(clinical_data[[covariate]])[2]
+  # Get categories of covariate (can have more than 2 levels now)
+  categories <- levels(clinical_data[[covariate]])
   
-  print(cat1)
-  print(cat2)
+  # Print categories for debugging
+  print(categories)
   
+  # Create a list to store KM plot results
+  km_plots <- list()
   
-  # Count number of patients with VTE/no VTE and categories
-  n_cat1_no_vte <- clinical_data %>% 
-    filter(.data[[covariate]] == cat1, .data[[patient_group]] == "Control") %>% nrow()
-  n_cat1_vte <- clinical_data %>% 
-    filter(.data[[covariate]] == cat1, .data[[patient_group]] == "Case") %>% nrow()
-  n_cat2_no_vte <- clinical_data %>% 
-    filter(.data[[covariate]] == cat2, .data[[patient_group]] == "Control") %>% nrow()
-  n_cat2_vte <- clinical_data %>% 
-    filter(.data[[covariate]] == cat2, .data[[patient_group]] == "Case") %>% nrow()
+  # Loop over each category in the covariate
+  for (cat in categories) {
+    
+    # Count number of patients with VTE/no VTE and categories
+    n_cat_no_vte <- clinical_data %>% 
+      filter(.data[[covariate]] == cat, .data[[patient_group]] == "Control") %>% nrow()
+    n_cat_vte <- clinical_data %>% 
+      filter(.data[[covariate]] == cat, .data[[patient_group]] == "Case") %>% nrow()
+    
+    # Print counts for debugging
+    print(paste("Category:", cat))
+    print(paste("No VTE:", n_cat_no_vte))
+    print(paste("VTE:", n_cat_vte))
+    
+    # Filter the survival data for this category
+    filtered_data <- survival_data %>% filter(.data[[covariate]] == cat)
+    
+    # Check if there are any non-missing observations after filtering
+    if (nrow(filtered_data) == 0) {
+      warning(paste("No observations found for category:", cat))
+      next  # Skip to the next category
+    }
+    
+    # Check for missing values in key variables
+    if (any(is.na(filtered_data$tstart)) || any(is.na(filtered_data$tstop)) || any(is.na(filtered_data$death)) || any(is.na(filtered_data$id))) {
+      warning(paste("Missing data in key columns for category:", cat))
+      next  # Skip to the next category
+    }
+    
+    # Construct formula for this category
+    km_formula <- as.formula(
+      paste("Surv(time = tstart, time2 = tstop, event = death) ~ ", VTE, " + ", covariate, " + ",  "cluster(id)")
+    )
+    
+    # KM fit for this category
+    km_fit <- tryCatch({
+      survfit(km_formula, id = id, data = filtered_data)
+    }, error = function(e) {
+      warning(paste("Error in survfit for category:", cat, ":", e$message))
+      return(NULL)  # Return NULL in case of error
+    })
+    
+    # Skip if KM fit failed
+    if (is.null(km_fit)) next
+    
+    # Get p-value for KM curve with VTE for this category
+    km_pval <- get_robscore_pval(data = filtered_data, covariates = c(VTE, covariate))
+    
+    # Create KM plot for this category
+    km_plot <- survplot_custom(
+      km_fit, 
+      title = cat, 
+      n_no_vte = n_cat_no_vte, 
+      n_vte = n_cat_vte, 
+      legend_labels = c("No VTE", "VTE"), 
+      line_colours = c("black", "red"),
+      logrank_pval = km_pval
+    ) + theme(legend.position = "none")
+    
+    # Add plot to the list
+    km_plots[[cat]] <- km_plot
+  }
   
-  # print(counts)
-  print(n_cat1_no_vte)
-  print(n_cat2_no_vte)
-  
-  # KM fit
-  km_fit_VTE_cat1 <- survfit(Surv(
-    time = tstart, 
-    time2 = tstop, 
-    event = death) ~ vte_event + gender + cluster(id),
-    id = id,
-    data = survival_data %>% filter(.data[[covariate]] == cat1))
-  
-  # Get p-value for KM curve with VTE only for men
-  km_pval_vte_cat1 <- get_robscore_pval(data = survival_data %>% filter(.data[[covariate]] == cat1),
-                                            covariates = c(VTE, covariate))
-  
-  # KM plot 1
-  km_plot_VTE_cat1 = survplot_custom(
-    km_fit_VTE_cat1, 
-    title = cat1, 
-    n_no_vte = n_cat1_no_vte, 
-    n_vte = n_cat1_vte, 
-    legend_labels = c("No VTE", "VTE"), 
-    line_colours = c("black", "red"),
-    logrank_pval = km_pval_vte_cat1) + 
-    theme(legend.position = "none")
-  
-  km_plot_VTE_cat1
+  # Return the list of plots
+  return(km_plots)
 }
+
 ```
 
 
