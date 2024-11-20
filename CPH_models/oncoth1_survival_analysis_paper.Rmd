@@ -655,18 +655,16 @@ KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, c
   print(cat1)
   print(cat2)
   
-  # Count number of patients with VTE/no VTE and categories
-  # counts <- clinical_data %>%
-  #   count({{covariate}}, {{patient_group}})
   
+  # Count number of patients with VTE/no VTE and categories
   n_cat1_no_vte <- clinical_data %>% 
-    filter({{covariate}} == cat1, {{patient_group}} == "Control") %>% pull(n)
+    filter(.data[[covariate]] == cat1, .data[[patient_group]] == "Control") %>% nrow()
   n_cat1_vte <- clinical_data %>% 
-    filter({{covariate}} == cat1, {{patient_group}} == "Case") %>% pull(n)
+    filter(.data[[covariate]] == cat1, .data[[patient_group]] == "Case") %>% nrow()
   n_cat2_no_vte <- clinical_data %>% 
-    filter({{covariate}} == cat2, {{patient_group}} == "Control") %>% pull(n)
+    filter(.data[[covariate]] == cat2, .data[[patient_group]] == "Control") %>% nrow()
   n_cat2_vte <- clinical_data %>% 
-    filter({{covariate}} == cat2, {{patient_group}} == "Case") %>% pull(n)
+    filter(.data[[covariate]] == cat2, .data[[patient_group]] == "Case") %>% nrow()
   
   # print(counts)
   print(n_cat1_no_vte)
