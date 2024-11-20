@@ -42,10 +42,14 @@ pacman::p_load(
 
 survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, legend_labels, line_colours) {
   
-  if (logrank_pval < 0.0001) {
-    logrank_pval = as.character("< 0.001")
-  } else if (logrank_pval < 0.01) {
+  if (logrank_pval <= 0.05 && logrank_pval > 0.01) {
+    logrank_pval = as.character("< 0.05")
+  } else if (logrank_pval <= 0.01 && logrank_pval > 0.001) {
     logrank_pval = as.character("< 0.01")
+  } else if (logrank_pval <= 0.001 && logrank_pval > 0.0001) {
+    logrank_pval = as.character("< 0.001")
+  } else if (logrank_pval <= 0.001) {
+    logrank_pval = as.character("< 0.0001")
   }
   
   median_survival_days = surv_median(survfit_obj)[2, 2]
