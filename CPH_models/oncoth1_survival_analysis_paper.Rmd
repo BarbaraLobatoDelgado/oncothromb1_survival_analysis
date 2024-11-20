@@ -309,80 +309,106 @@ sample_size_CPH %>%
 # Survival curves 
 
 ```{r}
-univariate_km_log_rank_test = function(tu_var, event_var, dataset, detailed_summary = FALSE, plot_curve = TRUE) {
+km_summary = function(km_survfit) {
   
-  # Make sure inputs are entered properly
-  if (!(tu_var %in% names(dataset) && event_var %in% names(dataset))) {
-    stop("The specified variables are not present in the dataset.")
-  }
-  
-  # Define survival object
-  surv_object = Surv(time = dataset[[tu_var]], event = dataset[[event_var]])
+  # Obtain summary from KM estimator
+  summary_fit = summary(km_survfit)
 
-  # Create survfit object
-  # It estimates the survival function (probability of survival) over time for censored data
-  # Calculations in months
-  survfit_object = survfit(formula = surv_object ~ 1, data = dataset)
+  formatted_summary = data.frame(
+    time = summary_fit$time,
+    n_risk = summary_fit$n.risk,
+    n_event = summary_fit$n.event,
+    survival = summary_fit$surv,
+    std_error = summary_fit$std.err,
+    lower_95CI = summary_fit$lower,
+    upper_95CI = summary_fit$upper
+  )
   
-  # Show summary of survival function (in months)
-  cat("Summary of KM fitted survival curve:")
-  cat("\n")
-  print(summary(survfit_object)$table/30.25)
-  cat("\n")
-  
-  # Overall survival at 18 months
-  cat("OS rate at 18 months:")
-  cat("\n")
-  time_in_months = 18 # Use consistent time units
-  print(summary(survfit_object, times = time_in_months * 30.25))
-  cat("\n")
-  
-  
-  # Summary in df, with nicer format (in days)
-  if (detailed_summary) {
-    cat("Nice summary of KM fitted survival curve:")
-    cat("\n")
-    print(surv_summary(survfit_object, data = dataset))
-    cat("\n")
-  }
-  
-  # Since no curves are being compare, log-rank test cannot be applied
-  cat("There is no stratification of survival estimates. Log-rank test cannot be applied.")
-  
-  # Return survfit object, needed to plot the survival curve
-  if (plot_curve) {
-
-    km_plot = ggsurvplot(
-      fit = surv_fit(formula = surv_object ~ 1, data = dataset),  
-      data = dataset,
-      break.time.by = 60,
-      censor = FALSE,
-      palette = "black",
-      conf.int = TRUE,
-      pval = FALSE,
-      xscale = 30,
-      xlim = c(0, 540),
-      # surv.plot.height = 1.25,
-      risk.table.height = 0.3,
-      risk.table = "abs_pct",
-      risk.table.y.text.col = TRUE,
-      fontsize = 2.75,
-      xlab = "Time (months)",
-      ylab = "OS Probability",
-      ggtheme = theme_bw()
-      )
-
-    # Customize risk table title
-    km_plot$table =
-      km_plot$table +
-      theme(plot.title = element_text(size = 10))
-
-    return(km_plot)
-  } else {
-    return(NULL)
-  }
-    
+  # Show table with summary
+  formatted_summary %>%
+    kbl(caption = "Survival Analysis Summary") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                  full_width = FALSE) %>%
+    column_spec(ncol(formatted_summary))
 }
+```
+
+
+```{r}
+# univariate_km_log_rank_test = function(tu_var, event_var, dataset, detailed_summary = FALSE, plot_curve = TRUE) {
+#   
+#   # Make sure inputs are entered properly
+#   if (!(tu_var %in% names(dataset) && event_var %in% names(dataset))) {
+#     stop("The specified variables are not present in the dataset.")
+#   }
+#   
+#   # Define survival object
+#   surv_object = Surv(time = dataset[[tu_var]], event = dataset[[event_var]])
+# 
+#   # Create survfit object
+#   # It estimates the survival function (probability of survival) over time for censored data
+#   # Calculations in months
+#   survfit_object = survfit(formula = surv_object ~ 1, data = dataset)
+#   
+#   # Show summary of survival function (in months)
+#   cat("Summary of KM fitted survival curve:")
+#   cat("\n")
+#   print(summary(survfit_object)$table/30.25)
+#   cat("\n")
+#   
+#   # Overall survival at 18 months
+#   cat("OS rate at 18 months:")
+#   cat("\n")
+#   time_in_months = 18 # Use consistent time units
+#   print(summary(survfit_object, times = time_in_months * 30.25))
+#   cat("\n")
+#   
+#   
+#   # Summary in df, with nicer format (in days)
+#   if (detailed_summary) {
+#     cat("Nice summary of KM fitted survival curve:")
+#     cat("\n")
+#     print(surv_summary(survfit_object, data = dataset))
+#     cat("\n")
+#   }
+#   
+#   # Since no curves are being compare, log-rank test cannot be applied
+#   cat("There is no stratification of survival estimates. Log-rank test cannot be applied.")
+#   
+#   # Return survfit object, needed to plot the survival curve
+#   if (plot_curve) {
+# 
+#     km_plot = ggsurvplot(
+#       fit = surv_fit(formula = surv_object ~ 1, data = dataset),  
+#       data = dataset,
+#       break.time.by = 60,
+#       censor = FALSE,
+#       palette = "black",
+#       conf.int = TRUE,
+#       pval = FALSE,
+#       xscale = 30,
+#       xlim = c(0, 540),
+#       # surv.plot.height = 1.25,
+#       risk.table.height = 0.3,
+#       risk.table = "abs_pct",
+#       risk.table.y.text.col = TRUE,
+#       fontsize = 2.75,
+#       xlab = "Time (months)",
+#       ylab = "OS Probability",
+#       ggtheme = theme_bw()
+#       )
+# 
+#     # Customize risk table title
+#     km_plot$table =
+#       km_plot$table +
+#       theme(plot.title = element_text(size = 10))
+# 
+#     return(km_plot)
+#   } else {
+#     return(NULL)
+#   }
+#     
+# }
 ```
 
 
@@ -429,20 +455,14 @@ km_plot$table =
 
 km_plot
 ```
-
-
 ```{r}
-# Do KM fit of survival and log rank test for all patients in oncothromb1
-surv_curve_oncoth1 = univariate_km_log_rank_test(
-  tu_var = "follow_up_length_from_cancer_diagnosis_days", 
-  event_var = "censored_patient", 
-  dataset = oncoth1$data, 
-  # detailed_summary = TRUE,
-  plot_curve = TRUE
-  )
-
-surv_curve_oncoth1$plot
+# Show table with summary with all time points from Kaplan-Meier estimation
+km_summary(km_fit_oncoth1)
 ```
+
+
+
+
 
 ## VTE
 
@@ -465,32 +485,6 @@ This output contains several items:
 - events: The number of events (deaths) observed.
 - median: The median survival time (days).
 - 0.95LCL and 0.95UCL: The lower and upper 95% confidence limits for the median survival time (days).
-
-
-```{r}
-km_summary = function(km_survfit) {
-  
-  # Obtain summary from KM estimator
-  summary_fit = summary(km_survfit)
-
-  formatted_summary = data.frame(
-    time = summary_fit$time,
-    n_risk = summary_fit$n.risk,
-    n_event = summary_fit$n.event,
-    survival = summary_fit$surv,
-    std_error = summary_fit$std.err,
-    lower_95CI = summary_fit$lower,
-    upper_95CI = summary_fit$upper
-  )
-  
-  # Show table with summary
-  formatted_summary %>%
-    kbl(caption = "Survival Analysis Summary") %>%
-    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
-                  full_width = FALSE) %>%
-    column_spec(ncol(formatted_summary))
-}
-```
 
 
 ```{r}
@@ -601,135 +595,197 @@ km_plot_vte
 ## VTE stratified by sex
 
 
-```{r, include=FALSE}
-# Fit Cox model to work around the problem of survfit() not accepting cluster(id)
-cox_fit <- coxph(
-  Surv(tstart, tstop, death) ~ vte_event + gender + cluster(id),
-  data = survival_vte_tmerge
-)
-
+```{r}
 # Fit Kaplan-Meier estimator
-km_fit_vte_sex <- survfit(cox_fit)
+km_fit_vte_sex <- survfit(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ vte_event + gender + cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
 
 km_fit_vte_sex
 ```
 
+```{r}
+# Fit Kaplan-Meier estimator for men
+km_fit_vte_male <- survfit(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ vte_event + gender + cluster(id),
+  id = id,
+  data = survival_vte_tmerge %>% filter(gender == "Male"))
 
-```{r, include=FALSE}
-# We perform the log-rank test separately, because we need to manually insert the
-# p-value into the KM plot
-cph_fit1 = coxph(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
-    data = survival_vte_tmerge)
-
-cph_tests_summary_fit1 = summary(cph_fit1)
-
-#cph_tests_summary_fit1
-
-fit1_log_rank_test_pval = format(
-  cph_tests_summary_fit1$sctest["pvalue"], 
-  digits = 2, 
-  scientific = TRUE)
-
-
-# # Perform log-rank test and obtain p-value
-# logrank_test <- survdiff(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
-#     data = td_survival_analysis)
-# p_value <- 1 - pchisq(logrank_test$chisq, length(logrank_test$n) - 1)
-# 
-# # Print p-value
-# print(p_value)
+km_fit_vte_male
 ```
+```{r}
+# Fit Kaplan-Meier estimator for men
+km_fit_vte_female <- survfit(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ vte_event + gender + cluster(id),
+  id = id,
+  data = survival_vte_tmerge %>% filter(gender == "Female"))
 
-
-```{r, include=FALSE}
-# Calculate separate p-values for different values of gender
-
-# Men
-man_td_survival_analysis = survival_vte_tmerge %>%
-  filter(gender == "Male") 
-
-cph_tests_summary_fit1_man = summary(coxph(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
-    data = man_td_survival_analysis))
-
-print(cph_tests_summary_fit1_man)
-
-fit1_man_log_rank_test_pval = format(
-  cph_tests_summary_fit1_man$sctest["pvalue"], 
-  digits = 2, 
-  scientific = TRUE)
-
-
-# Women
-woman_td_survival_analysis = survival_vte_tmerge %>%
-  filter(gender == "Female") 
-
-cph_tests_summary_fit1_woman = summary(coxph(Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + gender, 
-    data = woman_td_survival_analysis))
-
-print(cph_tests_summary_fit1_woman)
-
-fit1_woman_log_rank_test_pval = format(
-  cph_tests_summary_fit1_woman$sctest["pvalue"], 
-  digits = 2, 
-  scientific = TRUE)
-
+km_fit_vte_female
 ```
 
 
 ```{r}
-#jpeg("./graphs/time_dependent_covariate_analysis/vte_td_KM_curve_gender_conf_int.jpeg", width = 8, height = 4, units = 'in', res = 700)
+# Get p-value for VTE stratified by sex
+km_pval_vte_sex <- get_robscore_pval(data = survival_vte_tmerge, covariates = c("vte_event", "gender"))
 
-n_man = as.numeric(sum(oncoth1[["data"]]$gender == "Male"))
-n_woman = as.numeric(sum(oncoth1[["data"]]$gender == "Female"))
+# Get p-value for KM curve with VTE only for men
+km_pval_vte_sex_male <- get_robscore_pval(data = survival_vte_tmerge %>% filter(gender == "Male"), covariates = c("vte_event", "gender"))
 
-# A data frame with labels for each facet
-f_labels_gender <- data.frame(gender = c("Man", "Woman"), 
-                              label = c(
-                                paste0("n=", n_man), 
-                                paste0("n=", n_woman)))
-
-f_labels_gender_logrank_pval = data.frame(gender = c("Man", "Woman"), 
-                                   label = c(fit1_man_log_rank_test_pval, 
-                                             fit1_woman_log_rank_test_pval))
-
-# Survival according to gender
-ggsurvplot_facet(
-    km_fit_vte_sex,
-    survival_vte_tmerge,
-    censor = FALSE,
-    xscale = 30, 
-    break.x.by = 60,
-    conf.int = TRUE,
-    conf.int.alpha = 0.15,
-    xlim = c(0, 540),
-    xlab = "Time to death (months)",
-    ylab = "Overall survival probability",
-    facet.by = c("gender"),
-    ggtheme = theme_bw(),
-    palette = c("black", "red"),
-    legend.title = " ",
-    legend.labs = c("No VTE", "VTE"),
-    surv.median.line = "hv",
-    short.panel.labs = TRUE) + 
-  geom_text(
-    x = 500, 
-    y = 1, 
-    aes(label = label), 
-    data = f_labels_gender) + 
-  annotate(
-    geom = "text", 
-    x = 60,
-    y = 0.2,
-    label = "Log-rank",
-    color = "black") + 
-  geom_text(
-    x = 62, 
-    y = 0.12, 
-    aes(label = label), 
-    data = f_labels_gender_logrank_pval)
-
-#dev.off()
+# Get p-value for KM curve with VTE only for men
+km_pval_vte_sex_female <- get_robscore_pval(data = survival_vte_tmerge %>% filter(gender == "Female"), covariates = c("vte_event", "gender"))
 ```
+
+
+```{r}
+# Male
+n_male_no_vte = sum(
+  oncoth1$data$gender == "Male" & 
+    oncoth1$data$patient_group == "Control"
+  )
+
+n_male_vte = sum(
+  oncoth1$data$gender == "Male" & 
+    oncoth1$data$patient_group == "Case"
+  )
+
+# Female
+n_female_no_vte = sum(
+  oncoth1$data$gender == "Female" & 
+    oncoth1$data$patient_group == "Control"
+  )
+
+n_female_vte = sum(
+  oncoth1$data$gender == "Female" & 
+    oncoth1$data$patient_group == "Case"
+  )
+```
+
+
+```{r}
+# KM curve of VTE for men
+km_plot_vte_male = survplot_custom(
+  km_fit_vte_male, 
+  title = "Male", 
+  n_no_vte = n_male_no_vte, 
+  n_vte = n_male_vte, 
+  legend_labels = c("No VTE", "VTE"),
+  line_colours = c("black", "red"),
+  logrank_pval = fit1_man_log_rank_test_pval
+  ) + 
+  theme(legend.position = "none")
+
+km_plot_vte_male
+```
+
+
+```{r}
+# jpeg("../graphs/paper/KM_female.jpeg", width = 8, height = 4, units = 'in', res = 700)
+
+km_plot_vte_female = survplot_custom(
+  km_fit_vte_female, 
+  title = "Female", 
+  n_no_vte = n_female_no_vte, 
+  n_vte = n_female_vte, 
+  legend_labels = c("No VTE", "VTE"),
+  line_colours = c("black", "red"),
+  logrank_pval = fit1_woman_log_rank_test_pval
+  ) + 
+  theme(legend.position = "none", 
+        axis.title.y = element_blank())
+
+km_plot_vte_female
+
+# dev.off()
+```
+
+```{r}
+# #jpeg("./graphs/time_dependent_covariate_analysis/vte_td_KM_curve_gender_conf_int.jpeg", width = 8, height = 4, units = 'in', res = 700)
+# 
+# n_man = as.numeric(sum(oncoth1[["data"]]$gender == "Male"))
+# n_woman = as.numeric(sum(oncoth1[["data"]]$gender == "Female"))
+# 
+# # A data frame with labels for each facet
+# f_labels_gender <- data.frame(gender = c("Male", "Female"), 
+#                               label = c(
+#                                 paste0("n=", n_man), 
+#                                 paste0("n=", n_woman)))
+# 
+# f_labels_gender_logrank_pval = data.frame(gender = c("Male", "Female"), 
+#                                    label = c(km_pval_vte_sex_male, 
+#                                              km_pval_vte_sex_female))
+# 
+# # Survival according to gender
+# ggsurvplot_facet(
+#     km_fit_vte_sex,
+#     survival_vte_tmerge,
+#     censor = FALSE,
+#     xscale = 30, 
+#     break.x.by = 60,
+#     conf.int = TRUE,
+#     conf.int.alpha = 0.15,
+#     xlim = c(0, 540),
+#     xlab = "Time to death (months)",
+#     ylab = "Overall survival probability",
+#     facet.by = c("gender"),
+#     ggtheme = theme_bw(),
+#     palette = c("black", "red"),
+#     legend.title = " ",
+#     legend.labs = c("No VTE", "VTE"),
+#     surv.median.line = "hv",
+#     short.panel.labs = TRUE) + 
+#   geom_text(
+#     x = 500, 
+#     y = 1, 
+#     aes(label = label), 
+#     data = f_labels_gender) + 
+#   annotate(
+#     geom = "text", 
+#     x = 60,
+#     y = 0.2,
+#     label = "Log-rank",
+#     color = "black") + 
+#   geom_text(
+#     x = 62, 
+#     y = 0.12, 
+#     aes(label = label), 
+#     data = f_labels_gender_logrank_pval)
+# 
+# #dev.off()
+```
+
+
+```{r}
+# Save plot with table
+
+# Combine the main plot and the cumulative events table
+KM_curve_VTE_sex_combined_plot <- cowplot::plot_grid(
+  km_plot_vte_male,
+  km_plot_vte_female,
+  align = "h",
+  ncol = 2, 
+  rel_heights = c(0.7, 0.7),  # Adjust heights to fit both plots
+  rel_widths = c(1.0, 1.0)
+)
+
+# # Save plot
+# ggsave(
+#   filename = "../graphs/KM_curve_CAT_recurrence.jpeg",
+#   plot = KM_curve_CAT_recurrence_combined_plot, 
+#   width = 7, 
+#   height = 4,
+#   units = "in"
+#   )
+
+KM_curve_VTE_sex_combined_plot
+```
+
 
 
 ```{r, include=FALSE}
@@ -843,17 +899,6 @@ km_plot_vte_recurrence$plot =
     color = "#FF6600")
 
 km_plot_vte_recurrence
-
-# # Save plot
-# ggsave(
-#   filename = "../graphs/KM_curve_CAT_recurrence.jpeg",
-#   plot = km_plot_vte_recurrence$plot,
-#   width = 7, 
-#   height = 4,
-#   units = "in"
-#   )
-
-# dev.off()
 ```
 
 ```{r}
