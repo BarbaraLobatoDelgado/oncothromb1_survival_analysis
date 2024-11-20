@@ -486,6 +486,17 @@ oncoth1_vte_t0 <- oncoth1_data %>% filter(id %in% unique(yy$id))
 patient_no_VTE_but_tu1vte <- oncoth1_data %>% filter(patient_group == "Control") %>% filter(tu_1st_vte_all_days != 0)
 ```
 
+```{r}
+oncoth1_cat_conc <- oncoth1_data %>% 
+  filter(n_appointment_patient_became_case == "Beginning of study") %>%
+  select(id, tu_1st_vte_all_from_cancer_diagnosis_days_corrected)
+
+oncoth1_cat_conc_date <- oncoth1_data %>% 
+  filter(tu_1st_vte_all_from_cancer_diagnosis_days_corrected < 1) %>%
+  select(id, tu_1st_vte_all_from_cancer_diagnosis_days_corrected)
+```
+
+
 
 ```{r}
 oncoth1_v5 <- get_project("oncothr1")
