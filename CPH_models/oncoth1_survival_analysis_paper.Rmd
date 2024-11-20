@@ -206,16 +206,17 @@ KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, c
 # sshfs blobato@172.31.60.101:/home/datasets ~/datasets/
 ```
 
+
 ```{r}
 # Load DB
 tryCatch({
-  oncoth1 <- get_project("oncothr1", version = "0.0.8004")
+  oncoth1 <- get_project("oncothr1", version = "0.0.8005")
   }, 
   warning = function(w) {
     "Cannot open an9elobject project"
     }, 
   finally = {
-    load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8004")
+    load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8005")
     oncoth1 <- obj
     rm(obj)
   }
@@ -465,6 +466,15 @@ power_calc_CPH <- powerEpi(
 )
 
 print(paste("With the number of patients in ONCOTHROMB1 cohort and values of covariates 'death' and 'VTE', the statistical power is", round(power_calc_CPH$power, digits = 6)))
+```
+# Debuggin
+
+```{r}
+table(oncoth1_data$tu_1st_vte_all_days)
+table(oncoth1$data$tu_1st_vte_all_from_cancer_diagnosis_days_corrected)
+
+yy = oncoth1_data[oncoth1_data$tu_1st_vte_all_days < 0, ]
+oncoth1_vte_t0 <- oncoth1_data %>% filter(id %in% unique(yy$id))
 ```
 
 
