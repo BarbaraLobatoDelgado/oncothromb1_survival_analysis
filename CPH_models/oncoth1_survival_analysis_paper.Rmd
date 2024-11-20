@@ -89,13 +89,13 @@ survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, le
   # n stratified by CAT
   annotate(
     geom = "text", 
-    x = 500,
+    x = 600,
     y = 1,
     label = paste0("n=", n_no_vte),
     color = "black") +
   annotate(
     geom = "text", 
-    x = 500,
+    x = 600,
     y = 0.95,
     label = paste0("n=", n_vte),
     color = "red") + 
@@ -627,8 +627,6 @@ km_summary(km_fit_oncoth1)
 
 
 
-
-
 ## VTE
 
 ```{r}
@@ -809,8 +807,9 @@ ggsave(
   filename = "../graphs/KM_curve_VTE_age_plot.jpeg",
   plot = KM_curve_VTE_age_group_combined_plot,
   width = 7,
-  height = 4,
-  units = "in"
+  height = 5,
+  units = "in", 
+  dpi = 300
   )
 ```
 
@@ -861,14 +860,15 @@ KM_curve_VTE_sex_combined_plot
 ```
 
 ```{r}
-# # Save plot
-# ggsave(
-#   filename = "../graphs/KM_curve_VTE_sex_plot.jpeg",
-#   plot = KM_curve_VTE_sex_combined_plot,
-#   width = 7,
-#   height = 4,
-#   units = "in"
-#   )
+# Save plot
+ggsave(
+  filename = "../graphs/KM_curve_VTE_sex_plot.jpeg",
+  plot = KM_curve_VTE_sex_combined_plot,
+  width = 8,
+  height = 4,
+  units = "in", 
+  dpi = 300
+  )
 ```
 
 
@@ -926,14 +926,15 @@ KM_curve_VTE_cancer_type_combined_plot
 
 
 ```{r}
-# # Save plot
-# ggsave(
-#   filename = "../graphs/KM_curve_VTE_cancer_type_plot.jpeg",
-#   plot = KM_curve_VTE_cancer_type_combined_plot,
-#   width = 7,
-#   height = 4,
-#   units = "in"
-#   )
+# Save plot
+ggsave(
+  filename = "../graphs/KM_curve_VTE_cancer_type_plot.jpeg",
+  plot = KM_curve_VTE_cancer_type_combined_plot,
+  width = 7,
+  height = 7,
+  units = "in", 
+  dpi = 300
+  )
 ```
 
 
@@ -990,14 +991,15 @@ KM_curve_VTE_stage_combined_plot
 
 
 ```{r}
-# # Save plot
-# ggsave(
-#   filename = "../graphs/KM_curve_VTE_stage_plot.jpeg",
-#   plot = KM_curve_VTE_stage_combined_plot,
-#   width = 7,
-#   height = 4,
-#   units = "in"
-#   )
+# Save plot
+ggsave(
+  filename = "../graphs/KM_curve_VTE_stage_plot.jpeg",
+  plot = KM_curve_VTE_stage_combined_plot,
+  width = 7,
+  height = 7,
+  units = "in", 
+  dpi = 300
+  )
 ```
 
 
@@ -1122,8 +1124,9 @@ ggsave(
   filename = "../graphs/KM_curve_CAT_recurrence.jpeg",
   plot = KM_curve_CAT_recurrence_combined_plot, 
   width = 7, 
-  height = 4,
-  units = "in"
+  height = 5,
+  units = "in",
+  dpi = 300
   )
 ```
 
