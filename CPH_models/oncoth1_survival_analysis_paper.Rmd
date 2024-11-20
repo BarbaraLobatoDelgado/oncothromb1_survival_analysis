@@ -594,7 +594,6 @@ km_plot_vte
 
 ## VTE stratified by sex
 
-
 ```{r}
 # Fit Kaplan-Meier estimator
 km_fit_vte_sex <- survfit(Surv(
@@ -641,6 +640,47 @@ km_pval_vte_sex_male <- get_robscore_pval(data = survival_vte_tmerge %>% filter(
 # Get p-value for KM curve with VTE only for men
 km_pval_vte_sex_female <- get_robscore_pval(data = survival_vte_tmerge %>% filter(gender == "Female"), covariates = c("vte_event", "gender"))
 ```
+
+
+```{r}
+KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, covariate, patient_group = "patient_group") {
+  
+  # Sanity check -- make sure covariate is factor
+  stopifnot(class(clinical_data[[covariate]]) == "factor")
+  
+  # Get categories of covariate
+  cat1 <- levels(clinical_data[[covariate]])[1]
+  cat2 <- levels(clinical_data[[covariate]])[2]
+  
+  print(cat1)
+  print(cat2)
+  
+  # Count number of patients with VTE/no VTE and categories
+  # counts <- clinical_data %>%
+  #   count({{covariate}}, {{patient_group}})
+  
+  n_cat1_no_vte <- clinical_data %>% 
+    filter({{covariate}} == cat1, {{patient_group}} == "Control") %>% pull(n)
+  n_cat1_vte <- clinical_data %>% 
+    filter({{covariate}} == cat1, {{patient_group}} == "Case") %>% pull(n)
+  n_cat2_no_vte <- clinical_data %>% 
+    filter({{covariate}} == cat2, {{patient_group}} == "Control") %>% pull(n)
+  n_cat2_vte <- clinical_data %>% 
+    filter({{covariate}} == cat2, {{patient_group}} == "Case") %>% pull(n)
+  
+  # print(counts)
+  print(n_cat1_no_vte)
+  print(n_cat2_no_vte)
+  
+}
+```
+
+
+```{r}
+KM_curve_plots_VTE_another_covariate(
+  clinical_data = oncoth1_data, survival_data = survival_vte_tmerge, covariate = "gender")
+```
+
 
 
 ```{r}
