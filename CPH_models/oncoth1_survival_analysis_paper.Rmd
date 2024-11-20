@@ -78,13 +78,13 @@ survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, le
   annotate(
     geom = "text", 
     x = 70,
-    y = 0.24,
+    y = 0.25,
     label = "Log-rank",
     color = "black") + 
   annotate(
     geom = "text",
     x = 70, 
-    y = 0.19, 
+    y = 0.15, 
     label = logrank_pval) +
   # n stratified by CAT
   annotate(
@@ -937,6 +937,68 @@ KM_curve_VTE_cancer_type_combined_plot
 ```
 
 
+## VTE stratified by stage
+
+```{r}
+# Fit Kaplan-Meier estimator
+km_fit_vte_stage_type <- survfit(Surv(
+  time = tstart, 
+  time2 = tstop, 
+  event = death) ~ vte_event + tnm_stage_grouped + cluster(id),
+  id = id,
+  data = survival_vte_tmerge)
+
+km_fit_vte_stage_type
+```
+
+
+```{r, include=FALSE}
+# Survival at 18 months patients with no VTE vs patients with VTE by stage
+summary(survfit(
+    Surv(time = tstart, time2 = tstop, event = death) ~ vte_event + tnm_stage_grouped, 
+  data = survival_vte_tmerge), times = 18)
+```
+
+
+```{r}
+# Get KM curves for each cancer type
+km_plot_vte_stage_type <- KM_curve_plots_VTE_another_covariate(
+  clinical_data = oncoth1_data, 
+  survival_data = survival_vte_tmerge, 
+  covariate = "tnm_stage_grouped"
+  )
+```
+
+
+```{r}
+# Save plot with table
+
+# Combine the main plot and the cumulative events table
+KM_curve_VTE_stage_combined_plot <- cowplot::plot_grid(
+  km_plot_vte_stage_type$`I-II`,
+  km_plot_vte_stage_type$III,
+  km_plot_vte_stage_type$IV,
+  align = "hv",
+  nrow = 2,
+  ncol = 2, 
+  rel_heights = c(1.0, 1.0),  # Adjust heights to fit both plots
+  rel_widths = c(1.2, 1.2)
+)
+
+KM_curve_VTE_stage_combined_plot
+```
+
+
+```{r}
+# # Save plot
+# ggsave(
+#   filename = "../graphs/KM_curve_VTE_stage_plot.jpeg",
+#   plot = KM_curve_VTE_stage_combined_plot,
+#   width = 7,
+#   height = 4,
+#   units = "in"
+#   )
+```
 
 
 ## No VTE vs single VTE vs VTE recurrence
