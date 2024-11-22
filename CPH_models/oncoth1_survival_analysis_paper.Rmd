@@ -471,40 +471,6 @@ power_calc_CPH <- powerEpi(
 
 print(paste("With the number of patients in ONCOTHROMB1 cohort and values of covariates 'death' and 'VTE', the statistical power is", round(power_calc_CPH$power, digits = 6)))
 ```
-# Debuggin
-
-```{r}
-table(oncoth1_data$tu_1st_vte_all_days)
-table(oncoth1_data$patient_group)
-sum(oncoth1_data$tu_1st_vte_all_days < 0, na.rm = TRUE)
-table(oncoth1_data$patient_group, oncoth1_data$tu_1st_vte_all_days)
-table(oncoth1$data$tu_1st_vte_all_from_cancer_diagnosis_days_corrected)
-
-yy = oncoth1_data[oncoth1_data$tu_1st_vte_all_days < 0, ]
-oncoth1_vte_t0 <- oncoth1_data %>% filter(id %in% unique(yy$id))
-
-patient_no_VTE_but_tu1vte <- oncoth1_data %>% filter(patient_group == "Control") %>% filter(tu_1st_vte_all_days != 0)
-```
-
-```{r}
-oncoth1_cat_conc <- oncoth1_data %>% 
-  filter(n_appointment_patient_became_case == "Beginning of study") %>%
-  select(id, tu_1st_vte_all_from_cancer_diagnosis_days_corrected)
-
-oncoth1_cat_conc_date <- oncoth1_data %>% 
-  filter(tu_1st_vte_all_from_cancer_diagnosis_days_corrected < 1) %>%
-  select(id, tu_1st_vte_all_from_cancer_diagnosis_days_corrected)
-```
-
-
-
-```{r}
-oncoth1_v5 <- get_project("oncothr1")
-```
-
-
-
-
 # Survival curves 
 
 ```{r}
