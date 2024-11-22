@@ -1330,7 +1330,9 @@ print(paste("Cramer's V for family background VTE and venous insufficiency =", c
 
 
 
-## Stepwise feature selection CPH [careful with StepReg version]
+## Stepwise feature selection CPH 
+
+Original analysis was performed with `StepReg` version 1.4.4.
 
 `StepReg` package vignette: 
 
