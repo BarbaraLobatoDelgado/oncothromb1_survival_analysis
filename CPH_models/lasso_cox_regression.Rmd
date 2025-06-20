@@ -9,19 +9,180 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Settings and load libraries
+
+```{r}
+# Deactivate scientific notation
+options(scipen = 999, max.print = 10000)
+
+# Seed
+seed = 2828
+set.seed(seed)
+```
+
+
+```{r}
+# Load libraries
+pacman::p_load(
+  kfoldsableExtra,
+  an9elproject, 
+  tidyverse,
+  lubridate, 
+  magrittr,
+  glmnet,
+  survival,
+  survminer, 
+  powerSurvEpi,
+  car,
+  StepReg,
+  plotly,
+  install = FALSE, update = FALSE
+  )
+```
+
+## Load data
 
 ```{r cars}
 # Load time-dependent dataset
 oncoth1_td_dataset = read.csv(file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv")
 ```
 
-## Including Plots
+## Dataset partition
 
-You can also embed plots, for example:
+```{r}
+# Partition data with repeated rows per patient into training and test set
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+# Get unique IDs
+unique_ids <- unique(oncoth1_td_dataset$id)
+
+# Randomly assign each unique ID to either train or test
+train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
+test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
+
+# Partition the data into train and test sets based on the assigned IDs
+training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
+testing_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
+
+# Checkfolds that IDs are not in training and test sets
+stopifnot(
+  identical(
+    sort(unique(training_set$id)), sort(unique(testing_set$id))) == FALSE)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+# Set number of folds 
+kfolds = 10
+
+# Initialize a vector to store the evaluation results
+cv_index_valid <- vector("list", length = kfolds)
+cv_vars_results <- vector("list", length = kfolds)
+cv_cindex_results <- vector("list", length = kfolds)
+cv_vif_results <- vector("list", length = kfolds) # Inspection of GVIF in trained models is necessary to detect multicollinearity issues
+
+for (i in 1:kfolds) {
+  # Get the validation IDs
+  validation_ids <- unique_ids[cv_folds_index == i]
+  
+  # Get the validation fold
+  validation_fold <- training_set[training_set$id %in% validation_ids, ]
+  
+  # Get the training fold
+  training_fold <- training_set[!(training_set$id %in% validation_ids), ]
+  
+  # print("Training")
+  # print(head(training_fold, n = kfolds))
+  # 
+  # print("Validation")
+  # print(head(validation_fold, n = kfolds))
+  
+  # Checkfolds that IDs are not in training and test sets
+  stopifnot(
+    identical(
+      sort(unique(training_fold$id)), sort(unique(validation_fold$id))) == FALSE)
+  
+  
+  
+  
+  
+  
+  # Train your model on the training fold
+  model = StepReg::stepwiseCox(
+    formula = Surv(time = tstart, time2 = tstop, event = death) ~
+    vte_event +
+    age_when_cancer_dx +
+    gender +
+    bmi_value +
+    performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection in some folds, but models can be trained
+    # diabetes_mellitus + # Confounder. We kfoldsnow it is associated with pancreatic cancer patients that undergo resection of pancreas
+    dyslipidemia +
+    # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
+    # copd_imp + # Correlated to tobacco use
+    arterial_hypertension +
+    # venous_insufficiency_imp +  # remove as suggested by Andrés Muñoz (bad definition of variable, information may refer to different conditions)
+    # kfoldshorana_riskfolds_score_imp + # Correlated to pancreatic and esophago-gastric cancers
+    # two_groups_kfoldsrs + # Correlated to pancreatic and esophago-gastric cancers
+    # previous_onco_surgery + # Correlated to having had tumor resected
+    tumor_surgically_removed + 
+    primary_tumor_simplified +
+    # tnm_stage_grouped +
+    tnm_stage_two_groups +
+    # histology_type_imp + # Correlated with NSCLC
+    mucinous_histology_imp +
+    # grade_histological_differentiation_imp + # violates PH assumption
+    # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
+    # family_backfoldsground_vte + # High GVIF, multicollinearity with venous insufficiency in some folds. When selected, not clear if it is riskfolds or protective factor, due to lackfolds of information when recruiting patients
+    previous_vte +
+    previous_ate +
+    anticoag_tx_currently +
+    antiaggreg_tx_currently, 
+    data = training_fold,
+    include = "primary_tumor_simplified",
+    selection = "bidirection",
+    select = "AIC", 
+    method = "efron"
+    )
+  
+  # Save selected variables
+  selected_variables = unname(unlist(model$`Selected Varaibles`))
+  # print(selected_variables)
+  
+  # Fit model with selected variables in this fold
+  # Create formula
+  fold_pcox_formula = as.formula(
+    sprintf('%s ~ %s', 'Surv(time = tstart, time2 = tstop, event = death)',
+            paste(selected_variables, collapse = " + ")))
+  
+  # Fit model
+  fold_cph_model = coxph(
+    formula = fold_pcox_formula, 
+    id = id,
+    data = validation_fold
+  )
+  
+  # VIF
+  vif_results = rms::vif(fold_cph_model)
+  # print(vif_results)
+  
+  # Makfoldse predictions on the validation fold
+  # The result is the hazard of suffering the event. It's difficult to interpret
+  predictions <- predict(fold_cph_model, newdata = validation_fold)
+  # print(predictions)
+  
+  # Evaluate the predictions
+  # C-index
+  fold_cindex <- concordance(fold_cph_model, newdata = validation_fold)
+  # print(fold_cindex$concordance)
+  
+  # Store the evaluation result
+  cv_index_valid[[i]] = validation_ids
+  cv_vars_results[[i]] = selected_variables
+  cv_cindex_results[[i]] = fold_cindex$concordance
+  cv_vif_results[[i]] = as.data.frame(vif_results)
+
+}
+```
+
+
+
+
