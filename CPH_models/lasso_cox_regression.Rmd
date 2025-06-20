@@ -1,0 +1,27 @@
+---
+title: "Lasso Cox Regression"
+author: "Bárbara Lobato Delgado"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r cars}
+# Load time-dependent dataset
+oncoth1_td_dataset = read.csv(file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

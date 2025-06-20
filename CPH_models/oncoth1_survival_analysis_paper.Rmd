@@ -216,13 +216,13 @@ tryCatch({
     "Cannot open an9elobject project"
     }, 
   finally = {
-    load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8005")
+    load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8005")
     oncoth1 <- obj
     rm(obj)
   }
 )
 ```
-
+oncothr1.RData_0.0.8005
 
 ```{r}
 # Get data slot
@@ -454,6 +454,13 @@ survival_vte_tmerge = tmerge(
   erythropoietin_tx = tdc(tu_3rd_erythropoietin_tx_from_cancer_diagnosis_days)
   )
 ```
+
+
+```{r}
+# Save time-dependent dataset
+write.csv(survival_vte_tmerge, file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv", row.names = FALSE)
+```
+
 
 
 # Power calculations
