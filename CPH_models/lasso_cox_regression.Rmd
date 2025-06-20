@@ -47,6 +47,25 @@ pacman::p_load(
 oncoth1_td_dataset = read.csv(file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv")
 ```
 
+
+```{r}
+# Remove columns with missing values
+oncoth1_td_dataset %<>%
+  select(where(~ !any(is.na(.))))
+```
+
+
+```{r}
+# Change name of dependent variable
+```
+
+
+```{r}
+# Stop if there are missing values in dataset
+stopifnot(!anyNA(oncoth1_td_dataset))
+```
+
+
 ## Dataset partition
 
 ```{r}
@@ -86,9 +105,15 @@ for (i in 1:kfolds) {
   
   # Get the validation fold
   validation_fold <- training_set[training_set$id %in% validation_ids, ]
+  # Separate target from data
+  y_validation_fold <- validation_fold$death
+  validation_fold <- validation_fold %>% select(-death)
   
   # Get the training fold
   training_fold <- training_set[!(training_set$id %in% validation_ids), ]
+  # Separate target from data
+  y_training_fold <- training_fold$death
+  training_fold <- training_fold %>% select(-death)
   
   # print("Training")
   # print(head(training_fold, n = kfolds))
@@ -101,88 +126,131 @@ for (i in 1:kfolds) {
     identical(
       sort(unique(training_fold$id)), sort(unique(validation_fold$id))) == FALSE)
   
+  # # Lasso Cox regression
+  # cvfit <- cv.glmnet(
+  #   x = training_fold,
+  #   y = y_training_fold,
+  #   family = "cox", 
+  #   alpha = 1 # alpha = 1 is Lasso, 0 is ridge. In between, elastic net
+  # )
+  # 
+  # print(cvfit)
   
-  
-  
-  
-  
-  # Train your model on the training fold
-  model = StepReg::stepwiseCox(
-    formula = Surv(time = tstart, time2 = tstop, event = death) ~
-    vte_event +
-    age_when_cancer_dx +
-    gender +
-    bmi_value +
-    performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection in some folds, but models can be trained
-    # diabetes_mellitus + # Confounder. We kfoldsnow it is associated with pancreatic cancer patients that undergo resection of pancreas
-    dyslipidemia +
-    # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
-    # copd_imp + # Correlated to tobacco use
-    arterial_hypertension +
-    # venous_insufficiency_imp +  # remove as suggested by Andrés Muñoz (bad definition of variable, information may refer to different conditions)
-    # kfoldshorana_riskfolds_score_imp + # Correlated to pancreatic and esophago-gastric cancers
-    # two_groups_kfoldsrs + # Correlated to pancreatic and esophago-gastric cancers
-    # previous_onco_surgery + # Correlated to having had tumor resected
-    tumor_surgically_removed + 
-    primary_tumor_simplified +
-    # tnm_stage_grouped +
-    tnm_stage_two_groups +
-    # histology_type_imp + # Correlated with NSCLC
-    mucinous_histology_imp +
-    # grade_histological_differentiation_imp + # violates PH assumption
-    # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
-    # family_backfoldsground_vte + # High GVIF, multicollinearity with venous insufficiency in some folds. When selected, not clear if it is riskfolds or protective factor, due to lackfolds of information when recruiting patients
-    previous_vte +
-    previous_ate +
-    anticoag_tx_currently +
-    antiaggreg_tx_currently, 
-    data = training_fold,
-    include = "primary_tumor_simplified",
-    selection = "bidirection",
-    select = "AIC", 
-    method = "efron"
-    )
-  
-  # Save selected variables
-  selected_variables = unname(unlist(model$`Selected Varaibles`))
-  # print(selected_variables)
-  
-  # Fit model with selected variables in this fold
-  # Create formula
-  fold_pcox_formula = as.formula(
-    sprintf('%s ~ %s', 'Surv(time = tstart, time2 = tstop, event = death)',
-            paste(selected_variables, collapse = " + ")))
-  
-  # Fit model
-  fold_cph_model = coxph(
-    formula = fold_pcox_formula, 
-    id = id,
-    data = validation_fold
+  # lambda_star <- cvfit$lambda.min
+  fit_lasso <- glmnet(
+    x = training_fold,
+    y = y_training_fold, 
+    family = "cox",
+    alpha = 1,
+    lambda = lambda_star
   )
   
-  # VIF
-  vif_results = rms::vif(fold_cph_model)
-  # print(vif_results)
+  print(fit_lasso)
   
-  # Makfoldse predictions on the validation fold
-  # The result is the hazard of suffering the event. It's difficult to interpret
-  predictions <- predict(fold_cph_model, newdata = validation_fold)
-  # print(predictions)
+  lp_val <- predict(
+    fit_lasso,
+    newx = validation_fold
+  )
   
-  # Evaluate the predictions
-  # C-index
-  fold_cindex <- concordance(fold_cph_model, newdata = validation_fold)
-  # print(fold_cindex$concordance)
   
-  # Store the evaluation result
-  cv_index_valid[[i]] = validation_ids
-  cv_vars_results[[i]] = selected_variables
-  cv_cindex_results[[i]] = fold_cindex$concordance
-  cv_vif_results[[i]] = as.data.frame(vif_results)
+  
+  
+  # # Train your model on the training fold
+  # model = StepReg::stepwiseCox(
+  #   formula = Surv(time = tstart, time2 = tstop, event = death) ~
+  #   vte_event +
+  #   age_when_cancer_dx +
+  #   gender +
+  #   bmi_value +
+  #   performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection in some folds, but models can be trained
+  #   # diabetes_mellitus + # Confounder. We kfoldsnow it is associated with pancreatic cancer patients that undergo resection of pancreas
+  #   dyslipidemia +
+  #   # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
+  #   # copd_imp + # Correlated to tobacco use
+  #   arterial_hypertension +
+  #   # venous_insufficiency_imp +  # remove as suggested by Andrés Muñoz (bad definition of variable, information may refer to different conditions)
+  #   # kfoldshorana_riskfolds_score_imp + # Correlated to pancreatic and esophago-gastric cancers
+  #   # two_groups_kfoldsrs + # Correlated to pancreatic and esophago-gastric cancers
+  #   # previous_onco_surgery + # Correlated to having had tumor resected
+  #   tumor_surgically_removed + 
+  #   primary_tumor_simplified +
+  #   # tnm_stage_grouped +
+  #   tnm_stage_two_groups +
+  #   # histology_type_imp + # Correlated with NSCLC
+  #   mucinous_histology_imp +
+  #   # grade_histological_differentiation_imp + # violates PH assumption
+  #   # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
+  #   # family_backfoldsground_vte + # High GVIF, multicollinearity with venous insufficiency in some folds. When selected, not clear if it is riskfolds or protective factor, due to lackfolds of information when recruiting patients
+  #   previous_vte +
+  #   previous_ate +
+  #   anticoag_tx_currently +
+  #   antiaggreg_tx_currently, 
+  #   data = training_fold,
+  #   include = "primary_tumor_simplified",
+  #   selection = "bidirection",
+  #   select = "AIC", 
+  #   method = "efron"
+  #   )
+  
+  # # Save selected variables
+  # selected_variables = unname(unlist(model$`Selected Varaibles`))
+  # # print(selected_variables)
+  # 
+  # # Fit model with selected variables in this fold
+  # # Create formula
+  # fold_pcox_formula = as.formula(
+  #   sprintf('%s ~ %s', 'Surv(time = tstart, time2 = tstop, event = death)',
+  #           paste(selected_variables, collapse = " + ")))
+  # 
+  # # Fit model
+  # fold_cph_model = coxph(
+  #   formula = fold_pcox_formula, 
+  #   id = id,
+  #   data = validation_fold
+  # )
+  # 
+  # # VIF
+  # vif_results = rms::vif(fold_cph_model)
+  # # print(vif_results)
+  # 
+  # # Makfoldse predictions on the validation fold
+  # # The result is the hazard of suffering the event. It's difficult to interpret
+  # predictions <- predict(fold_cph_model, newdata = validation_fold)
+  # # print(predictions)
+  # 
+  # # Evaluate the predictions
+  # # C-index
+  # fold_cindex <- concordance(fold_cph_model, newdata = validation_fold)
+  # # print(fold_cindex$concordance)
+  # 
+  # # Store the evaluation result
+  # cv_index_valid[[i]] = validation_ids
+  # cv_vars_results[[i]] = selected_variables
+  # cv_cindex_results[[i]] = fold_cindex$concordance
+  # cv_vif_results[[i]] = as.data.frame(vif_results)
 
 }
 ```
 
+```{r}
+library(penalized)
+
+dataset <- as.matrix(oncoth1_td_dataset %>% select(-c(id, patient_group, tstart, tstop, death)))
+
+m <- model.matrix(~ . - 1, data = oncoth1_td_dataset)
+# then remove any columns you don't want and coerce:
+X <- as.matrix(m)
+
+fit <- penalized(
+  response    = with(oncoth1_td_dataset, Surv(tstart, tstop, death)), 
+  penalized  = X,
+  unpenalized = ~1,
+  lambda1     = 0.1,        # your LASSO penalty
+  model       = "cox"
+)
+
+
+```
 
 
 
