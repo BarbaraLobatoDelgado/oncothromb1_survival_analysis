@@ -108,9 +108,42 @@ oncoth1_td_data_clean
 
 
 ```{r}
+# Transform covariates dataframe into matrix
+covariates <- as.matrix(oncoth1_td_data_clean)
+covariates[1:5,]
+```
+
+
+```{r}
+# Create response Surv() object
+# Allow for right-censoring to handle time-dependent variables
+response = with(oncoth1_td_data_clean, Surv(tstart, tstop, death))
+response[1:5]
+```
+
+
+
+```{r}
+library(penalized)
+
+dataset <- as.matrix(oncoth1_td_data_clean)
+
+# m <- model.matrix(~ . - 1, data = oncoth1_td_dataset)
+# # then remove any columns you don't want and coerce:
+# X <- as.matrix(m)
+
+fit <- penalized(
+  response    = with(oncoth1_td_data_clean, Surv(tstart, tstop, death)), 
+  penalized  = dataset,
+  unpenalized = ~1,
+  lambda1     = 0.1,        # your LASSO penalty
+  model       = "cox"
+)
 
 
 ```
+
+
 
 
 ## Dataset partition
@@ -279,25 +312,7 @@ for (i in 1:kfolds) {
 }
 ```
 
-```{r}
-library(penalized)
 
-dataset <- as.matrix(oncoth1_td_dataset %>% select(-c(id, patient_group, tstart, tstop, death)))
-
-m <- model.matrix(~ . - 1, data = oncoth1_td_dataset)
-# then remove any columns you don't want and coerce:
-X <- as.matrix(m)
-
-fit <- penalized(
-  response    = with(oncoth1_td_dataset, Surv(tstart, tstop, death)), 
-  penalized  = X,
-  unpenalized = ~1,
-  lambda1     = 0.1,        # your LASSO penalty
-  model       = "cox"
-)
-
-
-```
 
 
 
