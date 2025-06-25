@@ -204,8 +204,13 @@ test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
 training_set <- covariates_scaled[train_rows,]
 test_set <- covariates_scaled[test_rows,]
 
+# Partition response
+y_training <- response[train_rows,]
+y_test <- response[test_rows,]
+
 # Check that all patients are accounted for in training and test set
 stopifnot(dim(training_set)[0] + dim(test_set)[0] == covariates_scaled)
+stopifnot(length(y_training) + length(y_test) == length(response))
 ```
 
 
