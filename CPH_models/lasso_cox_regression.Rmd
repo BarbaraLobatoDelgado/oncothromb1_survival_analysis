@@ -148,7 +148,7 @@ oncoth1_td_data_clean
 # Transform covariates dataframe into matrix
 covariates <- as.matrix(oncoth1_td_data_clean)
 # Scale 
-covariates_scaled <- scale(covariates)
+# covariates_scaled <- scale(covariates)
 ```
 
 
@@ -200,17 +200,25 @@ test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
 test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
 
+# Partition data keeping the IDs (needed for stratified CV)
+training_set_with_ids <- oncoth1_td_dataset %>% 
+  filter(id %in% train_ids) %>% 
+  select(id)
+testing_set_with_ids <- oncoth1_td_dataset %>% 
+  filter(id %in% test_ids) %>%
+  select(id)
+
 # Partition data
-training_set <- covariates_scaled[train_rows,]
-test_set <- covariates_scaled[test_rows,]
+training_set <- covariates[train_rows,]
+test_set <- covariates[test_rows,]
 
 # Partition response
-y_training <- response[train_rows,]
-y_test <- response[test_rows,]
+training_response <- response[train_rows,]
+test_response <- response[test_rows,]
 
 # Check that all patients are accounted for in training and test set
 stopifnot(dim(training_set)[0] + dim(test_set)[0] == covariates_scaled)
-stopifnot(length(y_training) + length(y_test) == length(response))
+stopifnot(length(training_response) + length(test_response) == length(response))
 ```
 
 
@@ -236,21 +244,27 @@ cv_vars_results <- vector("list", length = kfolds)
 cv_cindex_results <- vector("list", length = kfolds)
 cv_vif_results <- vector("list", length = kfolds) # Inspection of GVIF in trained models is necessary to detect multicollinearity issues
 
-for (i in 1:kfolds) {
+for (i in 1:kfolds) {       # each i is the number of a fold
   # Get the validation IDs
   validation_ids <- unique_ids[cv_folds_index == i]
   
   # Get the validation fold
-  validation_fold <- training_set[training_set$id %in% validation_ids, ]
-  # Separate target from data
-  y_validation_fold <- validation_fold$death
-  validation_fold <- validation_fold %>% select(-death)
+  validation_fold <- training_set[training_set_with_ids$id %in% validation_ids, ]
+  # Scale data
+  validation_fold <- scale(validation_fold)
+  
+  # # Separate target from data
+  # y_validation_fold <- y_training
+  # validation_fold <- validation_fold %>% select(-death)
   
   # Get the training fold
-  training_fold <- training_set[!(training_set$id %in% validation_ids), ]
-  # Separate target from data
-  y_training_fold <- training_fold$death
-  training_fold <- training_fold %>% select(-death)
+  training_fold <- training_set[!(training_set_with_ids$id %in% validation_ids), ]
+  # Scale data
+  training_fold <- scale(training_fold)
+  
+  # # Separate target from data
+  # y_training_fold <- training_fold$death
+  # training_fold <- training_fold %>% select(-death)
   
   # print("Training")
   # print(head(training_fold, n = kfolds))
@@ -258,10 +272,14 @@ for (i in 1:kfolds) {
   # print("Validation")
   # print(head(validation_fold, n = kfolds))
   
-  # Checkfolds that IDs are not in training and test sets
-  stopifnot(
-    identical(
-      sort(unique(training_fold$id)), sort(unique(validation_fold$id))) == FALSE)
+  # Check dimensions
+  stopifnot(dim(training_fold)[0] + dim(validation_fold)[0] == dim(training_set)[0])
+  
+  # # Checkfolds that IDs are not in training and test sets
+  # stopifnot(
+  #   identical(
+  #     sort(unique(training_fold$id)), sort(unique(validation_fold$id))) == FALSE)
+}
   
   # # Lasso Cox regression
   # cvfit <- cv.glmnet(
