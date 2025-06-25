@@ -94,6 +94,46 @@ oncoth1_td_dataset_selected_vars <- oncoth1_td_dataset %>%
          antiaggreg_tx_currently)
 ```
 
+```{r}
+# # Train your model on the training fold
+# model = StepReg::stepwiseCox(
+#   formula = Surv(time = tstart, time2 = tstop, event = death) ~
+#   vte_event +
+#   age_when_cancer_dx +
+#   gender +
+#   bmi_value +
+#   performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection in some folds, but models can be trained
+#   # diabetes_mellitus + # Confounder. We kfoldsnow it is associated with pancreatic cancer patients that undergo resection of pancreas
+#   dyslipidemia +
+#   # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
+#   # copd_imp + # Correlated to tobacco use
+#   arterial_hypertension +
+#   # venous_insufficiency_imp +  # remove as suggested by Andrés Muñoz (bad definition of variable, information may refer to different conditions)
+#   # kfoldshorana_riskfolds_score_imp + # Correlated to pancreatic and esophago-gastric cancers
+#   # two_groups_kfoldsrs + # Correlated to pancreatic and esophago-gastric cancers
+#   # previous_onco_surgery + # Correlated to having had tumor resected
+#   tumor_surgically_removed +
+#   primary_tumor_simplified +
+#   # tnm_stage_grouped +
+#   tnm_stage_two_groups +
+#   # histology_type_imp + # Correlated with NSCLC
+#   mucinous_histology_imp +
+#   # grade_histological_differentiation_imp + # violates PH assumption
+#   # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
+#   # family_backfoldsground_vte + # High GVIF, multicollinearity with venous insufficiency in some folds. When selected, not clear if it is riskfolds or protective factor, due to lackfolds of information when recruiting patients
+#   previous_vte +
+#   previous_ate +
+#   anticoag_tx_currently +
+#   antiaggreg_tx_currently,
+#   data = training_fold,
+#   include = "primary_tumor_simplified",
+#   selection = "bidirection",
+#   select = "AIC",
+#   method = "efron"
+#   )
+```
+
+
 
 ```{r}
 # Change name of dependent variable
@@ -110,7 +150,8 @@ oncoth1_td_data_clean
 ```{r}
 # Transform covariates dataframe into matrix
 covariates <- as.matrix(oncoth1_td_data_clean)
-covariates[1:5,]
+# Scale 
+covariates_scaled <- scale(covariates)
 ```
 
 
@@ -122,21 +163,14 @@ response[1:5]
 ```
 
 
-
 ```{r}
 library(penalized)
 
-dataset <- as.matrix(oncoth1_td_data_clean)
-
-# m <- model.matrix(~ . - 1, data = oncoth1_td_dataset)
-# # then remove any columns you don't want and coerce:
-# X <- as.matrix(m)
-
 fit <- penalized(
   response    = with(oncoth1_td_data_clean, Surv(tstart, tstop, death)), 
-  penalized  = dataset,
+  penalized  = covariates_scaled,
   unpenalized = ~1,
-  lambda1     = 0.1,        # your LASSO penalty
+  lambda1     = 10,        # your LASSO penalty
   model       = "cox"
 )
 
