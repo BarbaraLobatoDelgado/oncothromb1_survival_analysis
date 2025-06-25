@@ -22,6 +22,28 @@ set.seed(seed)
 
 
 ```{r}
+find_column_mismatch <- function(df1, df2) {
+  # Find column mismatch
+  missing_in_valid <- setdiff(colnames(df1), colnames(df2))
+  extra_in_valid <- setdiff(colnames(df2), colnames(df1))
+  
+  if (length(missing_in_valid) > 0 || length(extra_in_valid) > 0) {
+    msg <- c()
+    if (length(missing_in_valid) > 0) {
+      msg <- c(msg, sprintf("Columns missing in validation: %s", 
+                            paste(missing_in_valid, collapse = ", ")))
+    }
+    if (length(extra_in_valid) > 0) {
+      msg <- c(msg, sprintf("Extra columns in validation: %s",
+                          paste(extra_in_valid, collapse = ", ")))
+    }
+    stop(paste(msg, collapse = "; "), call. = FALSE)
+  }
+}
+```
+
+
+```{r}
 # Load libraries
 pacman::p_load(
   # kfoldsableExtra,
@@ -184,33 +206,35 @@ coef(fit)
 
 
 ```{r}
-cols2select <- c("vte_event",
-         "age_when_cancer_dx", 
-         "gender", 
-         "bmi_value", 
-         "performance_status_category_corrected_imp", 
-         "diabetes_mellitus",
-         "dyslipidemia", 
-         "arterial_hypertension", 
-         "tobacco_use_imp", 
-         "copd_imp", 
-         "venous_insufficiency_imp", 
-         "khorana_risk_score_imp", 
-         "two_groups_krs",
-         "previous_onco_surgery",
-         "tumor_surgically_removed", 
-         "primary_tumor_simplified", 
-         "tnm_stage_grouped", 
-         "tnm_stage_two_groups", 
-         "histology_type_imp",
-         "mucinous_histology_imp",
-         "grade_histological_differentiation_imp",
-         "catheter_device_imp", 
-         "family_background_vte", 
-         "previous_vte",  
-         "previous_ate", 
-         "anticoag_tx_currently", 
-         "antiaggreg_tx_currently")
+cols2select <- c(
+ "vte_event",
+ "age_when_cancer_dx", 
+ "gender", 
+ "bmi_value", 
+ "performance_status_category_corrected_imp", 
+ "diabetes_mellitus",
+ "dyslipidemia", 
+ "arterial_hypertension", 
+ "tobacco_use_imp", 
+ "copd_imp", 
+ "venous_insufficiency_imp", 
+ "khorana_risk_score_imp", 
+ "two_groups_krs",
+ "previous_onco_surgery",
+ "tumor_surgically_removed", 
+ "primary_tumor_simplified", 
+ # "tnm_stage_grouped", 
+ "tnm_stage_two_groups", 
+ # "histology_type_imp", # unequal categories between train and validation set
+ "mucinous_histology_imp",
+ "grade_histological_differentiation_imp",
+ "catheter_device_imp", 
+ "family_background_vte", 
+ "previous_vte",  
+ "previous_ate", 
+ # "anticoag_tx_currently", # unequal categories between train and validation set
+ "antiaggreg_tx_currently"
+ )
 ```
 
 
@@ -225,6 +249,16 @@ process_data <- function(data, cols2select) {
   
   # Select columns as dependent variables
   data_selection <- data[, cols2select]
+  
+  # Convert yes/no columns into 1/0
+  data_selection <- data_selection %>%
+    mutate(
+      across(
+        .cols = where(~ (is.character(.) || is.factor(.)) && 
+                        all(as.character(.) %in% c("Yes", "No"))), 
+        .fns = ~ as.integer(as.character(.) == "Yes")
+      )
+    )
   
   # Convert categorical to numeric
   data_dummies <- dummy_cols(
@@ -248,6 +282,9 @@ process_data <- function(data, cols2select) {
 }
 ```
 
+```{r}
+# process_data(oncoth1_td_dataset, cols2select)
+```
 
 
 ## Dataset partition
@@ -352,31 +389,14 @@ fold_map <- data.frame(
 
 ```
 
-```{r}
-find_column_mismatch <- function(df1, df2) {
-  # Find column mismatch
-  missing_in_valid <- setdiff(colnames(df1), colnames(df2))
-  extra_in_valid <- setdiff(colnames(df2), colnames(df1))
-  
-  if (length(missing_in_valid) > 0 || length(extra_in_valid) > 0) {
-    msg <- c()
-    if (length(missing_in_valid) > 0) {
-      msg <- c(msg, sprintf("Columns missing in validation: %s", 
-                            paste(missing_in_valid, collapse = ", ")))
-    }
-    if (length(extra_in_valid) > 0) {
-      msg <- c(msg, sprintf("Extra columns in validation: %s",
-                          paste(extra_in_valid, collapse = ", ")))
-    }
-    stop(paste(msg, collapse = "; "), call. = FALSE)
-  }
-}
-```
+
+
 
 
 
 ```{r}
 # Cross-validation loop
+set.seed(seed)
 
 # Store resutls
 cv_cindex <- numeric(kfolds)
@@ -414,7 +434,7 @@ for (i in seq_len(kfolds)) {
     penalized = X_train,
     unpenalized = ~1, 
     lambda1 = 10,
-    lambda2 = 0,
+    lambda2 = 0.1,
     model = "cox"
   )
   
@@ -423,18 +443,19 @@ for (i in seq_len(kfolds)) {
     object = fit_cv, 
     penalized = X_valid
     )
-  cv_cindex[i] <- survConcordance(y_valid ~ pred_valid)$concordance
-  
-  # Record selected variables
-  coefs <- coef(fit_cv)
-  cv_selected_vars[[i]] <- names(coefs)[which(coefs != 0)]
-  
-  message(sprintf(
-    "Fold %d: C-index = %.3f; Selected %d vars", 
-    i, 
-    cv_index[i], 
-    length(cv_selected_vars[[i]])
-  ))
+  print(pred_valid)
+  # cv_cindex[i] <- survConcordance(y_valid ~ pred_valid)$concordance
+  # 
+  # # Record selected variables
+  # coefs <- coef(fit_cv)
+  # cv_selected_vars[[i]] <- names(coefs)[which(coefs != 0)]
+  # 
+  # message(sprintf(
+  #   "Fold %d: C-index = %.3f; Selected %d vars", 
+  #   i, 
+  #   cv_index[i], 
+  #   length(cv_selected_vars[[i]])
+  # ))
   
 }
 ```
