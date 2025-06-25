@@ -444,16 +444,18 @@ for (i in seq_len(kfolds)) {
     penalized = X_valid
     )
   print(pred_valid)
-  # cv_cindex[i] <- survConcordance(y_valid ~ pred_valid)$concordance
+  print(class(pred_valid))
+  # # Calculate C-index
+  # cv_cindex[i] <- concordance(y_valid ~ pred_valid)$concordance
   # 
   # # Record selected variables
   # coefs <- coef(fit_cv)
   # cv_selected_vars[[i]] <- names(coefs)[which(coefs != 0)]
   # 
   # message(sprintf(
-  #   "Fold %d: C-index = %.3f; Selected %d vars", 
-  #   i, 
-  #   cv_index[i], 
+  #   "Fold %d: C-index = %.3f; Selected %d vars",
+  #   i,
+  #   cv_index[i],
   #   length(cv_selected_vars[[i]])
   # ))
   
