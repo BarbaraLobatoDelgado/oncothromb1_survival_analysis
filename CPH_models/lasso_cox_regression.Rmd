@@ -62,10 +62,7 @@ stopifnot(!anyNA(oncoth1_td_dataset))
 ```{r}
 # Get meaningful variables
 oncoth1_td_dataset_selected_vars <- oncoth1_td_dataset %>%
-  select(tstart,
-         tstop,
-         death,
-         vte_event,
+  select(vte_event,
          age_when_cancer_dx, 
          gender, 
          bmi_value, 
@@ -158,8 +155,13 @@ covariates_scaled <- scale(covariates)
 ```{r}
 # Create response Surv() object
 # Allow for right-censoring to handle time-dependent variables
-response = with(oncoth1_td_data_clean, Surv(tstart, tstop, death))
+response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
 response[1:5]
+```
+
+```{r}
+# Covariates matrix and response must have same length (number of patients)
+stopifnot(dim(covariates_scaled)[0] == length(response))
 ```
 
 
@@ -167,14 +169,16 @@ response[1:5]
 library(penalized)
 
 fit <- penalized(
-  response    = with(oncoth1_td_data_clean, Surv(tstart, tstop, death)), 
+  response    = response, 
   penalized  = covariates_scaled,
   unpenalized = ~1,
   lambda1     = 10,        # your LASSO penalty
   model       = "cox"
 )
 
-
+```
+```{r}
+coef(fit)
 ```
 
 
@@ -192,14 +196,28 @@ unique_ids <- unique(oncoth1_td_dataset$id)
 train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
 test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 
-# Partition the data into train and test sets based on the assigned IDs
-training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
-testing_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
+# Get rows of train and test patients
+train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
+test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
 
-# Checkfolds that IDs are not in training and test sets
-stopifnot(
-  identical(
-    sort(unique(training_set$id)), sort(unique(testing_set$id))) == FALSE)
+# Partition data
+training_set <- covariates_scaled[train_rows,]
+test_set <- covariates_scaled[test_rows,]
+
+# Check that all patients are accounted for in training and test set
+stopifnot(dim(training_set)[0] + dim(test_set)[0] == covariates_scaled)
+```
+
+
+```{r}
+# # Partition the data into train and test sets based on the assigned IDs
+# training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
+# testing_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
+# 
+# # Checkfolds that IDs are not in training and test sets
+# stopifnot(
+#   identical(
+#     sort(unique(training_set$id)), sort(unique(testing_set$id))) == FALSE)
 ```
 
 
