@@ -334,6 +334,7 @@ unique_train_ids <- unique(train_ids)
 
 # Shuffle and assign
 shuffled_train_ids <- sample(unique_train_ids)
+# Get size for each fold
 fold_sizes <- floor(length(shuffled_train_ids) / kfolds)
 remainder <- length(shuffled_train_ids) %% kfolds
 
@@ -343,12 +344,35 @@ fold_vec <- rep(
             rep(fold_sizes, kfolds - remainder))
 )
 
+# Map each ID to each fold
 fold_map <- data.frame(
   patient_id = shuffled_train_ids,
   fold = fold_vec
 )
 
 ```
+
+```{r}
+find_column_mismatch <- function(df1, df2) {
+  # Find column mismatch
+  missing_in_valid <- setdiff(colnames(df1), colnames(df2))
+  extra_in_valid <- setdiff(colnames(df2), colnames(df1))
+  
+  if (length(missing_in_valid) > 0 || length(extra_in_valid) > 0) {
+    msg <- c()
+    if (length(missing_in_valid) > 0) {
+      msg <- c(msg, sprintf("Columns missing in validation: %s", 
+                            paste(missing_in_valid, collapse = ", ")))
+    }
+    if (length(extra_in_valid) > 0) {
+      msg <- c(msg, sprintf("Extra columns in validation: %s",
+                          paste(extra_in_valid, collapse = ", ")))
+    }
+    stop(paste(msg, collapse = "; "), call. = FALSE)
+  }
+}
+```
+
 
 
 ```{r}
@@ -372,6 +396,46 @@ for (i in seq_len(kfolds)) {
     setequal(validation_ids, unique(valid_data$id)),
     setequal(training_ids, unique(train_data$id))
   )
+  
+  # Process data
+  X_valid <- process_data(valid_data, cols2select)
+  X_train <- process_data(train_data, cols2select)
+  
+  # Find column mismatch if there is one
+  find_column_mismatch(X_valid, X_train)
+  
+  # Get responses
+  y_valid <- with(valid_data, Surv(tstart, tstop, death))
+  y_train <- with(train_data, Surv(tstart, tstop, death))
+  
+  # Fit penalized Cox on training fold
+  fit_cv <- penalized(
+    response = y_train,
+    penalized = X_train,
+    unpenalized = ~1, 
+    lambda1 = 10,
+    lambda2 = 0,
+    model = "cox"
+  )
+  
+  # Evaluate using C-index
+  pred_valid <- penalized::predict(
+    object = fit_cv, 
+    penalized = X_valid
+    )
+  cv_cindex[i] <- survConcordance(y_valid ~ pred_valid)$concordance
+  
+  # Record selected variables
+  coefs <- coef(fit_cv)
+  cv_selected_vars[[i]] <- names(coefs)[which(coefs != 0)]
+  
+  message(sprintf(
+    "Fold %d: C-index = %.3f; Selected %d vars", 
+    i, 
+    cv_index[i], 
+    length(cv_selected_vars[[i]])
+  ))
+  
 }
 ```
 
