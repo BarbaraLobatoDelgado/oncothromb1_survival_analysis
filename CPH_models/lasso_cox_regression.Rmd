@@ -262,27 +262,37 @@ unique_ids <- unique(oncoth1_td_dataset$id)
 train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
 test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 
-# Get rows of train and test patients
-train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
-test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
-
-# Partition data keeping the IDs (needed for stratified CV)
-training_set_with_ids <- oncoth1_td_dataset %>% 
-  filter(id %in% train_ids) %>% 
-  select(id)
-testing_set_with_ids <- oncoth1_td_dataset %>% 
-  filter(id %in% test_ids) %>%
-  select(id)
+# # Get rows of train and test patients
+# train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
+# test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
+# 
+# # Partition data keeping the IDs (needed for stratified CV)
+# training_set_with_ids <- oncoth1_td_dataset %>% 
+#   filter(id %in% train_ids) %>% 
+#   select(id)
+# testing_set_with_ids <- oncoth1_td_dataset %>% 
+#   filter(id %in% test_ids) %>%
+#   select(id)
 
 # Partition data
-training_set <- oncoth1_td_dataset[train_rows,]
-test_set <- oncoth1_td_dataset[test_rows,]
+training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
+test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
+# training_set <- oncoth1_td_dataset[train_rows,]
+# test_set <- oncoth1_td_dataset[test_rows,]
 # training_set <- covariates[train_rows,]
 # test_set <- covariates[test_rows,]
 
-# Partition response
-training_response <- response[train_rows,]
-test_response <- response[test_rows,]
+# # Partition response
+# training_response <- response[train_rows,]
+# test_response <- response[test_rows,]
+
+# Surv response for full data
+response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
+train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
+test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
+# Get response for training and test sets
+training_response <- response[train_rows]
+test_response <- response[test_rows]
 
 # Check that all patients are accounted for in training and test set
 stopifnot(dim(training_set)[0] + dim(test_set)[0] == covariates)
@@ -303,9 +313,74 @@ stopifnot(length(training_response) + length(test_response) == length(response))
 
 
 ```{r}
-# Set number of folds 
-kfolds = 10
+# Create folds for k-fold CV
 
+# Number of folds
+kfolds <- 10
+
+# # Create a grouping variable for each ID
+# group_var <- as.numeric(factor(oncoth1_td_dataset$id))
+unique_train_ids <- unique(train_ids)
+
+# Determine the unique IDs and shuffle them randomly to ensure a balanced distribution across the folds
+# Get unique IDs
+# folds_unique_ids <- unique(group_var)
+
+# # Shuffle the unique IDs randomly
+# folds_shuffled_ids <- sample(folds_unique_ids)
+# 
+# # Divide the shuffled IDs into folds
+# cv_folds_index <- cut(folds_shuffled_ids, breaks = kfolds, labels = FALSE)
+
+# Shuffle and assign
+shuffled_train_ids <- sample(unique_train_ids)
+fold_sizes <- floor(length(shuffled_train_ids) / kfolds)
+remainder <- length(shuffled_train_ids) %% kfolds
+
+fold_vec <- rep(
+  1:kfolds, 
+  times = c(rep(fold_sizes + 1, remainder), 
+            rep(fold_sizes, kfolds - remainder))
+)
+
+fold_map <- data.frame(
+  patient_id = shuffled_train_ids,
+  fold = fold_vec
+)
+
+```
+
+
+```{r}
+# Cross-validation loop
+
+# Store resutls
+cv_cindex <- numeric(kfolds)
+cv_selected_vars <- vector("list", kfolds)
+
+for (i in seq_len(kfolds)) {
+  # Determine training and validation patient IDs
+  validation_ids <- fold_map$patient_id[fold_map$fold == i]
+  training_ids <- setdiff(unique_train_ids, validation_ids)
+  
+  # Subset interval-level data
+  valid_data <- training_set %>% filter(id %in% validation_ids)
+  train_data <- training_set %>% filter(id %in% training_ids)
+  
+  # Sanity checks
+  stopifnot(
+    setequal(validation_ids, unique(valid_data$id)),
+    setequal(training_ids, unique(train_data$id))
+  )
+}
+```
+
+
+
+
+
+
+```{r}
 # Initialize a vector to store the evaluation results
 cv_index_valid <- vector("list", length = kfolds)
 cv_vars_results <- vector("list", length = kfolds)
@@ -315,9 +390,19 @@ cv_vif_results <- vector("list", length = kfolds) # Inspection of GVIF in traine
 for (i in 1:kfolds) {       # each i is the number of a fold
   # Get the validation IDs
   validation_ids <- unique_ids[cv_folds_index == i]
+  print(validation_ids)
   
   # Get the validation fold
   valid_data <- training_set[training_set_with_ids$id %in% validation_ids, ]
+  print(unique(valid_data$id))
+  # stopifnot(all(validation_ids == unique(valid_data$id)))
+  stopifnot(
+  setequal(validation_ids, unique(valid_data$id)),
+  length(validation_ids) == length(unique(valid_data$id))
+  )
+  
+  
+  
   y_valid <- with(valid_data, Surv(tstart, tstop, death))
   valid_data <- process_data(valid_data, cols2select)
   # valid <- transformed_data[0]
@@ -335,9 +420,9 @@ for (i in 1:kfolds) {       # each i is the number of a fold
   # valid <- valid %>% select(-death)
   
   # Get the training fold
-  tr <- training_set[!(training_set_with_ids$id %in% validation_ids), ]
-  # Scale data
-  tr <- scale(training_fold)
+  train_data <- training_set[!(training_set_with_ids$id %in% validation_ids), ]
+  # # Scale data
+  # tr <- scale(tr)
   
   # # Separate target from data
   # y_training_fold <- training_fold$death
@@ -349,8 +434,8 @@ for (i in 1:kfolds) {       # each i is the number of a fold
   # print("Validation")
   # print(head(valid, n = kfolds))
   
-  # Check dimensions
-  stopifnot(dim(training_fold)[0] + dim(valid)[0] == dim(training_set)[0])
+  # # Check dimensions
+  # stopifnot(dim(tr)[0] + dim(train_data)[0] == dim(valid_data)[0])
   
   # # Checkfolds that IDs are not in training and test sets
   # stopifnot(
@@ -368,21 +453,21 @@ for (i in 1:kfolds) {       # each i is the number of a fold
   # 
   # print(cvfit)
   
-  # lambda_star <- cvfit$lambda.min
-  fit_lasso <- glmnet(
-    x = training_fold,
-    y = y_training_fold, 
-    family = "cox",
-    alpha = 1,
-    lambda = lambda_star
-  )
-  
-  print(fit_lasso)
-  
-  lp_val <- predict(
-    fit_lasso,
-    newx = valid
-  )
+  # # lambda_star <- cvfit$lambda.min
+  # fit_lasso <- glmnet(
+  #   x = training_fold,
+  #   y = y_training_fold, 
+  #   family = "cox",
+  #   alpha = 1,
+  #   lambda = lambda_star
+  # )
+  # 
+  # print(fit_lasso)
+  # 
+  # lp_val <- predict(
+  #   fit_lasso,
+  #   newx = valid
+  # )
   
   
   
@@ -461,7 +546,6 @@ for (i in 1:kfolds) {       # each i is the number of a fold
   # cv_cindex_results[[i]] = fold_cindex$concordance
   # cv_vif_results[[i]] = as.data.frame(vif_results)
 
-}
 ```
 
 
