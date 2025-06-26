@@ -46,7 +46,6 @@ find_column_mismatch <- function(df1, df2) {
 ```{r}
 # Load libraries
 pacman::p_load(
-  # kfoldsableExtra,
   an9elproject, 
   tidyverse,
   lubridate, 
@@ -55,6 +54,7 @@ pacman::p_load(
   glmnet,
   survival,
   survminer, 
+  penalized,
   powerSurvEpi,
   car,
   StepReg,
@@ -229,8 +229,9 @@ cols2select <- c(
  "previous_onco_surgery",
  "tumor_surgically_removed", 
  "primary_tumor_simplified", 
+ "tnm_stage",
  # "tnm_stage_grouped", 
- "tnm_stage_two_groups", 
+ # "tnm_stage_two_groups", 
  # "histology_type_imp", # unequal categories between train and validation set
  "mucinous_histology_imp",
  "grade_histological_differentiation_imp",
@@ -266,9 +267,25 @@ process_data <- function(data, cols2select) {
       )
     )
   
+  # Transform other columns to numerical
+  data_transf <- data_selection %>%
+    mutate(grade_histological_differentiation_imp = case_when(
+      str_starts(grade_histological_differentiation_imp, "Well") ~ 1,
+      str_starts(grade_histological_differentiation_imp, "Moderately") ~ 2,
+      str_starts(grade_histological_differentiation_imp, "Poorly") ~ 3, 
+      TRUE ~ NA_real_
+    )) %>%
+    mutate(tnm_stage = case_when(
+      tnm_stage == "I" ~ 1,
+      tnm_stage == "II" ~ 2,
+      tnm_stage == "III" ~ 3,
+      tnm_stage == "IV" ~ 4, 
+      TRUE ~ NA_real_
+    ))
+  
   # Convert categorical to numeric
   data_dummies <- dummy_cols(
-    .data = data_selection, 
+    .data = data_transf, 
     select_columns = NULL, 
     remove_first_dummy = TRUE, 
     remove_selected_columns = TRUE
@@ -279,17 +296,13 @@ process_data <- function(data, cols2select) {
   # Scale 
   covariates_scaled <- scale(covariates)
   
-  # # Create response Surv() object
-  # # Allow for right-censoring to handle time-dependent variables
-  # response = with(data, Surv(tstart, tstop, death))
-  
-  # return(list("covariates_scaled" = covariates_scaled, "response" = response))
   return(covariates_scaled)
 }
 ```
 
+
 ```{r}
-# process_data(oncoth1_td_dataset, cols2select)
+processed_oncoth1 <- process_data(oncoth1_td_dataset, cols2select)
 ```
 
 
@@ -401,7 +414,7 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.1, 1, 5, 10, 20, 50)
+lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10, 20, 50)
 
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
@@ -424,9 +437,9 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   l1 <- regpath_results$lambda1[row_idx]
   fold_i <- regpath_results$fold[row_idx]
   
-  print("------------")
-  print(paste0("Loop #", fold_i))
-  print("------------")
+  # print("------------")
+  # print(paste0("Loop #", fold_i))
+  # print("------------")
   
   # Determine training and validation patient IDs
   validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
@@ -469,14 +482,14 @@ for (row_idx in seq_len(nrow(regpath_results))) {
     lambda1 = l1,
     lambda2 = 0.1,
     model = "cox", 
-    trace = TRUE
+    trace = FALSE
   )
   
   # Get coefficients for all initial predictors
-  b <- coef(pencox_cv, "all")
+  b <- coef(pencox_cv, "all", standardize = TRUE)
   
   # Sanity check
-  stopifnot(length(b) == ncol(X_valid))
+  stopifnot(names(b) == colnames(X_valid))
   
   # Compute the linear predictor η = β′X
   lp_valid <- as.numeric(X_valid %*% b)
@@ -486,14 +499,6 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   
   # Record selected variables
   regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
-
-  # message(sprintf(
-  #   "Fold %d: C-index = %.4f; Selected %d vars",
-  #   regpath_results$fold[row_idx],
-  #   regpath_results$cindex[row_idx],
-  #   length(regpath_results$selected_vars[[row_idx]])
-  # ))
-  
 }
 ```
 
@@ -537,263 +542,88 @@ aa
 
 
 ```{r}
-# Cross-validation loop
-set.seed(seed)
-
-# Store resutls
-cv_cindex <- numeric(kfolds)
-cv_selected_vars <- vector("list", kfolds)
-
-for (i in seq_len(kfolds)) {
-  
-  print("------------")
-  print(paste0("Loop #", i))
-  print("------------")
-  
-  # Determine training and validation patient IDs
-  validation_ids <- fold_map$patient_id[fold_map$fold == i]
-  training_ids <- setdiff(unique_train_ids, validation_ids)
-  
-  # Subset interval-level data
-  valid_data <- training_set %>% filter(id %in% validation_ids)
-  train_data <- training_set %>% filter(id %in% training_ids)
-  
-  # Sanity checks
-  stopifnot(
-    setequal(validation_ids, unique(valid_data$id)),
-    setequal(training_ids, unique(train_data$id))
-  )
-  
-  # Process data
-  X_valid <- process_data(valid_data, cols2select)
-  X_train <- process_data(train_data, cols2select)
-  
-  # Check that there are no missing values
-  # na_per_col <- colSums(is.na(X_valid))
-  # print("Showing NAs per column")
-  # na_per_col[na_per_col > 0]
-  # print(na_per_col)
-  stopifnot(!anyNA(X_valid))
-  stopifnot(!anyNA(X_train))
-  
-  # Find column mismatch if there is one
-  find_column_mismatch(X_valid, X_train)
-  
-  # Get responses
-  y_valid <- with(valid_data, Surv(tstart, tstop, death))
-  y_train <- with(train_data, Surv(tstart, tstop, death))
-  
-  # Fit penalized Cox on training fold
-  pencox_cv <- penalized(
-    response = y_train,
-    penalized = X_train,
-    unpenalized = ~1, 
-    lambda1 = 10,
-    lambda2 = 0.1,
-    model = "cox", 
-    trace = TRUE
-  )
-  
-  # Get coefficients for all initial predictors
-  b <- coef(pencox_cv, "all")
-  
-  # Sanity check
-  stopifnot(length(b) == ncol(X_valid))
-  
-  # Compute the linear predictor η = β′X
-  lp_valid <- as.numeric(X_valid %*% b)
-  
-  # Evaluate using C-index
-  cv_cindex[[i]] <- survival::concordance(y_valid ~ lp_valid)$concordance
-  
-  # Record selected variables
-  cv_selected_vars[[i]] <- coef(pencox_cv) # names(coefs)[which(coefs != 0)]
-
-  message(sprintf(
-    "Fold %d: C-index = %.4f; Selected %d vars",
-    i,
-    cv_cindex[[i]],
-    length(cv_selected_vars[[i]])
-  ))
-  
-}
+# # Cross-validation loop
+# set.seed(seed)
+# 
+# # Store resutls
+# cv_cindex <- numeric(kfolds)
+# cv_selected_vars <- vector("list", kfolds)
+# 
+# for (i in seq_len(kfolds)) {
+#   
+#   print("------------")
+#   print(paste0("Loop #", i))
+#   print("------------")
+#   
+#   # Determine training and validation patient IDs
+#   validation_ids <- fold_map$patient_id[fold_map$fold == i]
+#   training_ids <- setdiff(unique_train_ids, validation_ids)
+#   
+#   # Subset interval-level data
+#   valid_data <- training_set %>% filter(id %in% validation_ids)
+#   train_data <- training_set %>% filter(id %in% training_ids)
+#   
+#   # Sanity checks
+#   stopifnot(
+#     setequal(validation_ids, unique(valid_data$id)),
+#     setequal(training_ids, unique(train_data$id))
+#   )
+#   
+#   # Process data
+#   X_valid <- process_data(valid_data, cols2select)
+#   X_train <- process_data(train_data, cols2select)
+#   
+#   # Check that there are no missing values
+#   # na_per_col <- colSums(is.na(X_valid))
+#   # print("Showing NAs per column")
+#   # na_per_col[na_per_col > 0]
+#   # print(na_per_col)
+#   stopifnot(!anyNA(X_valid))
+#   stopifnot(!anyNA(X_train))
+#   
+#   # Find column mismatch if there is one
+#   find_column_mismatch(X_valid, X_train)
+#   
+#   # Get responses
+#   y_valid <- with(valid_data, Surv(tstart, tstop, death))
+#   y_train <- with(train_data, Surv(tstart, tstop, death))
+#   
+#   # Fit penalized Cox on training fold
+#   pencox_cv <- penalized(
+#     response = y_train,
+#     penalized = X_train,
+#     unpenalized = ~1, 
+#     lambda1 = 10,
+#     lambda2 = 0.1,
+#     model = "cox", 
+#     trace = TRUE
+#   )
+#   
+#   # Get coefficients for all initial predictors
+#   b <- coef(pencox_cv, "all")
+#   
+#   # Sanity check
+#   stopifnot(length(b) == ncol(X_valid))
+#   
+#   # Compute the linear predictor η = β′X
+#   lp_valid <- as.numeric(X_valid %*% b)
+#   
+#   # Evaluate using C-index
+#   cv_cindex[[i]] <- survival::concordance(y_valid ~ lp_valid)$concordance
+#   
+#   # Record selected variables
+#   cv_selected_vars[[i]] <- coef(pencox_cv) # names(coefs)[which(coefs != 0)]
+# 
+#   message(sprintf(
+#     "Fold %d: C-index = %.4f; Selected %d vars",
+#     i,
+#     cv_cindex[[i]],
+#     length(cv_selected_vars[[i]])
+#   ))
+#   
+# }
 ```
 
-
-```{r}
-aa
-```
-
-
-
-
-```{r}
-# Initialize a vector to store the evaluation results
-cv_index_valid <- vector("list", length = kfolds)
-cv_vars_results <- vector("list", length = kfolds)
-cv_cindex_results <- vector("list", length = kfolds)
-cv_vif_results <- vector("list", length = kfolds) # Inspection of GVIF in trained models is necessary to detect multicollinearity issues
-
-for (i in 1:kfolds) {       # each i is the number of a fold
-  # Get the validation IDs
-  validation_ids <- unique_ids[cv_folds_index == i]
-  print(validation_ids)
-  
-  # Get the validation fold
-  valid_data <- training_set[training_set_with_ids$id %in% validation_ids, ]
-  print(unique(valid_data$id))
-  # stopifnot(all(validation_ids == unique(valid_data$id)))
-  stopifnot(
-  setequal(validation_ids, unique(valid_data$id)),
-  length(validation_ids) == length(unique(valid_data$id))
-  )
-  
-  
-  
-  y_valid <- with(valid_data, Surv(tstart, tstop, death))
-  valid_data <- process_data(valid_data, cols2select)
-  # valid <- transformed_data[0]
-  # valid_response <- transformed_data[1]
-  
-  
-  
-  # y_valid <- training_response[training_set_with_ids$id %in% validation_ids]
-  # # Scale data
-  # valid <- scale(valid)
-  # print(valid)
-  
-  # # Separate target from data
-  # y_valid <- y_training
-  # valid <- valid %>% select(-death)
-  
-  # Get the training fold
-  train_data <- training_set[!(training_set_with_ids$id %in% validation_ids), ]
-  # # Scale data
-  # tr <- scale(tr)
-  
-  # # Separate target from data
-  # y_training_fold <- training_fold$death
-  # training_fold <- training_fold %>% select(-death)
-  
-  # print("Training")
-  # print(head(training_fold, n = kfolds))
-  # 
-  # print("Validation")
-  # print(head(valid, n = kfolds))
-  
-  # # Check dimensions
-  # stopifnot(dim(tr)[0] + dim(train_data)[0] == dim(valid_data)[0])
-  
-  # # Checkfolds that IDs are not in training and test sets
-  # stopifnot(
-  #   identical(
-  #     sort(unique(training_fold$id)), sort(unique(valid$id))) == FALSE)
-}
-  
-  # # Lasso Cox regression
-  # cvfit <- cv.glmnet(
-  #   x = training_fold,
-  #   y = y_training_fold,
-  #   family = "cox", 
-  #   alpha = 1 # alpha = 1 is Lasso, 0 is ridge. In between, elastic net
-  # )
-  # 
-  # print(cvfit)
-  
-  # # lambda_star <- cvfit$lambda.min
-  # fit_lasso <- glmnet(
-  #   x = training_fold,
-  #   y = y_training_fold, 
-  #   family = "cox",
-  #   alpha = 1,
-  #   lambda = lambda_star
-  # )
-  # 
-  # print(fit_lasso)
-  # 
-  # lp_val <- predict(
-  #   fit_lasso,
-  #   newx = valid
-  # )
-  
-  
-  
-  
-  # # Train your model on the training fold
-  # model = StepReg::stepwiseCox(
-  #   formula = Surv(time = tstart, time2 = tstop, event = death) ~
-  #   vte_event +
-  #   age_when_cancer_dx +
-  #   gender +
-  #   bmi_value +
-  #   performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection in some folds, but models can be trained
-  #   # diabetes_mellitus + # Confounder. We kfoldsnow it is associated with pancreatic cancer patients that undergo resection of pancreas
-  #   dyslipidemia +
-  #   # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
-  #   # copd_imp + # Correlated to tobacco use
-  #   arterial_hypertension +
-  #   # venous_insufficiency_imp +  # remove as suggested by Andrés Muñoz (bad definition of variable, information may refer to different conditions)
-  #   # kfoldshorana_riskfolds_score_imp + # Correlated to pancreatic and esophago-gastric cancers
-  #   # two_groups_kfoldsrs + # Correlated to pancreatic and esophago-gastric cancers
-  #   # previous_onco_surgery + # Correlated to having had tumor resected
-  #   tumor_surgically_removed + 
-  #   primary_tumor_simplified +
-  #   # tnm_stage_grouped +
-  #   tnm_stage_two_groups +
-  #   # histology_type_imp + # Correlated with NSCLC
-  #   mucinous_histology_imp +
-  #   # grade_histological_differentiation_imp + # violates PH assumption
-  #   # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
-  #   # family_backfoldsground_vte + # High GVIF, multicollinearity with venous insufficiency in some folds. When selected, not clear if it is riskfolds or protective factor, due to lackfolds of information when recruiting patients
-  #   previous_vte +
-  #   previous_ate +
-  #   anticoag_tx_currently +
-  #   antiaggreg_tx_currently, 
-  #   data = training_fold,
-  #   include = "primary_tumor_simplified",
-  #   selection = "bidirection",
-  #   select = "AIC", 
-  #   method = "efron"
-  #   )
-  
-  # # Save selected variables
-  # selected_variables = unname(unlist(model$`Selected Varaibles`))
-  # # print(selected_variables)
-  # 
-  # # Fit model with selected variables in this fold
-  # # Create formula
-  # fold_pcox_formula = as.formula(
-  #   sprintf('%s ~ %s', 'Surv(time = tstart, time2 = tstop, event = death)',
-  #           paste(selected_variables, collapse = " + ")))
-  # 
-  # # Fit model
-  # fold_cph_model = coxph(
-  #   formula = fold_pcox_formula, 
-  #   id = id,
-  #   data = valid
-  # )
-  # 
-  # # VIF
-  # vif_results = rms::vif(fold_cph_model)
-  # # print(vif_results)
-  # 
-  # # Makfoldse predictions on the validation fold
-  # # The result is the hazard of suffering the event. It's difficult to interpret
-  # predictions <- predict(fold_cph_model, newdata = valid)
-  # # print(predictions)
-  # 
-  # # Evaluate the predictions
-  # # C-index
-  # fold_cindex <- concordance(fold_cph_model, newdata = valid)
-  # # print(fold_cindex$concordance)
-  # 
-  # # Store the evaluation result
-  # cv_index_valid[[i]] = validation_ids
-  # cv_vars_results[[i]] = selected_variables
-  # cv_cindex_results[[i]] = fold_cindex$concordance
-  # cv_vif_results[[i]] = as.data.frame(vif_results)
-
-```
 
 
 
