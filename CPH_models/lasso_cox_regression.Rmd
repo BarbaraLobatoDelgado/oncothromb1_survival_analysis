@@ -465,32 +465,19 @@ for (i in seq_len(kfolds)) {
   # Sanity check
   stopifnot(length(b) == ncol(X_valid))
   
-  
-  
   # Compute the linear predictor η = β′X
   lp_valid <- as.numeric(X_valid %*% b)
   
-  
-  # # Evaluate using C-index
+  # Evaluate using C-index
   cv_cindex[[i]] <- survival::concordance(y_valid ~ lp_valid)$concordance
   
-  # pred_valid <- penalized::predict(
-  #   object = fit_cv, 
-  #   penalized = X_valid
-  #   )
-  # print(pred_valid)
-  # print(class(pred_valid))
-  # # Calculate C-index
-  # cv_cindex[i] <- concordance(y_valid ~ pred_valid)
-  # 
   # Record selected variables
-  # coefs <- coef(fit_cv)
   cv_selected_vars[[i]] <- coef(fit_cv) # names(coefs)[which(coefs != 0)]
 
   message(sprintf(
-    "Fold %d: C-index = %.3f; Selected %d vars",
+    "Fold %d: C-index = %.4f; Selected %d vars",
     i,
-    cindex[i],
+    cv_cindex[[i]],
     length(cv_selected_vars[[i]])
   ))
   
