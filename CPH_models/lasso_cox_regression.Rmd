@@ -487,19 +487,48 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   # Record selected variables
   regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
 
-  message(sprintf(
-    "Fold %d: C-index = %.4f; Selected %d vars",
-    regpath_results$fold[row_idx],
-    regpath_results$cindex[row_idx],
-    length(regpath_results$selected_vars[[row_idx]])
-  ))
+  # message(sprintf(
+  #   "Fold %d: C-index = %.4f; Selected %d vars",
+  #   regpath_results$fold[row_idx],
+  #   regpath_results$cindex[row_idx],
+  #   length(regpath_results$selected_vars[[row_idx]])
+  # ))
   
 }
-
-
-
 ```
 
+
+```{r}
+# Summarize mean C-index by lambda1
+summary_regpath <- regpath_results %>%
+  group_by(lambda1) %>%
+  summarise(
+    mean_cindex = mean(cindex, na.rm = TRUE), 
+    .groups = "drop"
+  )
+summary_regpath
+```
+
+
+```{r}
+ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) + 
+  geom_line(size = 1) + 
+  geom_point(size = 2) + 
+  scale_x_log10(
+    breaks = unique(summary_regpath$lambda1), 
+    labels = scales::scientific_format(digits = 2)
+  ) + 
+  labs(
+    x = expression(log[10](lambda[1])), 
+    y = "Mean CV C-index", 
+    title = "Regularization path: mean C-index vs penalty strength"
+  ) + 
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
 
 
 ```{r}
