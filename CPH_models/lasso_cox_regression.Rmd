@@ -246,7 +246,7 @@ cols2select <- c(
 
 
 ```{r}
-process_data <- function(data, cols2select) {
+process_data <- function(data, cols2select, apply_scaling = FALSE) {
   
   missing_cols <- setdiff(cols2select, colnames(data))
   if (length(missing_cols) > 0) {
@@ -295,16 +295,19 @@ process_data <- function(data, cols2select) {
   
   # Transform covariates dataframe into matrix
   covariates <- as.matrix(data_dummies)
-  # Scale 
-  covariates_scaled <- scale(covariates)
   
-  return(covariates_scaled)
+  # Scale 
+  if (apply_scaling == TRUE) {
+    covariates <- scale(covariates)
+  }
+  
+  return(covariates)
 }
 ```
 
 
 ```{r}
-processed_oncoth1 <- process_data(oncoth1_td_dataset, cols2select)
+processed_oncoth1 <- process_data(oncoth1_td_dataset, cols2select, apply_scaling = TRUE)
 ```
 
 
@@ -320,10 +323,10 @@ unique_ids <- unique(oncoth1_td_dataset$id)
 train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
 test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 
-# # Get rows of train and test patients
-# train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
-# test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
-# 
+# Get rows of train and test patients
+train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
+test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
+
 # # Partition data keeping the IDs (needed for stratified CV)
 # training_set_with_ids <- oncoth1_td_dataset %>% 
 #   filter(id %in% train_ids) %>% 
@@ -333,10 +336,10 @@ test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 #   select(id)
 
 # Partition data
-training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
-test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
-# training_set <- oncoth1_td_dataset[train_rows,]
-# test_set <- oncoth1_td_dataset[test_rows,]
+# training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
+# test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
+training_set <- oncoth1_td_dataset[train_rows,]
+test_set <- oncoth1_td_dataset[test_rows,]
 # training_set <- covariates[train_rows,]
 # test_set <- covariates[test_rows,]
 
@@ -351,27 +354,15 @@ stopifnot(
 
 # Surv response for full data
 response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
-train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
-test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
 # Get response for training and test sets
 training_response <- response[train_rows]
 test_response <- response[test_rows]
 
 # Check that all patients are accounted for in training and test set
-stopifnot(dim(training_set)[0] + dim(test_set)[0] == covariates)
-stopifnot(length(training_response) + length(test_response) == length(response))
-```
-
-
-```{r}
-# # Partition the data into train and test sets based on the assigned IDs
-# training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
-# testing_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
-# 
-# # Checkfolds that IDs are not in training and test sets
-# stopifnot(
-#   identical(
-#     sort(unique(training_set$id)), sort(unique(testing_set$id))) == FALSE)
+stopifnot(
+  nrow(training_set) + nrow(test_set) == nrow(oncoth1_td_dataset),
+  length(training_response) + length(test_response) == length(response)
+)
 ```
 
 
@@ -400,6 +391,80 @@ fold_map <- data.frame(
   patient_id = shuffled_train_ids,
   fold = fold_vec
 )
+```
+
+
+```{r}
+# # --- 1) Attach fold to training_set ---------------------------------------
+# # training_set: your 80% train-only df with id, tstart, tstop, death, predictors
+# # fold_map: tibble with patient_id, fold (1…kfolds)
+# DF <- training_set %>%
+#   rename(patient_id = id) %>%
+#   left_join(fold_map, by = "patient_id") %>%
+#   select(patient_id, fold, tstart, tstop, death, all_of(cols2select))
+# 
+# lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
+# 
+# # --- 2) Prepare results tibble --------------------------------------------
+# regpath_results <- expand.grid(
+#   lambda1 = lambda1_grid,
+#   fold    = seq_len(kfolds),
+#   KEEP.OUT.ATTRS = FALSE,
+#   stringsAsFactors = FALSE
+# ) %>%
+#   as_tibble() %>%
+#   mutate(
+#     cindex        = NA_real_,
+#     selected_vars = vector("list", n())
+#   )
+# 
+# # --- 3) Cross‐validation loop --------------------------------------------
+# set.seed(seed)
+# for (row_idx in seq_len(nrow(regpath_results))) {
+#   l1     <- regpath_results$lambda1[row_idx]
+#   fold_i <- regpath_results$fold[row_idx]
+#   
+#   # Split DF
+#   train_df <- filter(DF, fold != fold_i)
+#   valid_df <- filter(DF, fold == fold_i)
+#   
+#   # Sanity checks
+#   stopifnot(
+#     nrow(train_df) + nrow(valid_df) == nrow(DF),
+#     length(unique(train_df$patient_id)) + length(unique(valid_df$patient_id)) ==
+#       length(unique(DF$patient_id))
+#   )
+#   
+#   # Build X and y
+#   X_train <- process_data(train_df, cols2select)
+#   X_valid <- process_data(valid_df, cols2select)
+#   stopifnot(!anyNA(X_train), !anyNA(X_valid))
+#   
+#   y_train <- with(train_df, Surv(tstart, tstop, death))
+#   y_valid <- with(valid_df, Surv(tstart, tstop, death))
+#   
+#   # Fit penalized Cox
+#   fit_cv <- penalized(
+#     response    = y_train,
+#     penalized   = X_train,
+#     unpenalized = ~1,
+#     lambda1     = l1,
+#     lambda2     = 0,
+#     model       = "cox",
+#     trace       = FALSE
+#   )
+#   
+#   # Linear predictor and C-index
+#   beta_valid <- coef(fit_cv, "all", standardize = TRUE)
+#   stopifnot(all(names(beta_valid) == colnames(X_valid)))
+#   
+#   lp_valid <- as.numeric(X_valid %*% beta_valid)
+#   regpath_results$cindex[row_idx] <- concordance(y_valid ~ lp_valid)$concordance
+#   
+#   # Record selected variables (non-zero)
+#   nz <- coef(fit_cv)
+#   regpath_results$selected_vars[[row_idx]] <- names(nz)[nz != 0]
+# }
 ```
 
 
