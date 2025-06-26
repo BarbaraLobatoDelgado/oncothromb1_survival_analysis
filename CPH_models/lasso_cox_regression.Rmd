@@ -114,6 +114,8 @@ oncoth1_td_dataset_selected_vars <- oncoth1_td_dataset %>%
          )
 ```
 
+
+
 ```{r}
 # # Train your model on the training fold
 # model = StepReg::stepwiseCox(
@@ -156,58 +158,58 @@ oncoth1_td_dataset_selected_vars <- oncoth1_td_dataset %>%
 
 
 ```{r}
-# Change name of dependent variable
-oncoth1_td_data_clean <- dummy_cols(
-  .data = oncoth1_td_dataset_selected_vars, 
-  select_columns = NULL, 
-  remove_first_dummy = TRUE, 
-  remove_selected_columns = TRUE
-  )
-# Sanity check
-stopifnot(!anyNA(oncoth1_td_data_clean))
-
-oncoth1_td_data_clean
+# # Change name of dependent variable
+# oncoth1_td_data_clean <- dummy_cols(
+#   .data = oncoth1_td_dataset_selected_vars, 
+#   select_columns = NULL, 
+#   remove_first_dummy = TRUE, 
+#   remove_selected_columns = TRUE
+#   )
+# # Sanity check
+# stopifnot(!anyNA(oncoth1_td_data_clean))
+# 
+# oncoth1_td_data_clean
 ```
 
 
 ```{r}
-# Transform covariates dataframe into matrix
-covariates <- as.matrix(oncoth1_td_data_clean)
-stopifnot(!anyNA(covariates))
-# Scale 
-covariates_scaled <- scale(covariates)
-stopifnot(!anyNA(covariates_scaled))
+# # Transform covariates dataframe into matrix
+# covariates <- as.matrix(oncoth1_td_data_clean)
+# stopifnot(!anyNA(covariates))
+# # Scale 
+# covariates_scaled <- scale(covariates)
+# stopifnot(!anyNA(covariates_scaled))
 ```
 
 
 ```{r}
-# Create response Surv() object
-# Allow for right-censoring to handle time-dependent variables
-response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
-response[1:5]
+# # Create response Surv() object
+# # Allow for right-censoring to handle time-dependent variables
+# response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
+# response[1:5]
 ```
 
 ```{r}
-# Covariates matrix and response must have same length (number of patients)
-stopifnot(dim(covariates)[0] == length(response))
+# # Covariates matrix and response must have same length (number of patients)
+# stopifnot(dim(covariates)[0] == length(response))
 ```
 
 
 ```{r}
-library(penalized)
-
-fit <- penalized(
-  response    = response, 
-  penalized  = covariates_scaled,
-  unpenalized = ~1,
-  lambda1     = 10,        # your LASSO penalty
-  model       = "cox"
-)
+# library(penalized)
+# 
+# fit <- penalized(
+#   response    = response, 
+#   penalized  = covariates_scaled,
+#   unpenalized = ~1,
+#   lambda1     = 10,        # your LASSO penalty
+#   model       = "cox"
+# )
 
 ```
 
 ```{r}
-coef(fit)
+# coef(fit)
 ```
 
 
@@ -222,10 +224,10 @@ cols2select <- c(
  "dyslipidemia", 
  "arterial_hypertension", 
  "tobacco_use_imp", 
- "copd_imp", 
+ # "copd_imp", 
  "venous_insufficiency_imp", 
- "khorana_risk_score_imp", 
- "two_groups_krs",
+ # "khorana_risk_score_imp",# correlated to a lot of features
+ # "two_groups_krs", # correlated to a lot of features
  "previous_onco_surgery",
  "tumor_surgically_removed", 
  "primary_tumor_simplified", 
@@ -310,6 +312,31 @@ process_data <- function(data, cols2select, apply_scaling = FALSE) {
 processed_oncoth1 <- process_data(oncoth1_td_dataset, cols2select, apply_scaling = TRUE)
 ```
 
+
+### Inspect correlation
+
+```{r}
+# Calculate correlation
+corr_covariates <- processed_oncoth1 %>% cor(.)
+```
+```{r}
+# Interactive heatmap
+plot_ly(
+  data = reshape2::melt(corr_covariates),
+  x = ~Var1,
+  y = ~Var2,
+  z = ~value,
+  type = "heatmap",
+  colors = colorRamp(c("blue", "white", "red")),
+  colorbar = list(title = "Correlation"),
+  showscale = TRUE
+) %>%
+  layout(
+    title = "Interactive Heatmap of Correlations in ONCOTHROMB1",
+    xaxis = list(title = "Variables"),
+    yaxis = list(title = "Variables")
+  )
+```
 
 ## Dataset partition
 
