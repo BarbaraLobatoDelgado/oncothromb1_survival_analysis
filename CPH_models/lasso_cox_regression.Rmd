@@ -396,8 +396,115 @@ fold_map <- data.frame(
 ```
 
 
+```{r}
+# Cross-validation loop
+set.seed(seed)
+
+# Define lambda grid
+lambda1_grid <- c(0.1, 1, 5, 10, 20, 50)
+
+# Store regularization pathway results
+# Do combinations of all folds and lambda1 values
+regpath_results <- expand.grid(
+  lambda1 = lambda1_grid, 
+  fold = seq_len(kfolds), 
+  KEEP.OUT.ATTRS = FALSE, 
+  stringsAsFactors = FALSE
+) %>%
+  as_tibble() %>%
+  mutate(
+    cindex = NA_real_, 
+    selected_vars = vector("list", n())
+  )
+
+# Loop over each row of tha tibble
+for (row_idx in seq_len(nrow(regpath_results))) {
+  
+  # Select lambda and fold value
+  l1 <- regpath_results$lambda1[row_idx]
+  fold_i <- regpath_results$fold[row_idx]
+  
+  print("------------")
+  print(paste0("Loop #", fold_i))
+  print("------------")
+  
+  # Determine training and validation patient IDs
+  validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
+  training_ids <- setdiff(unique_train_ids, validation_ids)
+  
+  # Subset interval-level data
+  valid_data <- training_set %>% filter(id %in% validation_ids)
+  train_data <- training_set %>% filter(id %in% training_ids)
+  
+  # Sanity checks
+  stopifnot(
+    setequal(validation_ids, unique(valid_data$id)),
+    setequal(training_ids, unique(train_data$id))
+  )
+  
+  # Process data
+  X_valid <- process_data(valid_data, cols2select)
+  X_train <- process_data(train_data, cols2select)
+  
+  # Check that there are no missing values
+  # na_per_col <- colSums(is.na(X_valid))
+  # print("Showing NAs per column")
+  # na_per_col[na_per_col > 0]
+  # print(na_per_col)
+  stopifnot(!anyNA(X_valid))
+  stopifnot(!anyNA(X_train))
+  
+  # Find column mismatch if there is one
+  find_column_mismatch(X_valid, X_train)
+  
+  # Get responses
+  y_valid <- with(valid_data, Surv(tstart, tstop, death))
+  y_train <- with(train_data, Surv(tstart, tstop, death))
+  
+  # Fit penalized Cox on training fold
+  pencox_cv <- penalized(
+    response = y_train,
+    penalized = X_train,
+    unpenalized = ~1, 
+    lambda1 = l1,
+    lambda2 = 0.1,
+    model = "cox", 
+    trace = TRUE
+  )
+  
+  # Get coefficients for all initial predictors
+  b <- coef(pencox_cv, "all")
+  
+  # Sanity check
+  stopifnot(length(b) == ncol(X_valid))
+  
+  # Compute the linear predictor η = β′X
+  lp_valid <- as.numeric(X_valid %*% b)
+  
+  # Evaluate using C-index
+  regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
+  
+  # Record selected variables
+  regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
+
+  message(sprintf(
+    "Fold %d: C-index = %.4f; Selected %d vars",
+    regpath_results$fold[row_idx],
+    regpath_results$cindex[row_idx],
+    length(regpath_results$selected_vars[[row_idx]])
+  ))
+  
+}
 
 
+
+```
+
+
+
+```{r}
+aa
+```
 
 
 ```{r}
@@ -448,7 +555,7 @@ for (i in seq_len(kfolds)) {
   y_train <- with(train_data, Surv(tstart, tstop, death))
   
   # Fit penalized Cox on training fold
-  fit_cv <- penalized(
+  pencox_cv <- penalized(
     response = y_train,
     penalized = X_train,
     unpenalized = ~1, 
@@ -459,7 +566,7 @@ for (i in seq_len(kfolds)) {
   )
   
   # Get coefficients for all initial predictors
-  b <- coef(fit_cv, "all")
+  b <- coef(pencox_cv, "all")
   
   # Sanity check
   stopifnot(length(b) == ncol(X_valid))
@@ -471,7 +578,7 @@ for (i in seq_len(kfolds)) {
   cv_cindex[[i]] <- survival::concordance(y_valid ~ lp_valid)$concordance
   
   # Record selected variables
-  cv_selected_vars[[i]] <- coef(fit_cv) # names(coefs)[which(coefs != 0)]
+  cv_selected_vars[[i]] <- coef(pencox_cv) # names(coefs)[which(coefs != 0)]
 
   message(sprintf(
     "Fold %d: C-index = %.4f; Selected %d vars",
