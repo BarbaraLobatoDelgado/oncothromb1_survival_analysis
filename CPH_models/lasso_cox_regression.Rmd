@@ -498,35 +498,58 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   l1 <- regpath_results$lambda1[row_idx]
   fold_i <- regpath_results$fold[row_idx]
   
-  # print("------------")
-  # print(paste0("Loop #", fold_i))
-  # print("------------")
-  
   # Determine training and validation patient IDs
   validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
   training_ids <- setdiff(unique_train_ids, validation_ids)
-  
+
   # Subset interval-level data
   valid_data <- training_set %>% filter(id %in% validation_ids)
   train_data <- training_set %>% filter(id %in% training_ids)
   
-  # Sanity checks
-  stopifnot(
-    setequal(validation_ids, unique(valid_data$id)),
-    setequal(training_ids, unique(train_data$id))
+  # # Split by fold (as before)
+  # train_df <- filter(training_set, fold != fold_i)
+  # valid_df <- filter(training_set, fold == fold_i)
+  # 
+  # Build unscaled X’s
+  X_train_raw <- process_data(train_data, cols2select, apply_scaling = FALSE)
+  X_valid_raw <- process_data(valid_data, cols2select, apply_scaling = FALSE)
+  
+  # 1) Fit preProcess on TRAIN only
+  pp <- caret::preProcess(
+    x      = X_train_raw,
+    method = c("center", "scale"),
+    na.remove = TRUE
   )
   
-  # Process data
-  X_valid <- process_data(valid_data, cols2select)
-  X_train <- process_data(train_data, cols2select)
+  # 2) Apply to both train & valid
+  X_train <- predict(pp, X_train_raw)
+  X_valid <- predict(pp, X_valid_raw)
+  
+  # # Determine training and validation patient IDs
+  # validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
+  # training_ids <- setdiff(unique_train_ids, validation_ids)
+  # 
+  # # Subset interval-level data
+  # valid_data <- training_set %>% filter(id %in% validation_ids)
+  # train_data <- training_set %>% filter(id %in% training_ids)
+  # 
+  # # Sanity checks
+  # stopifnot(
+  #   setequal(validation_ids, unique(valid_data$id)),
+  #   setequal(training_ids, unique(train_data$id))
+  # )
+  # 
+  # # Process data
+  # X_valid <- process_data(valid_data, cols2select)
+  # X_train <- process_data(train_data, cols2select)
   
   # Check that there are no missing values
   # na_per_col <- colSums(is.na(X_valid))
   # print("Showing NAs per column")
   # na_per_col[na_per_col > 0]
   # print(na_per_col)
-  stopifnot(!anyNA(X_valid))
-  stopifnot(!anyNA(X_train))
+  
+  stopifnot(!anyNA(X_train), !anyNA(X_valid))
   
   # Find column mismatch if there is one
   find_column_mismatch(X_valid, X_train)
