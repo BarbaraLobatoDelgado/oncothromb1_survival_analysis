@@ -340,6 +340,11 @@ test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
 # training_set <- covariates[train_rows,]
 # test_set <- covariates[test_rows,]
 
+# Checkfolds that IDs are not in training and test sets
+stopifnot(
+  identical(
+    sort(unique(training_set$id)), sort(unique(test_set$id))) == FALSE)
+
 # # Partition response
 # training_response <- response[train_rows,]
 # test_response <- response[test_rows,]
@@ -376,26 +381,14 @@ stopifnot(length(training_response) + length(test_response) == length(response))
 # Number of folds
 kfolds <- 10
 
-# # Create a grouping variable for each ID
-# group_var <- as.numeric(factor(oncoth1_td_dataset$id))
+# Create a grouping variable for each ID
 unique_train_ids <- unique(train_ids)
-
-# Determine the unique IDs and shuffle them randomly to ensure a balanced distribution across the folds
-# Get unique IDs
-# folds_unique_ids <- unique(group_var)
-
-# # Shuffle the unique IDs randomly
-# folds_shuffled_ids <- sample(folds_unique_ids)
-# 
-# # Divide the shuffled IDs into folds
-# cv_folds_index <- cut(folds_shuffled_ids, breaks = kfolds, labels = FALSE)
 
 # Shuffle and assign
 shuffled_train_ids <- sample(unique_train_ids)
 # Get size for each fold
 fold_sizes <- floor(length(shuffled_train_ids) / kfolds)
 remainder <- length(shuffled_train_ids) %% kfolds
-
 fold_vec <- rep(
   1:kfolds, 
   times = c(rep(fold_sizes + 1, remainder), 
@@ -407,7 +400,6 @@ fold_map <- data.frame(
   patient_id = shuffled_train_ids,
   fold = fold_vec
 )
-
 ```
 
 
@@ -416,7 +408,8 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10, 20, 50)
+lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10, 20, 50, 100)
+# lambda1_grid <- 10^seq(-4, 2, length.out = 50)
 
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
