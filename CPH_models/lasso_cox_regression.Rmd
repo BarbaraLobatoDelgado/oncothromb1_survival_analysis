@@ -458,9 +458,8 @@ for (i in seq_len(kfolds)) {
     trace = TRUE
   )
   
-
+  # Get coefficients for all initial predictors
   b <- coef(fit_cv, "all")
-  names(b) <- colnames(X_valid)
   
   # Sanity check
   stopifnot(length(b) == ncol(X_valid))
