@@ -475,7 +475,7 @@ for (row_idx in seq_len(nrow(regpath_results))) {
     penalized = X_train,
     unpenalized = ~1, 
     lambda1 = l1,
-    lambda2 = 0.1,
+    lambda2 = 0,
     model = "cox", 
     trace = FALSE
   )
@@ -530,9 +530,35 @@ ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) +
   )
 ```
 
+```{r}
+freq_selected_vars <- regpath_results %>%
+  mutate(
+    selected = map(
+      selected_vars, 
+      ~ names(.x)[.x != 0] # get variables names with non-zero weights
+    )
+  ) %>%
+  # Keep lambda/fold id and list of selected variables
+  select(lambda1, fold, selected) %>%
+  # Explode the list-column to have lambda, fold and vars in one row
+  unnest(selected) %>%
+  # Count how many times each variable appears
+  count(variable = selected, name = "freq") %>%
+  mutate(rel_freq = freq / nrow(regpath_results)) %>%
+  arrange(desc(rel_freq))
+
+freq_selected_vars
+```
+
+
 
 ```{r}
 aa
+```
+
+```{r}
+# Then, train final model with selected features and compute C-index on test set
+# ...
 ```
 
 
