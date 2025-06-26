@@ -433,11 +433,10 @@ for (i in seq_len(kfolds)) {
   X_train <- process_data(train_data, cols2select)
   
   # Check that there are no missing values
-  na_per_col <- colSums(is.na(X_valid))
-  print("Showing NAs per column")
-  na_per_col[na_per_col > 0]
-  print(na_per_col)
-  
+  # na_per_col <- colSums(is.na(X_valid))
+  # print("Showing NAs per column")
+  # na_per_col[na_per_col > 0]
+  # print(na_per_col)
   stopifnot(!anyNA(X_valid))
   stopifnot(!anyNA(X_train))
   
@@ -461,9 +460,7 @@ for (i in seq_len(kfolds)) {
   
 
   b <- coef(fit_cv, "all")
-  print(class(b))
   names(b) <- colnames(X_valid)
-  print(b)
   
   # Sanity check
   stopifnot(length(b) == ncol(X_valid))
@@ -472,9 +469,11 @@ for (i in seq_len(kfolds)) {
   
   # Compute the linear predictor η = β′X
   lp_valid <- as.numeric(X_valid %*% b)
-  print(lp_valid)
+  
   
   # # Evaluate using C-index
+  cv_cindex[[i]] <- survival::concordance(y_valid ~ lp_valid)$concordance
+  
   # pred_valid <- penalized::predict(
   #   object = fit_cv, 
   #   penalized = X_valid
@@ -484,16 +483,16 @@ for (i in seq_len(kfolds)) {
   # # Calculate C-index
   # cv_cindex[i] <- concordance(y_valid ~ pred_valid)
   # 
-  # # Record selected variables
+  # Record selected variables
   # coefs <- coef(fit_cv)
-  # cv_selected_vars[[i]] <- names(coefs)[which(coefs != 0)]
-  # 
-  # message(sprintf(
-  #   "Fold %d: C-index = %.3f; Selected %d vars",
-  #   i,
-  #   cv_index[i],
-  #   length(cv_selected_vars[[i]])
-  # ))
+  cv_selected_vars[[i]] <- coef(fit_cv) # names(coefs)[which(coefs != 0)]
+
+  message(sprintf(
+    "Fold %d: C-index = %.3f; Selected %d vars",
+    i,
+    cindex[i],
+    length(cv_selected_vars[[i]])
+  ))
   
 }
 ```
