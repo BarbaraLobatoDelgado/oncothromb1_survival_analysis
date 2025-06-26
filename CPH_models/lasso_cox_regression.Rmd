@@ -408,7 +408,8 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10, 20, 50, 100)
+lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
+# lambda1_grid <- 1
 # lambda1_grid <- 10^seq(-4, 2, length.out = 50)
 
 # Store regularization pathway results
