@@ -269,19 +269,21 @@ process_data <- function(data, cols2select) {
   
   # Transform other columns to numerical
   data_transf <- data_selection %>%
-    mutate(grade_histological_differentiation_imp = case_when(
+    mutate(grade_histological_differentiation_imp = as.numeric(case_when(
       str_starts(grade_histological_differentiation_imp, "Well") ~ 1,
       str_starts(grade_histological_differentiation_imp, "Moderately") ~ 2,
       str_starts(grade_histological_differentiation_imp, "Poorly") ~ 3, 
       TRUE ~ NA_real_
-    )) %>%
-    mutate(tnm_stage = case_when(
+    ))) %>%
+    mutate(tnm_stage = as.numeric(case_when(
       tnm_stage == "I" ~ 1,
       tnm_stage == "II" ~ 2,
       tnm_stage == "III" ~ 3,
       tnm_stage == "IV" ~ 4, 
       TRUE ~ NA_real_
-    ))
+    )))
+  
+  # print(colnames(data_transf))
   
   # Convert categorical to numeric
   data_dummies <- dummy_cols(
