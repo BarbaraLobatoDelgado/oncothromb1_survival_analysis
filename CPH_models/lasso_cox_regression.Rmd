@@ -115,6 +115,23 @@ oncoth1_td_dataset_selected_vars <- oncoth1_td_dataset %>%
 ```
 
 
+```{r}
+# Load DB
+tryCatch({
+  oncoth1 <- get_project("oncothr1", version = "0.0.8005") # "0.0.8004"
+  }, 
+  warning = function(w) {
+    "Cannot open an9elobject project"
+    }, 
+  finally = {
+    load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8005")
+    oncoth1 <- obj
+    rm(obj)
+  }
+)
+```
+
+
 
 ```{r}
 # # Train your model on the training fold
@@ -237,7 +254,7 @@ cols2select <- c(
  # "histology_type_imp", # unequal categories between train and validation set
  "mucinous_histology_imp",
  "grade_histological_differentiation_imp",
- "catheter_device_imp", 
+ # "catheter_device_imp", 
  # "family_background_vte", 
  # "previous_vte",  
  "previous_ate", 
@@ -319,6 +336,8 @@ processed_oncoth1 <- process_data(oncoth1_td_dataset, cols2select, apply_scaling
 # Calculate correlation
 corr_covariates <- processed_oncoth1 %>% cor(.)
 ```
+
+
 ```{r}
 # Interactive heatmap
 plot_ly(
@@ -330,7 +349,7 @@ plot_ly(
   colors = colorRamp(c("blue", "white", "red")),
   colorbar = list(title = "Correlation"),
   showscale = TRUE
-) %>%
+  ) %>%
   layout(
     title = "Interactive Heatmap of Correlations in ONCOTHROMB1",
     xaxis = list(title = "Variables"),
@@ -422,80 +441,6 @@ fold_map <- data.frame(
 
 
 ```{r}
-# # --- 1) Attach fold to training_set ---------------------------------------
-# # training_set: your 80% train-only df with id, tstart, tstop, death, predictors
-# # fold_map: tibble with patient_id, fold (1…kfolds)
-# DF <- training_set %>%
-#   rename(patient_id = id) %>%
-#   left_join(fold_map, by = "patient_id") %>%
-#   select(patient_id, fold, tstart, tstop, death, all_of(cols2select))
-# 
-# lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
-# 
-# # --- 2) Prepare results tibble --------------------------------------------
-# regpath_results <- expand.grid(
-#   lambda1 = lambda1_grid,
-#   fold    = seq_len(kfolds),
-#   KEEP.OUT.ATTRS = FALSE,
-#   stringsAsFactors = FALSE
-# ) %>%
-#   as_tibble() %>%
-#   mutate(
-#     cindex        = NA_real_,
-#     selected_vars = vector("list", n())
-#   )
-# 
-# # --- 3) Cross‐validation loop --------------------------------------------
-# set.seed(seed)
-# for (row_idx in seq_len(nrow(regpath_results))) {
-#   l1     <- regpath_results$lambda1[row_idx]
-#   fold_i <- regpath_results$fold[row_idx]
-#   
-#   # Split DF
-#   train_df <- filter(DF, fold != fold_i)
-#   valid_df <- filter(DF, fold == fold_i)
-#   
-#   # Sanity checks
-#   stopifnot(
-#     nrow(train_df) + nrow(valid_df) == nrow(DF),
-#     length(unique(train_df$patient_id)) + length(unique(valid_df$patient_id)) ==
-#       length(unique(DF$patient_id))
-#   )
-#   
-#   # Build X and y
-#   X_train <- process_data(train_df, cols2select)
-#   X_valid <- process_data(valid_df, cols2select)
-#   stopifnot(!anyNA(X_train), !anyNA(X_valid))
-#   
-#   y_train <- with(train_df, Surv(tstart, tstop, death))
-#   y_valid <- with(valid_df, Surv(tstart, tstop, death))
-#   
-#   # Fit penalized Cox
-#   fit_cv <- penalized(
-#     response    = y_train,
-#     penalized   = X_train,
-#     unpenalized = ~1,
-#     lambda1     = l1,
-#     lambda2     = 0,
-#     model       = "cox",
-#     trace       = FALSE
-#   )
-#   
-#   # Linear predictor and C-index
-#   beta_valid <- coef(fit_cv, "all", standardize = TRUE)
-#   stopifnot(all(names(beta_valid) == colnames(X_valid)))
-#   
-#   lp_valid <- as.numeric(X_valid %*% beta_valid)
-#   regpath_results$cindex[row_idx] <- concordance(y_valid ~ lp_valid)$concordance
-#   
-#   # Record selected variables (non-zero)
-#   nz <- coef(fit_cv)
-#   regpath_results$selected_vars[[row_idx]] <- names(nz)[nz != 0]
-# }
-```
-
-
-```{r}
 # Cross-validation loop
 set.seed(seed)
 
@@ -511,14 +456,17 @@ regpath_results <- expand.grid(
   fold = seq_len(kfolds), 
   KEEP.OUT.ATTRS = FALSE, 
   stringsAsFactors = FALSE
-) %>%
+  ) %>%
   as_tibble() %>%
   mutate(
     cindex = NA_real_, 
     selected_vars = vector("list", n())
   )
 
-# Loop over each row of tha tibble
+# 
+# vif_results <- vector("list", length = k)
+
+# Loop over each row of that tibble
 for (row_idx in seq_len(nrow(regpath_results))) {
   
   # Select lambda and fold value
@@ -614,6 +562,8 @@ for (row_idx in seq_len(nrow(regpath_results))) {
 ```
 
 
+## Regularization pathway
+
 ```{r}
 # Summarize mean C-index by lambda1
 summary_regpath <- regpath_results %>%
@@ -646,6 +596,8 @@ ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) +
   )
 ```
 
+## More frequently selected variables
+
 ```{r}
 freq_selected_vars <- regpath_results %>%
   mutate(
@@ -675,90 +627,6 @@ aa
 ```{r}
 # Then, train final model with selected features and compute C-index on test set
 # ...
-```
-
-
-```{r}
-# # Cross-validation loop
-# set.seed(seed)
-# 
-# # Store resutls
-# cv_cindex <- numeric(kfolds)
-# cv_selected_vars <- vector("list", kfolds)
-# 
-# for (i in seq_len(kfolds)) {
-#   
-#   print("------------")
-#   print(paste0("Loop #", i))
-#   print("------------")
-#   
-#   # Determine training and validation patient IDs
-#   validation_ids <- fold_map$patient_id[fold_map$fold == i]
-#   training_ids <- setdiff(unique_train_ids, validation_ids)
-#   
-#   # Subset interval-level data
-#   valid_data <- training_set %>% filter(id %in% validation_ids)
-#   train_data <- training_set %>% filter(id %in% training_ids)
-#   
-#   # Sanity checks
-#   stopifnot(
-#     setequal(validation_ids, unique(valid_data$id)),
-#     setequal(training_ids, unique(train_data$id))
-#   )
-#   
-#   # Process data
-#   X_valid <- process_data(valid_data, cols2select)
-#   X_train <- process_data(train_data, cols2select)
-#   
-#   # Check that there are no missing values
-#   # na_per_col <- colSums(is.na(X_valid))
-#   # print("Showing NAs per column")
-#   # na_per_col[na_per_col > 0]
-#   # print(na_per_col)
-#   stopifnot(!anyNA(X_valid))
-#   stopifnot(!anyNA(X_train))
-#   
-#   # Find column mismatch if there is one
-#   find_column_mismatch(X_valid, X_train)
-#   
-#   # Get responses
-#   y_valid <- with(valid_data, Surv(tstart, tstop, death))
-#   y_train <- with(train_data, Surv(tstart, tstop, death))
-#   
-#   # Fit penalized Cox on training fold
-#   pencox_cv <- penalized(
-#     response = y_train,
-#     penalized = X_train,
-#     unpenalized = ~1, 
-#     lambda1 = 10,
-#     lambda2 = 0.1,
-#     model = "cox", 
-#     trace = TRUE
-#   )
-#   
-#   # Get coefficients for all initial predictors
-#   b <- coef(pencox_cv, "all")
-#   
-#   # Sanity check
-#   stopifnot(length(b) == ncol(X_valid))
-#   
-#   # Compute the linear predictor η = β′X
-#   lp_valid <- as.numeric(X_valid %*% b)
-#   
-#   # Evaluate using C-index
-#   cv_cindex[[i]] <- survival::concordance(y_valid ~ lp_valid)$concordance
-#   
-#   # Record selected variables
-#   cv_selected_vars[[i]] <- coef(pencox_cv) # names(coefs)[which(coefs != 0)]
-# 
-#   message(sprintf(
-#     "Fold %d: C-index = %.4f; Selected %d vars",
-#     i,
-#     cv_cindex[[i]],
-#     length(cv_selected_vars[[i]])
-#   ))
-#   
-# }
 ```
 
 

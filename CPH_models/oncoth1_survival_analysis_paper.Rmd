@@ -233,11 +233,11 @@ oncoth1_data = oncoth1$data
 ```{r}
 # Group tobacco use into 'Never smoked' vs 'Former/current'
 oncoth1_data %<>%
-  mutate(tobacco_use_imp_grouped = case_when(
-    tobacco_use_imp == "Never has smoked" ~ "Never", 
-    tobacco_use_imp == "Former smoker" ~ "Former/current",
-    tobacco_use_imp == "Active smoker" ~ "Former/current"), 
-    .after = tobacco_use_imp)
+  mutate(tobacco_use = case_when(
+    tobacco_use == "Never has smoked" ~ "Never", 
+    tobacco_use == "Former smoker" ~ "Former/current",
+    tobacco_use == "Active smoker" ~ "Former/current"), 
+    .after = tobacco_use)
 
 # Create quartiles for age 
 oncoth1_data %<>%
@@ -283,8 +283,9 @@ covariates_df = oncoth1_data %>%
          oral_contraceptive_tx, 
          diabetes_mellitus, 
          dyslipidemia, 
-         tobacco_use_imp, 
-         tobacco_use_imp_grouped,
+         tobacco_use,
+         # tobacco_use_imp, 
+         # tobacco_use_imp_grouped,
          copd_imp, 
          arterial_hypertension, 
          chronic_cardiac_insufficiency, 
@@ -401,6 +402,18 @@ survival_data = oncoth1_data %>%
          tu_4th_vte_all_from_cancer_diagnosis_days_corrected, 
          tu_4th_vte_all_from_cancer_diagnosis_months_corrected
          )
+```
+
+
+```{r}
+survival_data_test = tmerge(
+  data1 = covariates_df, 
+  data2 = survival_data, 
+  id = id, 
+  tstop = follow_up_length_from_cancer_diagnosis_days, 
+  # event() is the survival analysis event of interest (in our case, death)
+  death = event(follow_up_length_from_cancer_diagnosis_days, censored_patient)
+)
 ```
 
 
