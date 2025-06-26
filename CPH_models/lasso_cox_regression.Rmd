@@ -110,7 +110,8 @@ oncoth1_td_dataset_selected_vars <- oncoth1_td_dataset %>%
          previous_vte,  
          previous_ate, 
          anticoag_tx_currently, 
-         antiaggreg_tx_currently)
+         antiaggreg_tx_currently
+         )
 ```
 
 ```{r}
@@ -162,6 +163,9 @@ oncoth1_td_data_clean <- dummy_cols(
   remove_first_dummy = TRUE, 
   remove_selected_columns = TRUE
   )
+# Sanity check
+stopifnot(!anyNA(oncoth1_td_data_clean))
+
 oncoth1_td_data_clean
 ```
 
@@ -169,8 +173,10 @@ oncoth1_td_data_clean
 ```{r}
 # Transform covariates dataframe into matrix
 covariates <- as.matrix(oncoth1_td_data_clean)
+stopifnot(!anyNA(covariates))
 # Scale 
 covariates_scaled <- scale(covariates)
+stopifnot(!anyNA(covariates_scaled))
 ```
 
 
@@ -229,8 +235,8 @@ cols2select <- c(
  "mucinous_histology_imp",
  "grade_histological_differentiation_imp",
  "catheter_device_imp", 
- "family_background_vte", 
- "previous_vte",  
+ # "family_background_vte", 
+ # "previous_vte",  
  "previous_ate", 
  # "anticoag_tx_currently", # unequal categories between train and validation set
  "antiaggreg_tx_currently"
@@ -403,6 +409,11 @@ cv_cindex <- numeric(kfolds)
 cv_selected_vars <- vector("list", kfolds)
 
 for (i in seq_len(kfolds)) {
+  
+  print("------------")
+  print(paste0("Loop #", i))
+  print("------------")
+  
   # Determine training and validation patient IDs
   validation_ids <- fold_map$patient_id[fold_map$fold == i]
   training_ids <- setdiff(unique_train_ids, validation_ids)
@@ -420,6 +431,15 @@ for (i in seq_len(kfolds)) {
   # Process data
   X_valid <- process_data(valid_data, cols2select)
   X_train <- process_data(train_data, cols2select)
+  
+  # Check that there are no missing values
+  na_per_col <- colSums(is.na(X_valid))
+  print("Showing NAs per column")
+  na_per_col[na_per_col > 0]
+  print(na_per_col)
+  
+  stopifnot(!anyNA(X_valid))
+  stopifnot(!anyNA(X_train))
   
   # Find column mismatch if there is one
   find_column_mismatch(X_valid, X_train)
@@ -439,17 +459,21 @@ for (i in seq_len(kfolds)) {
     trace = TRUE
   )
   
-  # show(fit_cv)
-  # basehaz(fit_cv)
-  
-  b <- as.numeric(coef(fit_cv, "all"))
+
+  b <- coef(fit_cv, "all")
+  print(class(b))
+  names(b) <- colnames(X_valid)
   print(b)
+  
+  # Sanity check
+  stopifnot(length(b) == ncol(X_valid))
   
   
   
   # Compute the linear predictor η = β′X
   lp_valid <- as.numeric(X_valid %*% b)
   print(lp_valid)
+  
   # # Evaluate using C-index
   # pred_valid <- penalized::predict(
   #   object = fit_cv, 
