@@ -435,18 +435,30 @@ for (i in seq_len(kfolds)) {
     unpenalized = ~1, 
     lambda1 = 10,
     lambda2 = 0.1,
-    model = "cox"
+    model = "cox", 
+    trace = TRUE
   )
   
-  # Evaluate using C-index
-  pred_valid <- penalized::predict(
-    object = fit_cv, 
-    penalized = X_valid
-    )
-  print(pred_valid)
-  print(class(pred_valid))
+  # show(fit_cv)
+  # basehaz(fit_cv)
+  
+  b <- as.numeric(coef(fit_cv, "all"))
+  print(b)
+  
+  
+  
+  # Compute the linear predictor η = β′X
+  lp_valid <- as.numeric(X_valid %*% b)
+  print(lp_valid)
+  # # Evaluate using C-index
+  # pred_valid <- penalized::predict(
+  #   object = fit_cv, 
+  #   penalized = X_valid
+  #   )
+  # print(pred_valid)
+  # print(class(pred_valid))
   # # Calculate C-index
-  # cv_cindex[i] <- concordance(y_valid ~ pred_valid)$concordance
+  # cv_cindex[i] <- concordance(y_valid ~ pred_valid)
   # 
   # # Record selected variables
   # coefs <- coef(fit_cv)
@@ -463,6 +475,9 @@ for (i in seq_len(kfolds)) {
 ```
 
 
+```{r}
+aa
+```
 
 
 
