@@ -185,7 +185,7 @@ cols2select <- c(
  "arterial_hypertension", 
  # "tobacco_use_imp", 
  # "copd_imp", 
- "venous_insufficiency_imp", 
+ # "venous_insufficiency_imp", 
  # "khorana_risk_score_imp",# correlated to a lot of features
  # "two_groups_krs", # correlated to a lot of features
  # "previous_onco_surgery",
@@ -196,7 +196,7 @@ cols2select <- c(
  "tnm_stage_two_groups",
  # "histology_type_imp", # unequal categories between train and validation set
  "mucinous_histology_imp",
- "grade_histological_differentiation_imp",
+ # "grade_histological_differentiation_imp",
  # "catheter_device_imp", 
  # "family_background_vte", 
  "previous_vte",
@@ -205,6 +205,12 @@ cols2select <- c(
  "antiaggreg_tx_currently"
  )
 ```
+
+
+```{r}
+# cols2select = c("primary_tumor_simplified", "tnm_stage_two_groups")
+```
+
 
 
 ```{r}
@@ -230,13 +236,16 @@ process_data <- function(data, cols2select, apply_scaling = FALSE) {
     )
   
   # Transform other columns to numerical
-  data_transf <- data_selection %>%
+  if ("grade_histological_differentiation_imp" %in% colnames(data_selection)) {
+    data_selection <- data_selection %>%
     mutate(grade_histological_differentiation_imp = as.numeric(case_when(
       str_starts(grade_histological_differentiation_imp, "Well") ~ 1,
       str_starts(grade_histological_differentiation_imp, "Moderately") ~ 2,
       str_starts(grade_histological_differentiation_imp, "Poorly") ~ 3, 
       TRUE ~ NA_real_
-    ))) # %>%
+    )))
+  }
+   # %>%
     # mutate(tnm_stage = as.numeric(case_when(
     #   tnm_stage == "I" ~ 1,
     #   tnm_stage == "II" ~ 2,
@@ -249,7 +258,7 @@ process_data <- function(data, cols2select, apply_scaling = FALSE) {
   
   # Convert categorical to numeric
   data_dummies <- dummy_cols(
-    .data = data_transf, 
+    .data = data_selection, 
     select_columns = NULL, 
     remove_first_dummy = TRUE, 
     remove_selected_columns = TRUE
@@ -390,7 +399,7 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10, 20, 30, 100)
+lambda1_grid <- c(0.1, 1, 5, 10, 25, 50, 75, 80, 100)
 # lambda1_grid <- 1
 # lambda1_grid <- 10^seq(-4, 2, length.out = 50)
 
@@ -404,6 +413,7 @@ regpath_results <- expand.grid(
   ) %>%
   as_tibble() %>%
   mutate(
+    cindex_train = NA_real_,
     cindex = NA_real_, 
     selected_vars = vector("list", n())
   )
@@ -498,9 +508,11 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   stopifnot(names(b) == colnames(X_valid))
 
   # Compute the linear predictor η = β′X
+  lp_train <- as.numeric(X_train %*% b)
   lp_valid <- as.numeric(X_valid %*% b)
 
   # Evaluate using C-index
+  regpath_results$cindex_train[row_idx] <- survival::concordance(y_train ~ lp_train)$concordance
   regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
 
   # Record selected variables
@@ -510,6 +522,18 @@ for (row_idx in seq_len(nrow(regpath_results))) {
 
 
 ## Regularization pathway
+
+```{r}
+# Summarize mean C-index by lambda1
+summary_regpath_train <- regpath_results %>%
+  group_by(lambda1) %>%
+  summarise(
+    mean_cindex_train = mean(cindex_train, na.rm = TRUE), 
+    .groups = "drop"
+  )
+summary_regpath_train
+```
+
 
 ```{r}
 # Summarize mean C-index by lambda1
@@ -543,6 +567,7 @@ summary_regpath
 #   )
 ```
 
+
 ## More frequently selected variables
 
 ```{r}
@@ -565,15 +590,54 @@ freq_selected_vars <- regpath_results %>%
 freq_selected_vars
 ```
 
-
+## Final model
 
 ```{r}
-aa
+# Select variables
+training_set <- process_data(training_set, cols2select)
+test_set <- process_data(test_set, cols2select)
+
+# Preprocess data
+preprocess <- caret::preProcess(
+  x = training_set,
+  method = c("center", "scale"),
+  na.remove = TRUE
+)
+  
+# 2) Apply to both train & valid
+training_set_transf <- predict(preprocess, training_set)
+test_set_transf <- predict(preprocess, test_set)
 ```
+
 
 ```{r}
 # Then, train final model with selected features and compute C-index on test set
-# ...
+final_lasso_cox <- penalized(
+    response = training_response,
+    penalized = training_set_transf,
+    unpenalized = ~1,
+    lambda1 = 10,
+    lambda2 = 0,
+    model = "cox",
+    trace = FALSE
+  )
+
+# Get coefficients for all initial predictors
+final_b <- coef(final_lasso_cox, "all", standardize = TRUE)
+
+# Sanity check
+stopifnot(names(final_b) == colnames(test_set_transf))
+
+# Compute the linear predictor η = β′X
+lp_test <- as.numeric(test_set_transf %*% final_b)
+
+# Evaluate using C-index
+final_cindex <- survival::concordance(test_response ~ lp_test)$concordance
+print(final_cindex)
+
+# Record selected variables
+final_selected_vars <- coef(final_lasso_cox)
+print(final_selected_vars)
 ```
 
 
