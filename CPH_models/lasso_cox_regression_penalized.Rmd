@@ -173,63 +173,6 @@ tryCatch({
 ```
 
 
-
-```{r}
-# # Change name of dependent variable
-# oncoth1_td_data_clean <- dummy_cols(
-#   .data = oncoth1_td_dataset_selected_vars, 
-#   select_columns = NULL, 
-#   remove_first_dummy = TRUE, 
-#   remove_selected_columns = TRUE
-#   )
-# # Sanity check
-# stopifnot(!anyNA(oncoth1_td_data_clean))
-# 
-# oncoth1_td_data_clean
-```
-
-
-```{r}
-# # Transform covariates dataframe into matrix
-# covariates <- as.matrix(oncoth1_td_data_clean)
-# stopifnot(!anyNA(covariates))
-# # Scale 
-# covariates_scaled <- scale(covariates)
-# stopifnot(!anyNA(covariates_scaled))
-```
-
-
-```{r}
-# # Create response Surv() object
-# # Allow for right-censoring to handle time-dependent variables
-# response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
-# response[1:5]
-```
-
-```{r}
-# # Covariates matrix and response must have same length (number of patients)
-# stopifnot(dim(covariates)[0] == length(response))
-```
-
-
-```{r}
-# library(penalized)
-# 
-# fit <- penalized(
-#   response    = response, 
-#   penalized  = covariates_scaled,
-#   unpenalized = ~1,
-#   lambda1     = 10,        # your LASSO penalty
-#   model       = "cox"
-# )
-
-```
-
-```{r}
-# coef(fit)
-```
-
-
 ```{r}
 cols2select <- c(
  "vte_event",
@@ -237,10 +180,10 @@ cols2select <- c(
  "gender", 
  "bmi_value", 
  "performance_status_category_corrected_imp", 
- "diabetes_mellitus",
+ # "diabetes_mellitus",
  "dyslipidemia", 
  "arterial_hypertension", 
- "tobacco_use_imp", 
+ # "tobacco_use_imp", 
  # "copd_imp", 
  "venous_insufficiency_imp", 
  # "khorana_risk_score_imp",# correlated to a lot of features
@@ -249,7 +192,7 @@ cols2select <- c(
  "tumor_surgically_removed", 
  "primary_tumor_simplified", 
  # "tnm_stage",
- # "tnm_stage_grouped", 
+ # "tnm_stage_grouped",
  "tnm_stage_two_groups",
  # "histology_type_imp", # unequal categories between train and validation set
  "mucinous_histology_imp",
@@ -440,12 +383,14 @@ fold_map <- data.frame(
 ```
 
 
+## Cross-validation
+
 ```{r}
 # Cross-validation loop
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10, 100)
+lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10, 20, 30, 100)
 # lambda1_grid <- 1
 # lambda1_grid <- 10^seq(-4, 2, length.out = 50)
 
@@ -484,14 +429,16 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   # # Split by fold (as before)
   # train_df <- filter(training_set, fold != fold_i)
   # valid_df <- filter(training_set, fold == fold_i)
-  # 
+  
+  
   # Build unscaled X’s
   X_train_raw <- process_data(train_data, cols2select, apply_scaling = FALSE)
   X_valid_raw <- process_data(valid_data, cols2select, apply_scaling = FALSE)
+  find_column_mismatch(X_train_raw, X_valid_raw) 
   
   # 1) Fit preProcess on TRAIN only
   pp <- caret::preProcess(
-    x      = X_train_raw,
+    x = X_train_raw,
     method = c("center", "scale"),
     na.remove = TRUE
   )
@@ -499,63 +446,63 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   # 2) Apply to both train & valid
   X_train <- predict(pp, X_train_raw)
   X_valid <- predict(pp, X_valid_raw)
-  
-  # # Determine training and validation patient IDs
-  # validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
-  # training_ids <- setdiff(unique_train_ids, validation_ids)
-  # 
-  # # Subset interval-level data
-  # valid_data <- training_set %>% filter(id %in% validation_ids)
-  # train_data <- training_set %>% filter(id %in% training_ids)
-  # 
+
+  # Determine training and validation patient IDs
+  validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
+  training_ids <- setdiff(unique_train_ids, validation_ids)
+
+  # Subset interval-level data
+  valid_data <- training_set %>% filter(id %in% validation_ids)
+  train_data <- training_set %>% filter(id %in% training_ids)
+
   # # Sanity checks
   # stopifnot(
   #   setequal(validation_ids, unique(valid_data$id)),
   #   setequal(training_ids, unique(train_data$id))
   # )
-  # 
+  #
   # # Process data
   # X_valid <- process_data(valid_data, cols2select)
   # X_train <- process_data(train_data, cols2select)
-  
+
   # Check that there are no missing values
   # na_per_col <- colSums(is.na(X_valid))
   # print("Showing NAs per column")
   # na_per_col[na_per_col > 0]
   # print(na_per_col)
-  
+
   stopifnot(!anyNA(X_train), !anyNA(X_valid))
-  
+
   # Find column mismatch if there is one
   find_column_mismatch(X_valid, X_train)
-  
+
   # Get responses
   y_valid <- with(valid_data, Surv(tstart, tstop, death))
   y_train <- with(train_data, Surv(tstart, tstop, death))
-  
+
   # Fit penalized Cox on training fold
   pencox_cv <- penalized(
     response = y_train,
     penalized = X_train,
-    unpenalized = ~1, 
+    unpenalized = ~1,
     lambda1 = l1,
     lambda2 = 0,
-    model = "cox", 
+    model = "cox",
     trace = FALSE
   )
-  
+
   # Get coefficients for all initial predictors
   b <- coef(pencox_cv, "all", standardize = TRUE)
-  
+
   # Sanity check
   stopifnot(names(b) == colnames(X_valid))
-  
+
   # Compute the linear predictor η = β′X
   lp_valid <- as.numeric(X_valid %*% b)
-  
+
   # Evaluate using C-index
   regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
-  
+
   # Record selected variables
   regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
 }
