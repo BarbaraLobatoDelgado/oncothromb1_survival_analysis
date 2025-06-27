@@ -139,10 +139,6 @@ oncoth1_survival_df <- oncoth1_data %>%
 
 
 ```{r}
-# # Remove columns with missing values
-# oncoth1_selected_vars %<>%
-#   select(where(~ !any(is.na(.))))
-
 # Stop if there are missing values in dataset
 stopifnot(!anyNA(oncoth1_survival_df))
 ```
@@ -212,16 +208,7 @@ process_data <- function(data, cols2select, apply_scaling = FALSE) {
       str_starts(grade_histological_differentiation_imp, "Moderately") ~ 2,
       str_starts(grade_histological_differentiation_imp, "Poorly") ~ 3, 
       TRUE ~ NA_real_
-    ))) # %>%
-    # mutate(tnm_stage = as.numeric(case_when(
-    #   tnm_stage == "I" ~ 1,
-    #   tnm_stage == "II" ~ 2,
-    #   tnm_stage == "III" ~ 3,
-    #   tnm_stage == "IV" ~ 4, 
-    #   TRUE ~ NA_real_
-    # )))
-  
-  # print(colnames(data_transf))
+    ))) 
   
   # Convert categorical to numeric
   data_dummies <- dummy_cols(
@@ -316,7 +303,7 @@ print(cindex)
 
 
 
-### Inspect correlation
+## Inspect correlation
 
 ```{r}
 # Calculate correlation
@@ -344,18 +331,13 @@ plot_ly(
 ```
 
 
-
-```{r}
-aa
-```
-
 ## Dataset partition
 
 ```{r}
 # Partition data with repeated rows per patient into training and test set
 
 # Get unique IDs
-unique_ids <- unique(oncoth1_td_dataset$id)
+unique_ids <- unique(oncoth1_survival_df$id)
 
 # Randomly assign each unique ID to either train or test
 train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
@@ -363,29 +345,32 @@ test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 
 # No match between train and test IDs
 stopifnot(train_ids != test_ids)
+
+# Get rows of train and test patients
+train_rows <- which(oncoth1_survival_df$id %in% train_ids)
+test_rows <- which(oncoth1_survival_df$id %in% test_ids)
+
+# No match between train and test rows
+stopifnot(train_rows != test_rows)
 ```
 
 
 ```{r}
 # Save IDs in training and test split
-write.csv(x = train_ids, file = "../partition_indices/train_ids.csv", row.names = FALSE, col.names = FALSE)
-write.csv(x = test_ids, file = "../partition_indices/test_ids.csv", row.names = FALSE, col.names = FALSE)
+write.csv(x = train_ids, file = "../partition_indices/glmnet_train_ids.csv", row.names = FALSE)
+write.csv(x = test_ids, file = "../partition_indices/glmnet_test_ids.csv", row.names = FALSE)
 ```
 
 
 
 ```{r}
-# # Get rows of train and test patients
-# train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
-# test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
-
-# # Partition data keeping the IDs (needed for stratified CV)
-# training_set_with_ids <- oncoth1_td_dataset %>% 
-#   filter(id %in% train_ids) %>% 
-#   select(id)
-# testing_set_with_ids <- oncoth1_td_dataset %>% 
-#   filter(id %in% test_ids) %>%
-#   select(id)
+# Partition data keeping the IDs
+training_set_with_ids <- oncoth1_td_dataset %>%
+  filter(id %in% train_ids) %>%
+  select(id)
+testing_set_with_ids <- oncoth1_td_dataset %>%
+  filter(id %in% test_ids) %>%
+  select(id)
 
 # Partition data
 # training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
