@@ -378,8 +378,8 @@ y <- with(oncoth1_survival_df, Surv(time, death))
 
 ```{r}
 # Partition data using rows
-training_set <- oncoth1_transf[train_rows,]
-test_set <- oncoth1_transf[test_rows,]
+training_set <- oncoth1_survival_df[train_rows,]
+test_set <- oncoth1_survival_df[test_rows,]
 
 # Partition target
 y_train <- y[train_rows]
@@ -457,41 +457,42 @@ for (i in seq_len(nrow(cv_out))) {
   i_fold <- cv_out$fold[i]
   
   # Get validation row number those not in this fold
-  valid_rows <- cv_info_mapping %>% 
+  valid_ids <- cv_info_mapping %>% 
     filter(set == "train", fold == i_fold) %>% 
-    pull(row) %>%
+    pull(id) %>%
     as.integer()
   # Get train row number
-  tr_rows <- cv_info_mapping %>% 
+  tr_ids <- cv_info_mapping %>% 
     filter(set == "train", fold != i_fold) %>% 
-    pull(row) %>%
+    pull(id) %>%
     as.integer()
   
-  print(valid_rows)
-  print(tr_rows)
-  
   # Sanity check
-  stopifnot(!valid_rows %in% tr_rows)
+  stopifnot(!valid_ids %in% tr_ids)
   
   # Subset data
-  valid_data <- training_set[valid_rows,]
-  tr_data <- training_set[tr_rows,]
+  valid_data <- training_set %>% filter(id %in% valid_ids)
+  tr_data <- training_set %>% filter(id %in% train_ids)
   
   # Sanity check
   stopifnot(
-    all(row.names(tr_data) %in% train_rows), 
-    all(row.names(valid_data) %in% valid_rows)
+    all(tr_data$id %in% train_ids), 
+    all(valid_data$id %in% valid_ids)
   )
   
-  # # Scale data
-  # preproc <- caret::preProcess(
-  #   x = tr_data,
-  #   method = c("center", "scale")
-  # )
-  # 
-  # # Apply transformation
-  # X_train <- predict(preproc, tr_data)
-  # X_valid <- predict(preproc, valid_data)
+  # Select covariates
+  valid_data_subset <- process_data(valid_data, cols2select)
+  tr_data_subset <- process_data(tr_data, cols2select)
+  
+  # Learn scaling parameters on train data
+  preproc <- caret::preProcess(
+    x = tr_data_subset,
+    method = c("center", "scale")
+  )
+  # Scale data
+  X_train <- predict(preproc, tr_data_subset)
+  X_valid <- predict(preproc, valid_data_subset)
+  
   
 }
 ```
