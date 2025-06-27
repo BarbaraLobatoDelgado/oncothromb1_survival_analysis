@@ -769,6 +769,7 @@ KM_curve_VTE_age_group_combined_plot <- cowplot::plot_grid(
 KM_curve_VTE_age_group_combined_plot
 ```
 
+
 ```{r}
 # Save plot
 ggsave(

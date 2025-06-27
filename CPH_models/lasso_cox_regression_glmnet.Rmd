@@ -66,25 +66,39 @@ pacman::p_load(
 ## Load data
 
 ```{r cars}
-# Load time-dependent dataset
-oncoth1_td_dataset = read.csv(file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv")
+# # Load time-dependent dataset
+# oncoth1_td_dataset = read.csv(file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv")
 ```
 
 
 ```{r}
-# Remove columns with missing values
-oncoth1_td_dataset %<>%
-  select(where(~ !any(is.na(.))))
+# Load an9elproject DB
+oncoth1 <- get_project("oncothr1", version = "0.0.8005")
+```
 
-# Stop if there are missing values in dataset
-stopifnot(!anyNA(oncoth1_td_dataset))
+
+```{r}
+# Get data slot
+oncoth1_data <- oncoth1$data
 ```
 
 
 ```{r}
 # Get meaningful variables
-oncoth1_td_dataset_selected_vars <- oncoth1_td_dataset %>%
-  select(vte_event,
+oncoth1_selected_vars <- oncoth1_data %>%
+  filter(patient_inc_exc == "Included") %>%
+  select(id, 
+         patient_group,
+         # Follow-up data
+         date_cancer_dx, 
+         date_study_begins, 
+         date_study_ends,
+         date_death,
+         patient_status_at_end_study, 
+         censored_patient, 
+         follow_up_length_from_cancer_diagnosis_days, 
+         follow_up_length_from_cancer_diagnosis_months,
+         # Covariates
          age_when_cancer_dx, 
          gender, 
          bmi_value, 
@@ -111,8 +125,30 @@ oncoth1_td_dataset_selected_vars <- oncoth1_td_dataset %>%
          previous_ate, 
          anticoag_tx_currently, 
          antiaggreg_tx_currently
-         )
+         ) %>%
+  # Create VTE variable
+  mutate(VTE = ifelse(patient_group == "Case", 1, 0)) %>%
+  select(-patient_group)
+  
 ```
+
+
+```{r}
+
+```
+
+
+```{r}
+# Remove columns with missing values
+oncoth1_td_dataset %<>%
+  select(where(~ !any(is.na(.))))
+
+# Stop if there are missing values in dataset
+stopifnot(!anyNA(oncoth1_td_dataset))
+```
+
+
+
 
 
 ```{r}
