@@ -359,46 +359,33 @@ stopifnot(train_rows != test_rows)
 # Save IDs in training and test split
 write.csv(x = train_ids, file = "../partition_indices/glmnet_train_ids.csv", row.names = FALSE)
 write.csv(x = test_ids, file = "../partition_indices/glmnet_test_ids.csv", row.names = FALSE)
+
+# Save row number in training and test split
+write.csv(x = train_rows, file = "../partition_indices/glmnet_train_rows.csv", row.names = FALSE)
+write.csv(x = test_rows, file = "../partition_indices/glmnet_test_rows.csv", row.names = FALSE)
+```
+
+
+```{r}
+# Create target variable
+y <- with(oncoth1_survival_df, Surv(time, death))
 ```
 
 
 
 ```{r}
-# Partition data keeping the IDs
-training_set_with_ids <- oncoth1_td_dataset %>%
-  filter(id %in% train_ids) %>%
-  select(id)
-testing_set_with_ids <- oncoth1_td_dataset %>%
-  filter(id %in% test_ids) %>%
-  select(id)
+# Partition data using rows
+training_set <- oncoth1_transf[train_rows,]
+test_set <- oncoth1_transf[test_rows,]
 
-# Partition data
-# training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
-# test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
-training_set <- oncoth1_td_dataset[train_rows,]
-test_set <- oncoth1_td_dataset[test_rows,]
-# training_set <- covariates[train_rows,]
-# test_set <- covariates[test_rows,]
-
-# Checkfolds that IDs are not in training and test sets
-stopifnot(
-  identical(
-    sort(unique(training_set$id)), sort(unique(test_set$id))) == FALSE)
-
-# # Partition response
-# training_response <- response[train_rows,]
-# test_response <- response[test_rows,]
-
-# Surv response for full data
-response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
-# Get response for training and test sets
-training_response <- response[train_rows]
-test_response <- response[test_rows]
+# Partition target
+y_train <- y[train_rows]
+y_test <- y[test_rows]
 
 # Check that all patients are accounted for in training and test set
 stopifnot(
-  nrow(training_set) + nrow(test_set) == nrow(oncoth1_td_dataset),
-  length(training_response) + length(test_response) == length(response)
+  nrow(training_set) + nrow(test_set) == nrow(oncoth1_transf),
+  length(y_train) + length(y_test) == length(y)
 )
 ```
 
