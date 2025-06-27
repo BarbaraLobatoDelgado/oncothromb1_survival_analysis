@@ -267,11 +267,12 @@ lasso_cox <- glmnet(
 )
 
 coef(lasso_cox, s = alpha)
+
+linear_pred <- as.numeric(predict(lasso_cox, newx = oncoth1_transf, s = alpha, type = "link"))
+
+cindex <- concordance(Y0 ~ linear_pred)
+print(cindex)
 ```
-
-
-
-
 
 
 ```{r}
@@ -318,16 +319,14 @@ coef(lasso_cox, s = alpha)
 ### Inspect correlation
 
 ```{r}
-# # Calculate correlation
-# corr_covariates <- oncoth1_transf %>% cor(.)
+# Calculate correlation
+corr_covariates <- oncoth1_transf %>% cor(.)
 ```
 
 
 ```{r}
 # Interactive heatmap
-oncoth1_transf %>% 
-  cor(.) %>% 
-  plot_ly(
+plot_ly(
   data = reshape2::melt(corr_covariates),
   x = ~Var1,
   y = ~Var2,
@@ -362,9 +361,23 @@ unique_ids <- unique(oncoth1_td_dataset$id)
 train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
 test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 
-# Get rows of train and test patients
-train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
-test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
+# No match between train and test IDs
+stopifnot(train_ids != test_ids)
+```
+
+
+```{r}
+# Save IDs in training and test split
+write.csv(x = train_ids, file = "../partition_indices/train_ids.csv", row.names = FALSE, col.names = FALSE)
+write.csv(x = test_ids, file = "../partition_indices/test_ids.csv", row.names = FALSE, col.names = FALSE)
+```
+
+
+
+```{r}
+# # Get rows of train and test patients
+# train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
+# test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
 
 # # Partition data keeping the IDs (needed for stratified CV)
 # training_set_with_ids <- oncoth1_td_dataset %>% 
@@ -403,6 +416,7 @@ stopifnot(
   length(training_response) + length(test_response) == length(response)
 )
 ```
+
 
 
 ```{r}
