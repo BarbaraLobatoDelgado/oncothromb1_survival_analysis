@@ -440,7 +440,7 @@ alpha_grid <- c(0.001, 0.01, 0.1, 1)
 # alpha_grid <- 1
 
 # Store regularization pathway results
-# Do combinations of all folds and lambda1 values
+# Do combinations of all folds and alpha values
 cv_out <- expand.grid(
   alpha = alpha_grid, 
   fold = 1:kfolds, 
@@ -512,6 +512,19 @@ for (i in seq_len(nrow(cv_out))) {
   
   coefs <- coef(lasso_cox, s = alpha)
   
+  # Evaluate using C-index
+  linear_pred <- as.numeric(predict(
+    lasso_cox, 
+    newx = X_valid, 
+    s = alpha, 
+    type = "link"
+    ))
+  # Calculate C-index and add to results
+  cv_out$cindex[i] <- survival::concordance(y_valid ~ linear_pred)$concordance
+  
+  # Record selected variables
+  cv_out$selected_vars[[i]] <- coef(lasso_cox, s = alpha)
+  
 }
 ```
 
@@ -519,9 +532,9 @@ for (i in seq_len(nrow(cv_out))) {
 ## Regularization pathway
 
 ```{r}
-# Summarize mean C-index by lambda1
-summary_regpath <- regpath_results %>%
-  group_by(lambda1) %>%
+# Summarize mean C-index by alpha
+summary_regpath <- cv_out %>%
+  group_by(alpha) %>%
   summarise(
     mean_cindex = mean(cindex, na.rm = TRUE), 
     .groups = "drop"
@@ -531,11 +544,11 @@ summary_regpath
 
 
 ```{r}
-ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) + 
+ggplot(summary_regpath, aes(x = alpha, y = mean_cindex)) + 
   geom_line(size = 1) + 
   geom_point(size = 2) + 
   scale_x_log10(
-    breaks = unique(summary_regpath$lambda1), 
+    breaks = unique(summary_regpath$alpha), 
     labels = scales::scientific_format(digits = 2)
   ) + 
   labs(
@@ -553,20 +566,28 @@ ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) +
 ## More frequently selected variables
 
 ```{r}
-freq_selected_vars <- regpath_results %>%
+freq_selected_vars <- cv_out %>%
   mutate(
     selected = map(
       selected_vars, 
-      ~ names(.x)[.x != 0] # get variables names with non-zero weights
+      # Extract rownames for non-zero coefficients
+      ~ {
+        nonzero_idx <- which(.x != 0)
+        if (length(nonzero_idx) == 0) {
+          character(0)
+        } else {
+          rownames(.x)[nonzero_idx]
+        }
+      }
     )
   ) %>%
   # Keep lambda/fold id and list of selected variables
-  select(lambda1, fold, selected) %>%
+  select(alpha, fold, selected) %>%
   # Explode the list-column to have lambda, fold and vars in one row
   unnest(selected) %>%
   # Count how many times each variable appears
   count(variable = selected, name = "freq") %>%
-  mutate(rel_freq = freq / nrow(regpath_results)) %>%
+  mutate(rel_freq = freq / nrow(cv_out)) %>%
   arrange(desc(rel_freq))
 
 freq_selected_vars
