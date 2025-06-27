@@ -90,14 +90,8 @@ oncoth1_selected_vars <- oncoth1_data %>%
   select(id, 
          patient_group,
          # Follow-up data
-         date_cancer_dx, 
-         date_study_begins, 
-         date_study_ends,
-         date_death,
-         patient_status_at_end_study, 
-         censored_patient, 
+         censored_patient, # zero for censored patients (alive at the time point), one for dead
          follow_up_length_from_cancer_diagnosis_days, 
-         follow_up_length_from_cancer_diagnosis_months,
          # Covariates
          age_when_cancer_dx, 
          gender, 
@@ -114,6 +108,7 @@ oncoth1_selected_vars <- oncoth1_data %>%
          previous_onco_surgery,
          tumor_surgically_removed, 
          primary_tumor_simplified, 
+         tnm_stage,
          tnm_stage_grouped, 
          tnm_stage_two_groups, 
          histology_type_imp,
@@ -128,43 +123,164 @@ oncoth1_selected_vars <- oncoth1_data %>%
          ) %>%
   # Create VTE variable
   mutate(VTE = ifelse(patient_group == "Case", 1, 0)) %>%
-  select(-patient_group)
+  select(-patient_group) %>%
+  # Create dataset for survival analysis
+  rename(death = censored_patient, 
+         time = follow_up_length_from_cancer_diagnosis_days)
+  
   
 ```
 
 
 ```{r}
 
+  
 ```
 
 
 ```{r}
-# Remove columns with missing values
-oncoth1_td_dataset %<>%
-  select(where(~ !any(is.na(.))))
+# # Remove columns with missing values
+# oncoth1_selected_vars %<>%
+#   select(where(~ !any(is.na(.))))
 
 # Stop if there are missing values in dataset
-stopifnot(!anyNA(oncoth1_td_dataset))
+stopifnot(!anyNA(oncoth1_selected_vars))
 ```
 
 
 
+```{r}
+cols2select <- c(
+ "VTE",
+ "age_when_cancer_dx", 
+ "gender", 
+ "bmi_value", 
+ "performance_status_category_corrected_imp", 
+ "diabetes_mellitus",
+ "dyslipidemia", 
+ "arterial_hypertension", 
+ "tobacco_use_imp", 
+ # "copd_imp", 
+ "venous_insufficiency_imp", 
+ # "khorana_risk_score_imp",# correlated to a lot of features
+ # "two_groups_krs", # correlated to a lot of features
+ "previous_onco_surgery",
+ "tumor_surgically_removed", 
+ "primary_tumor_simplified", 
+ "tnm_stage",
+ # "tnm_stage_grouped", 
+ # "tnm_stage_two_groups", 
+ # "histology_type_imp", # unequal categories between train and validation set
+ "mucinous_histology_imp",
+ "grade_histological_differentiation_imp",
+ # "catheter_device_imp", 
+ # "family_background_vte", 
+ # "previous_vte",  
+ "previous_ate", 
+ # "anticoag_tx_currently", # unequal categories between train and validation set
+ "antiaggreg_tx_currently"
+ )
+```
 
 
 ```{r}
-# Load DB
-tryCatch({
-  oncoth1 <- get_project("oncothr1", version = "0.0.8005") # "0.0.8004"
-  }, 
-  warning = function(w) {
-    "Cannot open an9elobject project"
-    }, 
-  finally = {
-    load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8005")
-    oncoth1 <- obj
-    rm(obj)
+process_data <- function(data, cols2select, apply_scaling = FALSE) {
+  
+  missing_cols <- setdiff(cols2select, colnames(data))
+  if (length(missing_cols) > 0) {
+    stop(paste("The following columns are missing from the data:", 
+               paste(missing_cols, collapse = ", ")))
   }
+  
+  # Select columns as dependent variables
+  data_selection <- data[, cols2select]
+  
+  # Convert yes/no columns into 1/0
+  data_selection <- data_selection %>%
+    mutate(
+      across(
+        .cols = where(~ (is.character(.) || is.factor(.)) && 
+                        all(as.character(.) %in% c("Yes", "No"))), 
+        .fns = ~ as.integer(as.character(.) == "Yes")
+      )
+    )
+  
+  # Transform other columns to numerical
+  data_transf <- data_selection %>%
+    mutate(grade_histological_differentiation_imp = as.numeric(case_when(
+      str_starts(grade_histological_differentiation_imp, "Well") ~ 1,
+      str_starts(grade_histological_differentiation_imp, "Moderately") ~ 2,
+      str_starts(grade_histological_differentiation_imp, "Poorly") ~ 3, 
+      TRUE ~ NA_real_
+    ))) %>%
+    mutate(tnm_stage = as.numeric(case_when(
+      tnm_stage == "I" ~ 1,
+      tnm_stage == "II" ~ 2,
+      tnm_stage == "III" ~ 3,
+      tnm_stage == "IV" ~ 4, 
+      TRUE ~ NA_real_
+    )))
+  
+  # print(colnames(data_transf))
+  
+  # Convert categorical to numeric
+  data_dummies <- dummy_cols(
+    .data = data_transf, 
+    select_columns = NULL, 
+    remove_first_dummy = TRUE, 
+    remove_selected_columns = TRUE
+    )
+  
+  # Transform covariates dataframe into matrix
+  covariates <- as.matrix(data_dummies)
+  
+  # Scale 
+  if (apply_scaling == TRUE) {
+    covariates <- scale(covariates)
+  }
+  
+  return(covariates)
+}
+```
+
+
+```{r}
+oncoth1_transf <- process_data(oncoth1_selected_vars, cols2select = cols2select)
+```
+
+
+```{r}
+Y0 <- with(oncoth1_selected_vars, Surv(time, death))
+Y0
+```
+
+
+
+```{r}
+lasso_cox <- glmnet(
+  x = oncoth1_transf, 
+  y = Y0, 
+  family = "cox", 
+  alpha = 0.1
 )
+```
+
+
+
+```{r}
+# # Load DB
+# tryCatch({
+#   oncoth1 <- get_project("oncothr1", version = "0.0.8005") # "0.0.8004"
+#   }, 
+#   warning = function(w) {
+#     "Cannot open an9elobject project"
+#     }, 
+#   finally = {
+#     load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8005")
+#     oncoth1 <- obj
+#     rm(obj)
+#   }
+# )
 ```
 
 
