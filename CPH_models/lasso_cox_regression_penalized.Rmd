@@ -245,20 +245,20 @@ cols2select <- c(
  "venous_insufficiency_imp", 
  # "khorana_risk_score_imp",# correlated to a lot of features
  # "two_groups_krs", # correlated to a lot of features
- "previous_onco_surgery",
+ # "previous_onco_surgery",
  "tumor_surgically_removed", 
  "primary_tumor_simplified", 
- "tnm_stage",
+ # "tnm_stage",
  # "tnm_stage_grouped", 
- # "tnm_stage_two_groups", 
+ "tnm_stage_two_groups",
  # "histology_type_imp", # unequal categories between train and validation set
  "mucinous_histology_imp",
  "grade_histological_differentiation_imp",
  # "catheter_device_imp", 
  # "family_background_vte", 
- # "previous_vte",  
+ "previous_vte",
  "previous_ate", 
- # "anticoag_tx_currently", # unequal categories between train and validation set
+ "anticoag_tx_currently", # unequal categories between train and validation set
  "antiaggreg_tx_currently"
  )
 ```
@@ -293,14 +293,14 @@ process_data <- function(data, cols2select, apply_scaling = FALSE) {
       str_starts(grade_histological_differentiation_imp, "Moderately") ~ 2,
       str_starts(grade_histological_differentiation_imp, "Poorly") ~ 3, 
       TRUE ~ NA_real_
-    ))) %>%
-    mutate(tnm_stage = as.numeric(case_when(
-      tnm_stage == "I" ~ 1,
-      tnm_stage == "II" ~ 2,
-      tnm_stage == "III" ~ 3,
-      tnm_stage == "IV" ~ 4, 
-      TRUE ~ NA_real_
-    )))
+    ))) # %>%
+    # mutate(tnm_stage = as.numeric(case_when(
+    #   tnm_stage == "I" ~ 1,
+    #   tnm_stage == "II" ~ 2,
+    #   tnm_stage == "III" ~ 3,
+    #   tnm_stage == "IV" ~ 4, 
+    #   TRUE ~ NA_real_
+    # )))
   
   # print(colnames(data_transf))
   
@@ -445,7 +445,7 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
+lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10, 100)
 # lambda1_grid <- 1
 # lambda1_grid <- 10^seq(-4, 2, length.out = 50)
 
@@ -577,23 +577,23 @@ summary_regpath
 
 
 ```{r}
-ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) + 
-  geom_line(size = 1) + 
-  geom_point(size = 2) + 
-  scale_x_log10(
-    breaks = unique(summary_regpath$lambda1), 
-    labels = scales::scientific_format(digits = 2)
-  ) + 
-  labs(
-    x = expression(log[10](lambda[1])), 
-    y = "Mean CV C-index", 
-    title = "Regularization path: mean C-index vs penalty strength"
-  ) + 
-  theme_minimal() + 
-  theme(
-    plot.title = element_text(hjust = 0.5), 
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+# ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) + 
+#   geom_line(size = 1) + 
+#   geom_point(size = 2) + 
+#   scale_x_log10(
+#     breaks = unique(summary_regpath$lambda1), 
+#     labels = scales::scientific_format(digits = 2)
+#   ) + 
+#   labs(
+#     x = expression(log[10](lambda[1])), 
+#     y = "Mean CV C-index", 
+#     title = "Regularization path: mean C-index vs penalty strength"
+#   ) + 
+#   theme_minimal() + 
+#   theme(
+#     plot.title = element_text(hjust = 0.5), 
+#     axis.text.x = element_text(angle = 45, hjust = 1)
+#   )
 ```
 
 ## More frequently selected variables
