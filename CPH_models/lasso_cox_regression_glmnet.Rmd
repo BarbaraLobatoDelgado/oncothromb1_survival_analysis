@@ -335,6 +335,10 @@ plot_ly(
 
 ```{r}
 # Partition data with repeated rows per patient into training and test set
+ids_row_map <- data.frame(
+  "row" = row.names(oncoth1_survival_df), 
+  "id" = oncoth1_survival_df$id
+  )
 
 # Get unique IDs
 unique_ids <- unique(oncoth1_survival_df$id)
@@ -372,7 +376,6 @@ y <- with(oncoth1_survival_df, Surv(time, death))
 ```
 
 
-
 ```{r}
 # Partition data using rows
 training_set <- oncoth1_transf[train_rows,]
@@ -390,32 +393,36 @@ stopifnot(
 ```
 
 
-
 ```{r}
-# Create folds for k-fold CV
-
 # Number of folds
 kfolds <- 10
+```
 
-# Create a grouping variable for each ID
-unique_train_ids <- unique(train_ids)
 
-# Shuffle and assign
-shuffled_train_ids <- sample(unique_train_ids)
-# Get size for each fold
-fold_sizes <- floor(length(shuffled_train_ids) / kfolds)
-remainder <- length(shuffled_train_ids) %% kfolds
+```{r}
+# Create a fold-map at the patient level
+shuffled_ids <- sample(unique_ids)
+fold_sizes <- floor(length(shuffled_ids) / kfolds)
+remainder <- length(shuffled_ids) %% kfolds
+
 fold_vec <- rep(
   1:kfolds, 
-  times = c(rep(fold_sizes + 1, remainder), 
-            rep(fold_sizes, kfolds - remainder))
+  times = c(
+    rep(fold_sizes + 1, remainder), 
+    rep(fold_sizes, kfolds - remainder)
+  )
 )
+# Tibble with IDs and folds mapped
+fold_map <- tibble(id = shuffled_ids, fold = fold_vec)
 
-# Map each ID to each fold
-fold_map <- data.frame(
-  patient_id = shuffled_train_ids,
-  fold = fold_vec
-)
+# Join to have row number
+cv_info_mapping <- fold_map %>%
+  left_join(ids_row_map, by = "id") %>%
+  mutate(set = case_when(
+    id %in% train_ids ~ "train",
+    id %in% test_ids ~ "test"
+    )
+    )
 ```
 
 
@@ -424,14 +431,14 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
-# lambda1_grid <- 1
-# lambda1_grid <- 10^seq(-4, 2, length.out = 50)
+alpha_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
+# alpha_grid <- 1
+# alpha_grid <- 10^seq(-4, 2, length.out = 50)
 
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
 regpath_results <- expand.grid(
-  lambda1 = lambda1_grid, 
+  alpha = alpha_grid, 
   fold = seq_len(kfolds), 
   KEEP.OUT.ATTRS = FALSE, 
   stringsAsFactors = FALSE
@@ -449,7 +456,7 @@ regpath_results <- expand.grid(
 for (row_idx in seq_len(nrow(regpath_results))) {
   
   # Select lambda and fold value
-  l1 <- regpath_results$lambda1[row_idx]
+  alpha <- regpath_results$alpha[row_idx]
   fold_i <- regpath_results$fold[row_idx]
   
   # Determine training and validation patient IDs
@@ -460,10 +467,6 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   valid_data <- training_set %>% filter(id %in% validation_ids)
   train_data <- training_set %>% filter(id %in% training_ids)
   
-  # # Split by fold (as before)
-  # train_df <- filter(training_set, fold != fold_i)
-  # valid_df <- filter(training_set, fold == fold_i)
-  # 
   # Build unscaled X’s
   X_train_raw <- process_data(train_data, cols2select, apply_scaling = FALSE)
   X_valid_raw <- process_data(valid_data, cols2select, apply_scaling = FALSE)
@@ -478,30 +481,6 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   # 2) Apply to both train & valid
   X_train <- predict(pp, X_train_raw)
   X_valid <- predict(pp, X_valid_raw)
-  
-  # # Determine training and validation patient IDs
-  # validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
-  # training_ids <- setdiff(unique_train_ids, validation_ids)
-  # 
-  # # Subset interval-level data
-  # valid_data <- training_set %>% filter(id %in% validation_ids)
-  # train_data <- training_set %>% filter(id %in% training_ids)
-  # 
-  # # Sanity checks
-  # stopifnot(
-  #   setequal(validation_ids, unique(valid_data$id)),
-  #   setequal(training_ids, unique(train_data$id))
-  # )
-  # 
-  # # Process data
-  # X_valid <- process_data(valid_data, cols2select)
-  # X_train <- process_data(train_data, cols2select)
-  
-  # Check that there are no missing values
-  # na_per_col <- colSums(is.na(X_valid))
-  # print("Showing NAs per column")
-  # na_per_col[na_per_col > 0]
-  # print(na_per_col)
   
   stopifnot(!anyNA(X_train), !anyNA(X_valid))
   
