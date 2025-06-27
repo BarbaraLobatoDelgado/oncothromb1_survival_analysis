@@ -433,14 +433,12 @@ set.seed(seed)
 # Define lambda grid
 alpha_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
 # alpha_grid <- 1
-# alpha_grid <- 10^seq(-4, 2, length.out = 50)
 
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
-regpath_results <- expand.grid(
+cv_out <- expand.grid(
   alpha = alpha_grid, 
-  fold = seq_len(kfolds), 
-  KEEP.OUT.ATTRS = FALSE, 
+  fold = 1:kfolds, 
   stringsAsFactors = FALSE
   ) %>%
   as_tibble() %>%
@@ -453,69 +451,45 @@ regpath_results <- expand.grid(
 # vif_results <- vector("list", length = k)
 
 # Loop over each row of that tibble
-for (row_idx in seq_len(nrow(regpath_results))) {
+for (i in seq_len(nrow(cv_out))) {
+  # Get alpha and fold from tibble with combinations
+  alpha <- cv_out$alpha[i]
+  i_fold <- cv_out$fold[i]
   
-  # Select lambda and fold value
-  alpha <- regpath_results$alpha[row_idx]
-  fold_i <- regpath_results$fold[row_idx]
-  
-  # Determine training and validation patient IDs
-  validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
-  training_ids <- setdiff(unique_train_ids, validation_ids)
-
-  # Subset interval-level data
-  valid_data <- training_set %>% filter(id %in% validation_ids)
-  train_data <- training_set %>% filter(id %in% training_ids)
-  
-  # Build unscaled X’s
-  X_train_raw <- process_data(train_data, cols2select, apply_scaling = FALSE)
-  X_valid_raw <- process_data(valid_data, cols2select, apply_scaling = FALSE)
-  
-  # 1) Fit preProcess on TRAIN only
-  pp <- caret::preProcess(
-    x      = X_train_raw,
-    method = c("center", "scale"),
-    na.remove = TRUE
-  )
-  
-  # 2) Apply to both train & valid
-  X_train <- predict(pp, X_train_raw)
-  X_valid <- predict(pp, X_valid_raw)
-  
-  stopifnot(!anyNA(X_train), !anyNA(X_valid))
-  
-  # Find column mismatch if there is one
-  find_column_mismatch(X_valid, X_train)
-  
-  # Get responses
-  y_valid <- with(valid_data, Surv(tstart, tstop, death))
-  y_train <- with(train_data, Surv(tstart, tstop, death))
-  
-  # Fit penalized Cox on training fold
-  pencox_cv <- penalized(
-    response = y_train,
-    penalized = X_train,
-    unpenalized = ~1, 
-    lambda1 = l1,
-    lambda2 = 0,
-    model = "cox", 
-    trace = FALSE
-  )
-  
-  # Get coefficients for all initial predictors
-  b <- coef(pencox_cv, "all", standardize = TRUE)
+  # Get validation row number those not in this fold
+  valid_rows <- cv_info_mapping %>% 
+    filter(set == "Train", fold == i_fold) %>% 
+    pull(row) %>%
+    as.integer()
+  # Get train row number
+  tr_rows <- cv_info_mapping %>% 
+    filter(set == "Train", fold != i_fold) %>% 
+    pull(row) %>%
+    as.integer()
   
   # Sanity check
-  stopifnot(names(b) == colnames(X_valid))
+  stopifnot(valid_rows != tr_rows)
   
-  # Compute the linear predictor η = β′X
-  lp_valid <- as.numeric(X_valid %*% b)
+  # Subset data
+  valid_data <- training_set[valid_rows,]
+  tr_data <- training_set[tr_rows,]
   
-  # Evaluate using C-index
-  regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
+  # Sanity check
+  stopifnot(
+    all(row.names(tr_data) %in% train_rows), 
+    all(row.names(valid_data) %in% valid_rows)
+  )
   
-  # Record selected variables
-  regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
+  # # Scale data
+  # preproc <- caret::preProcess(
+  #   x = tr_data, 
+  #   method = c("center", "scale")
+  # )
+  # 
+  # # Apply transformation
+  # X_train <- predict(preproc, tr_data)
+  # X_valid <- predict(preproc, valid_data)
+  
 }
 ```
 
