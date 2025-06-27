@@ -373,6 +373,11 @@ write.csv(x = test_rows, file = "../partition_indices/glmnet_test_rows.csv", row
 ```{r}
 # Create target variable
 y <- with(oncoth1_survival_df, Surv(time, death))
+# y <- cbind.data.frame(
+#   "id" = oncoth1_survival_df, 
+#   "Surv" = y
+# )
+y
 ```
 
 
@@ -431,7 +436,7 @@ cv_info_mapping <- fold_map %>%
 set.seed(seed)
 
 # Define lambda grid
-alpha_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
+alpha_grid <- c(0.001, 0.01, 0.1, 1)
 # alpha_grid <- 1
 
 # Store regularization pathway results
@@ -474,6 +479,10 @@ for (i in seq_len(nrow(cv_out))) {
   valid_data <- training_set %>% filter(id %in% valid_ids)
   tr_data <- training_set %>% filter(id %in% train_ids)
   
+  # Get dependent variable (Surv object)
+  y_valid <- with(valid_data, Surv(time, death))
+  y_train <- with(tr_data, Surv(time, death))
+  
   # Sanity check
   stopifnot(
     all(tr_data$id %in% train_ids), 
@@ -493,6 +502,15 @@ for (i in seq_len(nrow(cv_out))) {
   X_train <- predict(preproc, tr_data_subset)
   X_valid <- predict(preproc, valid_data_subset)
   
+  # Train lasso Cox model
+  lasso_cox <- glmnet(
+    x = X_train, 
+    y = y_train,
+    family = "cox", 
+    alpha = alpha
+  )
+  
+  coefs <- coef(lasso_cox, s = alpha)
   
 }
 ```
