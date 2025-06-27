@@ -458,17 +458,20 @@ for (i in seq_len(nrow(cv_out))) {
   
   # Get validation row number those not in this fold
   valid_rows <- cv_info_mapping %>% 
-    filter(set == "Train", fold == i_fold) %>% 
+    filter(set == "train", fold == i_fold) %>% 
     pull(row) %>%
     as.integer()
   # Get train row number
   tr_rows <- cv_info_mapping %>% 
-    filter(set == "Train", fold != i_fold) %>% 
+    filter(set == "train", fold != i_fold) %>% 
     pull(row) %>%
     as.integer()
   
+  print(valid_rows)
+  print(tr_rows)
+  
   # Sanity check
-  stopifnot(valid_rows != tr_rows)
+  stopifnot(!valid_rows %in% tr_rows)
   
   # Subset data
   valid_data <- training_set[valid_rows,]
@@ -482,7 +485,7 @@ for (i in seq_len(nrow(cv_out))) {
   
   # # Scale data
   # preproc <- caret::preProcess(
-  #   x = tr_data, 
+  #   x = tr_data,
   #   method = c("center", "scale")
   # )
   # 
