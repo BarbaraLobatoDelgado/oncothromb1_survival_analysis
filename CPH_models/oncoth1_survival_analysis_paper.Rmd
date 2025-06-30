@@ -212,18 +212,23 @@ KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, c
 
 ```{r}
 # Load DB
-tryCatch({
-  oncoth1 <- get_project("oncothr1", version = "0.0.8030") # "0.0.8005"
-  },
-  warning = function(w) {
-    "Cannot open an9elobject project"
-    },
-  finally = {
-    load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8005") # 0.0.8005
-    oncoth1 <- obj
-    rm(obj)
-  }
-)
+# tryCatch({
+#   oncoth1 <- get_project("oncothr1", version = "0.0.8023") # "0.0.8005"
+#   },
+#   warning = function(w) {
+#     "Cannot open an9elobject project"
+#     },
+#   finally = {
+#     load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8005") # 0.0.8005
+#     oncoth1 <- obj
+#     rm(obj)
+#   }
+# )
+# oncoth1 <- get_project("oncothr1", version = "0.0.8023") # "0.0.8005"
+
+load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8032") # 0.0.8005
+oncoth1 <- obj
+rm(obj)
 ```
 oncothr1.RData_0.0.8005
 
@@ -288,7 +293,7 @@ covariates_df = oncoth1_data %>%
          dyslipidemia, 
          tobacco_use,
          tobacco_use_imp,
-         tobacco_use_imp_grouped,
+         # tobacco_use_imp_grouped,
          copd_imp,
          arterial_hypertension, 
          chronic_cardiac_insufficiency, 
@@ -365,20 +370,20 @@ covariates_df = oncoth1_data %>%
          antiaggreg_tx_cva,                              
          antiaggreg_tx_other_causes,
          antiaggreg_tx_currently, 
-         tu_1st_blood_transfusion_from_cancer_diagnosis_days,
-         tu_2nd_blood_transfusion_from_cancer_diagnosis_days,
-         tu_3rd_blood_transfusion_from_cancer_diagnosis_days,
-         tu_1st_major_trauma_from_cancer_diagnosis_days,
-         tu_1st_immobilisation_from_cancer_diagnosis_days,
-         tu_2nd_immobilisation_from_cancer_diagnosis_days,
-         tu_3rd_immobilisation_from_cancer_diagnosis_days,
-         tu_1st_recent_major_surgery_from_cancer_diagnosis_days,
-         tu_2nd_recent_major_surgery_from_cancer_diagnosis_days,
-         tu_3rd_recent_major_surgery_from_cancer_diagnosis_days,
-         tu_1st_thromboprophylaxis_hospital_from_cancer_diagnosis_days,
-         tu_1st_erythropoietin_tx_from_cancer_diagnosis_days,
-         tu_2nd_erythropoietin_tx_from_cancer_diagnosis_days,
-         tu_3rd_erythropoietin_tx_from_cancer_diagnosis_days,
+         time_until_1st_blood_transfusion_from_cancer_diagnosis_days,
+         time_until_2nd_blood_transfusion_from_cancer_diagnosis_days,
+         time_until_3rd_blood_transfusion_from_cancer_diagnosis_days,
+         time_until_1st_major_trauma_from_cancer_diagnosis_days,
+         time_until_1st_immobilisation_from_cancer_diagnosis_days,
+         time_until_2nd_immobilisation_from_cancer_diagnosis_days,
+         time_until_3rd_immobilisation_from_cancer_diagnosis_days,
+         time_until_1st_recent_major_surgery_from_cancer_diagnosis_days,
+         time_until_2nd_recent_major_surgery_from_cancer_diagnosis_days,
+         time_until_3rd_recent_major_surgery_from_cancer_diagnosis_days,
+         time_until_1st_thromboprophylaxis_hospital_from_cancer_diagnosis_days,
+         time_until_1st_erythropoietin_tx_from_cancer_diagnosis_days,
+         time_until_2nd_erythropoietin_tx_from_cancer_diagnosis_days,
+         time_until_3rd_erythropoietin_tx_from_cancer_diagnosis_days,
          vte_recurrence)
 ```
 
