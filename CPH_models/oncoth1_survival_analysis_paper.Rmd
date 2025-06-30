@@ -202,35 +202,21 @@ KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, c
 
 # Load data
 
-
-```{r}
-# load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8030")
-# oncoth1 <- obj
-# rm(obj)
-```
-
-
 ```{r}
 # Load DB
-# tryCatch({
-#   oncoth1 <- get_project("oncothr1", version = "0.0.8023") # "0.0.8005"
-#   },
-#   warning = function(w) {
-#     "Cannot open an9elobject project"
-#     },
-#   finally = {
-#     load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8005") # 0.0.8005
-#     oncoth1 <- obj
-#     rm(obj)
-#   }
-# )
-# oncoth1 <- get_project("oncothr1", version = "0.0.8023") # "0.0.8005"
-
-load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8032") # 0.0.8005
-oncoth1 <- obj
-rm(obj)
+tryCatch({
+  oncoth1 <- get_project("oncothr1", version = "0.0.8032") # "0.0.8005"
+  },
+  warning = function(w) {
+    "Cannot open an9elobject project"
+    },
+  finally = {
+    load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8032") # 0.0.8005
+    oncoth1 <- obj
+    rm(obj)
+  }
+)
 ```
-oncothr1.RData_0.0.8005
 
 ```{r}
 # Get data slot
@@ -241,11 +227,11 @@ oncoth1_data = oncoth1$data
 ```{r}
 # Group tobacco use into 'Never smoked' vs 'Former/current'
 oncoth1_data %<>%
-  mutate(tobacco_use = case_when(
-    tobacco_use == "Never has smoked" ~ "Never", 
-    tobacco_use == "Former smoker" ~ "Former/current",
-    tobacco_use == "Active smoker" ~ "Former/current"), 
-    .after = tobacco_use)
+  mutate(tobacco_use_imp_grouped = case_when(
+    tobacco_use_imp == "Never has smoked" ~ "Never", 
+    tobacco_use_imp == "Former smoker" ~ "Former/current",
+    tobacco_use_imp == "Active smoker" ~ "Former/current"), 
+    .after = tobacco_use_imp)
 
 # Create quartiles for age 
 oncoth1_data %<>%
@@ -258,7 +244,7 @@ oncoth1_data %<>%
 
 # # Correct time until 1st VTE
 # oncoth1_data %<>%
-#   mutate(tu_1st_vte_all_from_cancer_diagnosis_days_corrected = as.Date(date_1st_vte_all) - as.Date(date_cancer_dx))
+#   mutate(time_until_1st_vte_all_from_cancer_diagnosis_days_corrected = as.Date(date_1st_vte_all) - as.Date(date_cancer_dx))
 ```
 
 
@@ -293,7 +279,7 @@ covariates_df = oncoth1_data %>%
          dyslipidemia, 
          tobacco_use,
          tobacco_use_imp,
-         # tobacco_use_imp_grouped,
+         tobacco_use_imp_grouped,
          copd_imp,
          arterial_hypertension, 
          chronic_cardiac_insufficiency, 
@@ -401,14 +387,14 @@ survival_data = oncoth1_data %>%
          censored_patient, 
          follow_up_length_from_cancer_diagnosis_days, 
          follow_up_length_from_cancer_diagnosis_months,
-         tu_1st_vte_all_from_cancer_diagnosis_days_corrected,
-         tu_1st_vte_all_from_cancer_diagnosis_months_corrected, 
-         tu_2nd_vte_all_from_cancer_diagnosis_days_corrected, 
-         tu_2nd_vte_all_from_cancer_diagnosis_months_corrected, 
-         tu_3rd_vte_all_from_cancer_diagnosis_days_corrected, 
-         tu_3rd_vte_all_from_cancer_diagnosis_months_corrected, 
-         tu_4th_vte_all_from_cancer_diagnosis_days_corrected, 
-         tu_4th_vte_all_from_cancer_diagnosis_months_corrected
+         time_until_1st_vte_all_from_cancer_diagnosis_days_corrected,
+         time_until_1st_vte_all_from_cancer_diagnosis_months_corrected, 
+         time_until_2nd_vte_all_from_cancer_diagnosis_days_corrected, 
+         time_until_2nd_vte_all_from_cancer_diagnosis_months_corrected, 
+         time_until_3rd_vte_all_from_cancer_diagnosis_days_corrected, 
+         time_until_3rd_vte_all_from_cancer_diagnosis_months_corrected, 
+         time_until_4th_vte_all_from_cancer_diagnosis_days_corrected, 
+         time_until_4th_vte_all_from_cancer_diagnosis_months_corrected
          )
 ```
 
@@ -446,10 +432,10 @@ survival_vte_tmerge = tmerge(
   # event() is the survival analysis event of interest (in our case, death)
   death = event(follow_up_length_from_cancer_diagnosis_days, censored_patient), 
   # tdc() are for time-dependent covariates
-  vte_event = tdc(tu_1st_vte_all_from_cancer_diagnosis_days_corrected),
-  vte_event = tdc(tu_2nd_vte_all_from_cancer_diagnosis_days_corrected),
-  vte_event = tdc(tu_3rd_vte_all_from_cancer_diagnosis_days_corrected),
-  vte_event = tdc(tu_4th_vte_all_from_cancer_diagnosis_days_corrected)
+  vte_event = tdc(time_until_1st_vte_all_from_cancer_diagnosis_days_corrected),
+  vte_event = tdc(time_until_2nd_vte_all_from_cancer_diagnosis_days_corrected),
+  vte_event = tdc(time_until_3rd_vte_all_from_cancer_diagnosis_days_corrected),
+  vte_event = tdc(time_until_4th_vte_all_from_cancer_diagnosis_days_corrected)
   )
 ```
 
@@ -460,19 +446,19 @@ survival_vte_tmerge = tmerge(
   survival_vte_tmerge, 
   survival_vte_tmerge, 
   id = id, 
-  blood_transfusion = tdc(tu_1st_blood_transfusion_from_cancer_diagnosis_days),
-  blood_transfusion = tdc(tu_2nd_blood_transfusion_from_cancer_diagnosis_days),
-  blood_transfusion = tdc(tu_3rd_blood_transfusion_from_cancer_diagnosis_days),
-  immobilisation = tdc(tu_1st_immobilisation_from_cancer_diagnosis_days), 
-  immobilisation = tdc(tu_2nd_immobilisation_from_cancer_diagnosis_days), 
-  immobilisation = tdc(tu_3rd_immobilisation_from_cancer_diagnosis_days), 
-  recent_major_surgery = tdc(tu_1st_recent_major_surgery_from_cancer_diagnosis_days),
-  recent_major_surgery = tdc(tu_2nd_recent_major_surgery_from_cancer_diagnosis_days),
-  recent_major_surgery = tdc(tu_3rd_recent_major_surgery_from_cancer_diagnosis_days),
-  thromboprophylaxis_hospital = tdc(tu_1st_thromboprophylaxis_hospital_from_cancer_diagnosis_days), 
-  erythropoietin_tx = tdc(tu_1st_erythropoietin_tx_from_cancer_diagnosis_days),
-  erythropoietin_tx = tdc(tu_2nd_erythropoietin_tx_from_cancer_diagnosis_days),
-  erythropoietin_tx = tdc(tu_3rd_erythropoietin_tx_from_cancer_diagnosis_days)
+  blood_transfusion = tdc(time_until_1st_blood_transfusion_from_cancer_diagnosis_days),
+  blood_transfusion = tdc(time_until_2nd_blood_transfusion_from_cancer_diagnosis_days),
+  blood_transfusion = tdc(time_until_3rd_blood_transfusion_from_cancer_diagnosis_days),
+  immobilisation = tdc(time_until_1st_immobilisation_from_cancer_diagnosis_days), 
+  immobilisation = tdc(time_until_2nd_immobilisation_from_cancer_diagnosis_days), 
+  immobilisation = tdc(time_until_3rd_immobilisation_from_cancer_diagnosis_days), 
+  recent_major_surgery = tdc(time_until_1st_recent_major_surgery_from_cancer_diagnosis_days),
+  recent_major_surgery = tdc(time_until_2nd_recent_major_surgery_from_cancer_diagnosis_days),
+  recent_major_surgery = tdc(time_until_3rd_recent_major_surgery_from_cancer_diagnosis_days),
+  thromboprophylaxis_hospital = tdc(time_until_1st_thromboprophylaxis_hospital_from_cancer_diagnosis_days), 
+  erythropoietin_tx = tdc(time_until_1st_erythropoietin_tx_from_cancer_diagnosis_days),
+  erythropoietin_tx = tdc(time_until_2nd_erythropoietin_tx_from_cancer_diagnosis_days),
+  erythropoietin_tx = tdc(time_until_3rd_erythropoietin_tx_from_cancer_diagnosis_days)
   )
 ```
 
@@ -755,39 +741,39 @@ summary(survfit(
 
 
 ```{r}
-# KM plots by VTE and age group
-km_plot_vte_age_group <- KM_curve_plots_VTE_another_covariate(
-  clinical_data = oncoth1_data, survival_data = survival_vte_tmerge, covariate = "age_when_cancer_dx_65")
+# # KM plots by VTE and age group
+# km_plot_vte_age_group <- KM_curve_plots_VTE_another_covariate(
+#   clinical_data = oncoth1_data, survival_data = survival_vte_tmerge, covariate = "age_when_cancer_dx_65")
 ```
 
 
 ```{r}
-# Save plot with table
-
-# Combine the main plot and the cumulative events table
-KM_curve_VTE_age_group_combined_plot <- cowplot::plot_grid(
-  km_plot_vte_age_group$`Younger than 65 years old`,
-  km_plot_vte_age_group$`Older or 65 years old`,
-  align = "h",
-  ncol = 2, 
-  rel_heights = c(0.5, 0.5),  # Adjust heights to fit both plots
-  rel_widths = c(1.2, 1.2)
-)
-
-KM_curve_VTE_age_group_combined_plot
+# # Save plot with table
+# 
+# # Combine the main plot and the cumulative events table
+# KM_curve_VTE_age_group_combined_plot <- cowplot::plot_grid(
+#   km_plot_vte_age_group$`Younger than 65 years old`,
+#   km_plot_vte_age_group$`Older or 65 years old`,
+#   align = "h",
+#   ncol = 2, 
+#   rel_heights = c(0.5, 0.5),  # Adjust heights to fit both plots
+#   rel_widths = c(1.2, 1.2)
+# )
+# 
+# KM_curve_VTE_age_group_combined_plot
 ```
 
 
 ```{r}
-# Save plot
-ggsave(
-  filename = "../graphs/KM_curve_VTE_age_plot.jpeg",
-  plot = KM_curve_VTE_age_group_combined_plot,
-  width = 7,
-  height = 5,
-  units = "in", 
-  dpi = 300
-  )
+# # Save plot
+# ggsave(
+#   filename = "../graphs/KM_curve_VTE_age_plot.jpeg",
+#   plot = KM_curve_VTE_age_group_combined_plot,
+#   width = 7,
+#   height = 5,
+#   units = "in", 
+#   dpi = 300
+#   )
 ```
 
 
@@ -1177,7 +1163,7 @@ Linear models do not work well when there is multicollinearity. Also, given the 
 # Convert categorical variables into dummies (one-hot encoding)
 survival_vte_tmerge_dummies = survival_vte_tmerge %>%
   # Remove useless variables
-  select(-c(id, tstart, tstop, contains("tu_"))) %>%
+  select(-c(id, tstart, tstop, contains("time_until_"))) %>%
   # Convert KRS to numeric
   mutate(khorana_risk_score_imp = as.numeric(khorana_risk_score_imp)) %>%
   # Create dummies for all categorical variables (character and factors)
@@ -1376,7 +1362,9 @@ survival_vte_tmerge_stepwise %<>%
 
 ```{r}
 # Save time-dependent dataset
-write.csv(survival_vte_tmerge_stepwise, file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv", row.names = FALSE)
+if (!file.exists("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv")) {
+  write.csv(survival_vte_tmerge_stepwise, file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv", row.names = FALSE)
+}
 ```
 
 
@@ -1417,8 +1405,8 @@ stopifnot(
 
 ```{r}
 # Save IDs in training and test split
-write.csv(x = train_ids, file = "../partition_indices/stepwise_train_ids.csv", row.names = FALSE, col.names = FALSE)
-write.csv(x = test_ids, file = "../partition_indices/stepwise_test_ids.csv", row.names = FALSE, col.names = FALSE)
+write.csv(x = train_ids, file = "../partition_indices/stepwise_train_ids.csv", row.names = FALSE)
+write.csv(x = test_ids, file = "../partition_indices/stepwise_test_ids.csv", row.names = FALSE)
 ```
 
 
@@ -1562,7 +1550,7 @@ for (i in 1:k) {
   # Evaluate the predictions
   # C-index
   fold_cindex <- concordance(fold_cph_model, newdata = validation_fold)
-  # print(fold_cindex$concordance)
+  print(paste("C-index in validation data:", fold_cindex$concordance))
   
   # Store the evaluation result
   stepwise_cv_index_valid[[i]] = validation_ids
@@ -1586,8 +1574,8 @@ for (i in 1:k) {
     "Validation_IDs" = paste(stepwise_cv_index_valid, collapse = ", ")
   )
 
-  # Append to CSV file
-  append2file(data = info_df)
+# Append to CSV file
+append2file(data = info_df)
 ```
 
 
@@ -1617,14 +1605,7 @@ stepwise_cv_cph_final_model = coxph(
     tnm_stage_two_groups +
     tumor_surgically_removed +
     vte_event +
-    mucinous_histology_imp, # after removing venous insufficiency
-    # vte_event + 
-    # performance_status_category_corrected_imp +
-    # primary_tumor_simplified +
-    # tnm_stage_two_groups +
-    # tumor_surgically_removed +
-    # venous_insufficiency_imp +
-    # mucinous_histology_imp,
+    mucinous_histology_imp,
   id = id,
   data = stepwise_training_set
   )
