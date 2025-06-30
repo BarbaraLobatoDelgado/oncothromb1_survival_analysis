@@ -441,14 +441,14 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
-# lambda1_grid <- 1
-# lambda1_grid <- 10^seq(-4, 2, length.out = 50)
+lambda_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
+# lambda_grid <- 1
+# lambda_grid <- 10^seq(-4, 2, length.out = 50)
 
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
 regpath_results <- expand.grid(
-  lambda = lambda1_grid, 
+  lambda = lambda_grid, 
   fold = seq_len(kfolds), 
   KEEP.OUT.ATTRS = FALSE, 
   stringsAsFactors = FALSE
@@ -569,33 +569,9 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   # Save result
   regpath_results$cindex_valid[row_idx] <- cindex_valid
 
-  # # Record selected variables
-  # regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
+  # Record selected variables
+  regpath_results$selected_vars[[row_idx]] <- coef(fold_lasso_cox)
   
-  # pencox_cv <- penalized(
-  #   response = y_train,
-  #   penalized = X_train,
-  #   unpenalized = ~1, 
-  #   lambda1 = l1,
-  #   lambda2 = 0,
-  #   model = "cox", 
-  #   trace = FALSE
-  # )
-  # 
-  # # Get coefficients for all initial predictors
-  # b <- coef(pencox_cv, "all", standardize = TRUE)
-  
-  # # Sanity check
-  # stopifnot(names(b) == colnames(X_valid))
-  # 
-  # # Compute the linear predictor η = β′X
-  # lp_valid <- as.numeric(X_valid %*% b)
-  # 
-  # # Evaluate using C-index
-  # regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
-  # 
-  # # Record selected variables
-  # regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
 }
 ```
 
@@ -641,27 +617,29 @@ summary_regpath
 freq_selected_vars <- regpath_results %>%
   mutate(
     selected = map(
-      selected_vars, 
-      ~ names(.x)[.x != 0] # get variables names with non-zero weights
+      selected_vars,
+      ~ {
+        mat <- .x
+        # `@i` is 0-based row indices of non-zero entries
+        nz_rows <- mat@i + 1
+        rownames(mat)[nz_rows]
+      }
     )
   ) %>%
-  # Keep lambda/fold id and list of selected variables
-  select(lambda1, fold, selected) %>%
-  # Explode the list-column to have lambda, fold and vars in one row
+  # Keep lambda/fold and the list of selected variables
+  select(lambda, fold, selected) %>%
+  # Explode the list‑column so each row is one (lambda, fold, variable)
   unnest(selected) %>%
-  # Count how many times each variable appears
+  # Count how many times each variable was selected
   count(variable = selected, name = "freq") %>%
+  # Compute relative frequency (over all lambda×fold runs)
   mutate(rel_freq = freq / nrow(regpath_results)) %>%
   arrange(desc(rel_freq))
+
 
 freq_selected_vars
 ```
 
-
-
-```{r}
-aa
-```
 
 ```{r}
 # Then, train final model with selected features and compute C-index on test set
