@@ -402,7 +402,6 @@ test_response <- with(test_set, Surv(time, death))
 
 # Check that all patients are accounted for in training and test set
 stopifnot(
-  nrow(training_set) + nrow(test_set) == nrow(oncoth1_survival_df),
   sort(c(training_set$id, test_set$id)) == sort(oncoth1_survival_df$id), 
   length(training_response) + length(test_response) == length(response)
 )
@@ -449,14 +448,15 @@ lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
 regpath_results <- expand.grid(
-  lambda1 = lambda1_grid, 
+  lambda = lambda1_grid, 
   fold = seq_len(kfolds), 
   KEEP.OUT.ATTRS = FALSE, 
   stringsAsFactors = FALSE
   ) %>%
   as_tibble() %>%
   mutate(
-    cindex = NA_real_, 
+    cindex_train = NA_real_, 
+    cindex_valid = NA_real_,
     selected_vars = vector("list", n())
   )
 
@@ -467,7 +467,7 @@ regpath_results <- expand.grid(
 for (row_idx in seq_len(nrow(regpath_results))) {
   
   # Select lambda and fold value
-  l1 <- regpath_results$lambda1[row_idx]
+  lambda <- regpath_results$lambda[row_idx]
   fold_i <- regpath_results$fold[row_idx]
   
   # Determine training and validation patient IDs
@@ -496,6 +496,9 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   # 2) Apply to both train & valid
   X_train <- predict(pp, X_train_raw)
   X_valid <- predict(pp, X_valid_raw)
+  
+  
+  
   
   # # Determine training and validation patient IDs
   # validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
@@ -528,17 +531,46 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   find_column_mismatch(X_valid, X_train)
   
   # Get responses
-  y_valid <- with(valid_data, Surv(tstart, tstop, death))
-  y_train <- with(train_data, Surv(tstart, tstop, death))
+  y_valid <- with(valid_data, Surv(time, death))
+  y_train <- with(train_data, Surv(time, death))
   
   # Fit penalized Cox on training fold
-  lasso_cox <- glmnet(
+  fold_lasso_cox <- glmnet(
     x = X_train, 
     y = y_train, 
     family = "cox", 
-    alpha = alpha
+    # alpha = alpha, 
+    lambda = lambda
   )
   
+  # Calculate C-index
+  
+  # On training data
+  lp_train <- predict(
+    fold_lasso_cox, 
+    newx = X_train, 
+    s    = lambda, 
+    type = "link"
+  )
+  lp_train <- as.numeric(lp_train)
+  cindex_train <- concordance(y_train ~ lp_train)$concordance
+  # Save result
+  regpath_results$cindex_train[row_idx] <- cindex_train
+  
+  # On validation data
+  lp_valid <- predict(
+    fold_lasso_cox, 
+    newx = X_valid, 
+    s    = lambda, 
+    type = "link"
+  )
+  lp_valid <- as.numeric(lp_valid)
+  cindex_valid <- concordance(y_valid ~ lp_valid)$concordance
+  # Save result
+  regpath_results$cindex_valid[row_idx] <- cindex_valid
+
+  # # Record selected variables
+  # regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
   
   # pencox_cv <- penalized(
   #   response = y_train,
@@ -553,17 +585,17 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   # # Get coefficients for all initial predictors
   # b <- coef(pencox_cv, "all", standardize = TRUE)
   
-  # Sanity check
-  stopifnot(names(b) == colnames(X_valid))
-  
-  # Compute the linear predictor η = β′X
-  lp_valid <- as.numeric(X_valid %*% b)
-  
-  # Evaluate using C-index
-  regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
-  
-  # Record selected variables
-  regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
+  # # Sanity check
+  # stopifnot(names(b) == colnames(X_valid))
+  # 
+  # # Compute the linear predictor η = β′X
+  # lp_valid <- as.numeric(X_valid %*% b)
+  # 
+  # # Evaluate using C-index
+  # regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
+  # 
+  # # Record selected variables
+  # regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
 }
 ```
 
@@ -573,9 +605,10 @@ for (row_idx in seq_len(nrow(regpath_results))) {
 ```{r}
 # Summarize mean C-index by lambda1
 summary_regpath <- regpath_results %>%
-  group_by(lambda1) %>%
+  group_by(lambda) %>%
   summarise(
-    mean_cindex = mean(cindex, na.rm = TRUE), 
+    mean_cindex_train = mean(cindex_train, na.rm = TRUE), 
+    mean_cindex_valid = mean(cindex_valid, na.rm = TRUE),
     .groups = "drop"
   )
 summary_regpath
@@ -583,23 +616,23 @@ summary_regpath
 
 
 ```{r}
-ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) + 
-  geom_line(size = 1) + 
-  geom_point(size = 2) + 
-  scale_x_log10(
-    breaks = unique(summary_regpath$lambda1), 
-    labels = scales::scientific_format(digits = 2)
-  ) + 
-  labs(
-    x = expression(log[10](lambda[1])), 
-    y = "Mean CV C-index", 
-    title = "Regularization path: mean C-index vs penalty strength"
-  ) + 
-  theme_minimal() + 
-  theme(
-    plot.title = element_text(hjust = 0.5), 
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+# ggplot(summary_regpath, aes(x = lambda, y = mean_cindex)) + 
+#   geom_line(size = 1) + 
+#   geom_point(size = 2) + 
+#   scale_x_log10(
+#     breaks = unique(summary_regpath$lambda1), 
+#     labels = scales::scientific_format(digits = 2)
+#   ) + 
+#   labs(
+#     x = expression(log[10](lambda[1])), 
+#     y = "Mean CV C-index", 
+#     title = "Regularization path: mean C-index vs penalty strength"
+#   ) + 
+#   theme_minimal() + 
+#   theme(
+#     plot.title = element_text(hjust = 0.5), 
+#     axis.text.x = element_text(angle = 45, hjust = 1)
+#   )
 ```
 
 ## More frequently selected variables
