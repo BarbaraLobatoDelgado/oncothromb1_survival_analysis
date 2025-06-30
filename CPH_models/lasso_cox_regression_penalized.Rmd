@@ -245,15 +245,18 @@ process_data <- function(data, cols2select, apply_scaling = FALSE) {
       TRUE ~ NA_real_
     )))
   }
-   # %>%
-    # mutate(tnm_stage = as.numeric(case_when(
-    #   tnm_stage == "I" ~ 1,
-    #   tnm_stage == "II" ~ 2,
-    #   tnm_stage == "III" ~ 3,
-    #   tnm_stage == "IV" ~ 4, 
-    #   TRUE ~ NA_real_
-    # )))
   
+  if ("tnm_stage" %in% colnames(data_selection)) {
+    data_selection <- data_selection %>%
+     mutate(tnm_stage = as.numeric(case_when(
+       tnm_stage == "I" ~ 1,
+       tnm_stage == "II" ~ 2,
+       tnm_stage == "III" ~ 3,
+       tnm_stage == "IV" ~ 4,
+       TRUE ~ NA_real_
+     )))
+  }
+   
   # print(colnames(data_transf))
   
   # Convert categorical to numeric
@@ -336,15 +339,13 @@ test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
 # Partition data
 # training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
 # test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
-training_set <- oncoth1_td_dataset[train_rows,]
-test_set <- oncoth1_td_dataset[test_rows,]
-# training_set <- covariates[train_rows,]
-# test_set <- covariates[test_rows,]
+training_set_raw <- oncoth1_td_dataset[train_rows,]
+test_set_raw <- oncoth1_td_dataset[test_rows,]
 
 # Checkfolds that IDs are not in training and test sets
 stopifnot(
   identical(
-    sort(unique(training_set$id)), sort(unique(test_set$id))) == FALSE)
+    sort(unique(training_set_raw$id)), sort(unique(test_set_raw$id))) == FALSE)
 
 # # Partition response
 # training_response <- response[train_rows,]
@@ -358,7 +359,7 @@ test_response <- response[test_rows]
 
 # Check that all patients are accounted for in training and test set
 stopifnot(
-  nrow(training_set) + nrow(test_set) == nrow(oncoth1_td_dataset),
+  nrow(training_set_raw) + nrow(test_set_raw) == nrow(oncoth1_td_dataset),
   length(training_response) + length(test_response) == length(response)
 )
 ```
@@ -399,9 +400,7 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.1, 1, 5, 10, 25, 50, 75, 80, 100)
-# lambda1_grid <- 1
-# lambda1_grid <- 10^seq(-4, 2, length.out = 50)
+lambda1_grid <- c(0.1, 1, 5, 10, 50, 75, 100)
 
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
@@ -414,12 +413,10 @@ regpath_results <- expand.grid(
   as_tibble() %>%
   mutate(
     cindex_train = NA_real_,
-    cindex = NA_real_, 
+    cindex_valid = NA_real_, 
     selected_vars = vector("list", n())
   )
 
-# 
-# vif_results <- vector("list", length = k)
 
 # Loop over each row of that tibble
 for (row_idx in seq_len(nrow(regpath_results))) {
@@ -433,13 +430,11 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   training_ids <- setdiff(unique_train_ids, validation_ids)
 
   # Subset interval-level data
-  valid_data <- training_set %>% filter(id %in% validation_ids)
-  train_data <- training_set %>% filter(id %in% training_ids)
+  valid_data <- training_set_raw %>% filter(id %in% validation_ids)
+  train_data <- training_set_raw %>% filter(id %in% training_ids)
   
-  # # Split by fold (as before)
-  # train_df <- filter(training_set, fold != fold_i)
-  # valid_df <- filter(training_set, fold == fold_i)
-  
+  # Check IDs do not overlap validation and train data
+  stopifnot(!(unique(valid_data$id) %in% unique(train_data$id)))
   
   # Build unscaled X’s
   X_train_raw <- process_data(train_data, cols2select, apply_scaling = FALSE)
@@ -457,30 +452,11 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   X_train <- predict(pp, X_train_raw)
   X_valid <- predict(pp, X_valid_raw)
 
-  # Determine training and validation patient IDs
-  validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
-  training_ids <- setdiff(unique_train_ids, validation_ids)
+  # # Determine training and validation patient IDs
+  # validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
+  # training_ids <- setdiff(unique_train_ids, validation_ids)
 
-  # Subset interval-level data
-  valid_data <- training_set %>% filter(id %in% validation_ids)
-  train_data <- training_set %>% filter(id %in% training_ids)
-
-  # # Sanity checks
-  # stopifnot(
-  #   setequal(validation_ids, unique(valid_data$id)),
-  #   setequal(training_ids, unique(train_data$id))
-  # )
-  #
-  # # Process data
-  # X_valid <- process_data(valid_data, cols2select)
-  # X_train <- process_data(train_data, cols2select)
-
-  # Check that there are no missing values
-  # na_per_col <- colSums(is.na(X_valid))
-  # print("Showing NAs per column")
-  # na_per_col[na_per_col > 0]
-  # print(na_per_col)
-
+  # Check there are no missing values
   stopifnot(!anyNA(X_train), !anyNA(X_valid))
 
   # Find column mismatch if there is one
@@ -513,7 +489,7 @@ for (row_idx in seq_len(nrow(regpath_results))) {
 
   # Evaluate using C-index
   regpath_results$cindex_train[row_idx] <- survival::concordance(y_train ~ lp_train)$concordance
-  regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
+  regpath_results$cindex_valid[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
 
   # Record selected variables
   regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
@@ -525,22 +501,11 @@ for (row_idx in seq_len(nrow(regpath_results))) {
 
 ```{r}
 # Summarize mean C-index by lambda1
-summary_regpath_train <- regpath_results %>%
-  group_by(lambda1) %>%
-  summarise(
-    mean_cindex_train = mean(cindex_train, na.rm = TRUE), 
-    .groups = "drop"
-  )
-summary_regpath_train
-```
-
-
-```{r}
-# Summarize mean C-index by lambda1
 summary_regpath <- regpath_results %>%
   group_by(lambda1) %>%
   summarise(
-    mean_cindex = mean(cindex, na.rm = TRUE), 
+    mean_cindex_train = mean(cindex_train, na.rm = TRUE), 
+    mean_cindex_valid = mean(cindex_valid, na.rm = TRUE), 
     .groups = "drop"
   )
 summary_regpath
@@ -590,23 +555,24 @@ freq_selected_vars <- regpath_results %>%
 freq_selected_vars
 ```
 
+
 ## Final model
 
 ```{r}
 # Select variables
-training_set <- process_data(training_set, cols2select)
-test_set <- process_data(test_set, cols2select)
+training_set_subset <- process_data(training_set_raw, cols2select)
+test_set_subset <- process_data(test_set_raw, cols2select)
 
 # Preprocess data
 preprocess <- caret::preProcess(
-  x = training_set,
+  x = training_set_subset,
   method = c("center", "scale"),
   na.remove = TRUE
 )
   
 # 2) Apply to both train & valid
-training_set_transf <- predict(preprocess, training_set)
-test_set_transf <- predict(preprocess, test_set)
+training_set_transf <- predict(preprocess, training_set_subset)
+test_set_transf <- predict(preprocess, test_set_subset)
 ```
 
 
@@ -633,7 +599,7 @@ lp_test <- as.numeric(test_set_transf %*% final_b)
 
 # Evaluate using C-index
 final_cindex <- survival::concordance(test_response ~ lp_test)$concordance
-print(final_cindex)
+print(paste("C-index on test set:", final_cindex))
 
 # Record selected variables
 final_selected_vars <- coef(final_lasso_cox)
@@ -641,6 +607,41 @@ print(final_selected_vars)
 ```
 
 
+```{r}
+# Select variables used in 50% models or more trained during CV
+selected_vars <- freq_selected_vars %>%
+  filter(rel_freq > 0.5) %>%
+  select(variable) %>%
+  print()
+```
+
+
+
+```{r}
+# Train final model
+final_cox <- coxph(
+  Surv(time = tstart, 
+       time2 = tstop, 
+       event = death) ~ 
+    cluster(id) + 
+    tnm_stage_two_groups + 
+    tumor_surgically_removed + 			
+    performance_status_category_corrected_imp +			
+    vte_event +			
+    primary_tumor_simplified +		
+    mucinous_histology_imp +			
+    gender,
+  id = id,
+  data = test_set_raw
+  )
+
+# Check proportional hazards assumption for Cox model
+cox.zph(final_cox)
+
+# Show HR and 95% CI
+final_cox %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+```
 
 
 
