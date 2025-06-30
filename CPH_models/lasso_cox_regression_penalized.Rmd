@@ -559,51 +559,51 @@ freq_selected_vars
 ## Final model
 
 ```{r}
-# Select variables
-training_set_subset <- process_data(training_set_raw, cols2select)
-test_set_subset <- process_data(test_set_raw, cols2select)
-
-# Preprocess data
-preprocess <- caret::preProcess(
-  x = training_set_subset,
-  method = c("center", "scale"),
-  na.remove = TRUE
-)
-  
-# 2) Apply to both train & valid
-training_set_transf <- predict(preprocess, training_set_subset)
-test_set_transf <- predict(preprocess, test_set_subset)
+# # Select variables
+# training_set_subset <- process_data(training_set_raw, cols2select)
+# test_set_subset <- process_data(test_set_raw, cols2select)
+# 
+# # Preprocess data
+# preprocess <- caret::preProcess(
+#   x = training_set_subset,
+#   method = c("center", "scale"),
+#   na.remove = TRUE
+# )
+#   
+# # 2) Apply to both train & valid
+# training_set_transf <- predict(preprocess, training_set_subset)
+# test_set_transf <- predict(preprocess, test_set_subset)
 ```
 
 
 ```{r}
-# Then, train final model with selected features and compute C-index on test set
-final_lasso_cox <- penalized(
-    response = training_response,
-    penalized = training_set_transf,
-    unpenalized = ~1,
-    lambda1 = 10,
-    lambda2 = 0,
-    model = "cox",
-    trace = FALSE
-  )
-
-# Get coefficients for all initial predictors
-final_b <- coef(final_lasso_cox, "all", standardize = TRUE)
-
-# Sanity check
-stopifnot(names(final_b) == colnames(test_set_transf))
-
-# Compute the linear predictor η = β′X
-lp_test <- as.numeric(test_set_transf %*% final_b)
-
-# Evaluate using C-index
-final_cindex <- survival::concordance(test_response ~ lp_test)$concordance
-print(paste("C-index on test set:", final_cindex))
-
-# Record selected variables
-final_selected_vars <- coef(final_lasso_cox)
-print(final_selected_vars)
+# # Then, train final model with selected features and compute C-index on test set
+# final_lasso_cox <- penalized(
+#     response = training_response,
+#     penalized = training_set_transf,
+#     unpenalized = ~1,
+#     lambda1 = 10,
+#     lambda2 = 0,
+#     model = "cox",
+#     trace = FALSE
+#   )
+# 
+# # Get coefficients for all initial predictors
+# final_b <- coef(final_lasso_cox, "all", standardize = TRUE)
+# 
+# # Sanity check
+# stopifnot(names(final_b) == colnames(test_set_transf))
+# 
+# # Compute the linear predictor η = β′X
+# lp_test <- as.numeric(test_set_transf %*% final_b)
+# 
+# # Evaluate using C-index
+# final_cindex <- survival::concordance(test_response ~ lp_test)$concordance
+# print(paste("C-index on test set:", final_cindex))
+# 
+# # Record selected variables
+# final_selected_vars <- coef(final_lasso_cox)
+# print(final_selected_vars)
 ```
 
 
@@ -632,7 +632,7 @@ final_cox <- coxph(
     mucinous_histology_imp +			
     gender,
   id = id,
-  data = test_set_raw
+  data = training_set_raw
   )
 
 # Check proportional hazards assumption for Cox model
@@ -643,6 +643,17 @@ final_cox %>%
   gtsummary::tbl_regression(exp = TRUE)
 ```
 
+```{r}
+# Inspect VIF in final model
+vif_results = car::vif(final_cox)
+vif_results
+```
+
+
+```{r}
+# C-index in testing set
+concordance(final_cox, newdata = test_set_raw)
+```
 
 
 
