@@ -338,6 +338,12 @@ test_ids <- scan(
 
 
 ```{r}
+# Partition data with repeated rows per patient into training and test set
+
+# Get rows of train and test patients
+train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
+test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
+
 # Partition data
 training_set_raw <- oncoth1_td_dataset[train_rows,]
 test_set_raw <- oncoth1_td_dataset[test_rows,]
