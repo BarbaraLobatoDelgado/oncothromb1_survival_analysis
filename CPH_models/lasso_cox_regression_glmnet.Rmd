@@ -73,7 +73,7 @@ pacman::p_load(
 
 ```{r}
 # Load an9elproject DB
-oncoth1 <- get_project("oncothr1", version = "0.0.8005") 
+oncoth1 <- get_project("oncothr1", version = "0.0.8005")
 ```
 
 
@@ -133,9 +133,20 @@ oncoth1_survival_df <- oncoth1_data %>%
 
 
 ```{r}
+
+  
+```
+
+
+```{r}
+# # Remove columns with missing values
+# oncoth1_selected_vars %<>%
+#   select(where(~ !any(is.na(.))))
+
 # Stop if there are missing values in dataset
 stopifnot(!anyNA(oncoth1_survival_df))
 ```
+
 
 
 ```{r}
@@ -145,15 +156,15 @@ cols2select <- c(
  "gender", 
  "bmi_value", 
  "performance_status_category_corrected_imp", 
- # "diabetes_mellitus",
+ "diabetes_mellitus",
  "dyslipidemia", 
  "arterial_hypertension", 
- # "tobacco_use_imp", 
+ "tobacco_use_imp", 
  # "copd_imp", 
- # "venous_insufficiency_imp", 
+ "venous_insufficiency_imp", 
  # "khorana_risk_score_imp",# correlated to a lot of features
  # "two_groups_krs", # correlated to a lot of features
- # "previous_onco_surgery",
+ "previous_onco_surgery",
  "tumor_surgically_removed", 
  "primary_tumor_simplified", 
  # "tnm_stage",
@@ -161,45 +172,14 @@ cols2select <- c(
  "tnm_stage_two_groups",
  # "histology_type_imp", # unequal categories between train and validation set
  "mucinous_histology_imp",
- # "grade_histological_differentiation_imp",
+ "grade_histological_differentiation_imp",
  # "catheter_device_imp", 
- # "family_background_vte",
+ "family_background_vte",
  "previous_vte",
  "previous_ate", 
  "anticoag_tx_currently", # unequal categories between train and validation set
  "antiaggreg_tx_currently"
  )
-```
-
-
-```{r}
-  # vte_event +
-  # age_when_cancer_dx +
-  # gender +
-  # bmi_value +
-  # performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection in some folds, but models can be trained
-  # # diabetes_mellitus + # Confounder. We kfoldsnow it is associated with pancreatic cancer patients that undergo resection of pancreas
-  # dyslipidemia +
-  # # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
-  # # copd_imp + # Correlated to tobacco use
-  # arterial_hypertension +
-  # # venous_insufficiency_imp +  # remove as suggested by Andrés Muñoz (bad definition of variable, information may refer to different conditions)
-  # # kfoldshorana_riskfolds_score_imp + # Correlated to pancreatic and esophago-gastric cancers
-  # # two_groups_kfoldsrs + # Correlated to pancreatic and esophago-gastric cancers
-  # # previous_onco_surgery + # Correlated to having had tumor resected
-  # tumor_surgically_removed +
-  # primary_tumor_simplified +
-  # # tnm_stage_grouped +
-  # tnm_stage_two_groups +
-  # # histology_type_imp + # Correlated with NSCLC
-  # mucinous_histology_imp +
-  # # grade_histological_differentiation_imp + # violates PH assumption
-  # # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
-  # # family_backfoldsground_vte + # High GVIF, multicollinearity with venous insufficiency in some folds. When selected, not clear if it is riskfolds or protective factor, due to lackfolds of information when recruiting patients
-  # previous_vte +
-  # previous_ate +
-  # anticoag_tx_currently +
-  # antiaggreg_tx_currently,
 ```
 
 
@@ -226,16 +206,29 @@ process_data <- function(data, cols2select, apply_scaling = FALSE) {
     )
   
   # Transform other columns to numerical
-  if ("grade_histological_differentiation_imp" %in% colnames(data_selection)){
+  if ("grade_histological_differentiation_imp" %in% colnames(data_selection)) {
     data_selection <- data_selection %>%
-      mutate(grade_histological_differentiation_imp = as.numeric(case_when(
-        str_starts(grade_histological_differentiation_imp, "Well") ~ 1,
-        str_starts(grade_histological_differentiation_imp, "Moderately") ~ 2,
-        str_starts(grade_histological_differentiation_imp, "Poorly") ~ 3, 
-        TRUE ~ NA_real_
+    mutate(grade_histological_differentiation_imp = as.numeric(case_when(
+      str_starts(grade_histological_differentiation_imp, "Well") ~ 1,
+      str_starts(grade_histological_differentiation_imp, "Moderately") ~ 2,
+      str_starts(grade_histological_differentiation_imp, "Poorly") ~ 3, 
+      TRUE ~ NA_real_
     )))
   }
+  
+  if ("tnm_stage" %in% colnames(data_selection)) {
+    data_selection <- data_selection %>%
+     mutate(tnm_stage = as.numeric(case_when(
+       tnm_stage == "I" ~ 1,
+       tnm_stage == "II" ~ 2,
+       tnm_stage == "III" ~ 3,
+       tnm_stage == "IV" ~ 4,
+       TRUE ~ NA_real_
+     )))
+  }
    
+  # print(colnames(data_transf))
+  
   # Convert categorical to numeric
   data_dummies <- dummy_cols(
     .data = data_selection, 
@@ -268,7 +261,62 @@ Y0
 ```
 
 
-## Inspect correlation
+
+```{r}
+alpha = 0.1
+
+lasso_cox <- glmnet(
+  x = oncoth1_transf, 
+  y = Y0, 
+  family = "cox", 
+  alpha = alpha
+)
+
+coef(lasso_cox, s = alpha)
+```
+
+```{r}
+# # Train your model on the training fold
+# model = StepReg::stepwiseCox(
+#   formula = Surv(time = tstart, time2 = tstop, event = death) ~
+#   vte_event +
+#   age_when_cancer_dx +
+#   gender +
+#   bmi_value +
+#   performance_status_category_corrected_imp + # Multicollinearity with cancer type, tobacco use, tumor resection in some folds, but models can be trained
+#   # diabetes_mellitus + # Confounder. We kfoldsnow it is associated with pancreatic cancer patients that undergo resection of pancreas
+#   dyslipidemia +
+#   # tobacco_use_imp + # Correlated to NSCLC. Multicollinearity if PS is also selected
+#   # copd_imp + # Correlated to tobacco use
+#   arterial_hypertension +
+#   # venous_insufficiency_imp +  # remove as suggested by Andrés Muñoz (bad definition of variable, information may refer to different conditions)
+#   # kfoldshorana_riskfolds_score_imp + # Correlated to pancreatic and esophago-gastric cancers
+#   # two_groups_kfoldsrs + # Correlated to pancreatic and esophago-gastric cancers
+#   # previous_onco_surgery + # Correlated to having had tumor resected
+#   tumor_surgically_removed +
+#   primary_tumor_simplified +
+#   # tnm_stage_grouped +
+#   tnm_stage_two_groups +
+#   # histology_type_imp + # Correlated with NSCLC
+#   mucinous_histology_imp +
+#   # grade_histological_differentiation_imp + # violates PH assumption
+#   # catheter_device_imp + # quite correlated with tumor type, as Cramer's V indicates
+#   # family_backfoldsground_vte + # High GVIF, multicollinearity with venous insufficiency in some folds. When selected, not clear if it is riskfolds or protective factor, due to lackfolds of information when recruiting patients
+#   previous_vte +
+#   previous_ate +
+#   anticoag_tx_currently +
+#   antiaggreg_tx_currently,
+#   data = training_fold,
+#   include = "primary_tumor_simplified",
+#   selection = "bidirection",
+#   select = "AIC",
+#   method = "efron"
+#   )
+```
+
+
+
+### Inspect correlation
 
 ```{r}
 # Calculate correlation
@@ -295,15 +343,10 @@ plot_ly(
   )
 ```
 
-
 ## Dataset partition
 
 ```{r}
 # Partition data with repeated rows per patient into training and test set
-ids_row_map <- data.frame(
-  "row" = row.names(oncoth1_survival_df), 
-  "id" = oncoth1_survival_df$id
-  )
 
 # Get unique IDs
 unique_ids <- unique(oncoth1_survival_df$id)
@@ -312,111 +355,92 @@ unique_ids <- unique(oncoth1_survival_df$id)
 train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
 test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
 
-# No match between train and test IDs
-stopifnot(train_ids != test_ids)
-
 # Get rows of train and test patients
-train_rows <- which(oncoth1_survival_df$id %in% train_ids)
-test_rows <- which(oncoth1_survival_df$id %in% test_ids)
+train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
+test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
 
-# No match between train and test rows
-stopifnot(train_rows != test_rows)
-```
+# # Partition data keeping the IDs (needed for stratified CV)
+# training_set_with_ids <- oncoth1_td_dataset %>% 
+#   filter(id %in% train_ids) %>% 
+#   select(id)
+# testing_set_with_ids <- oncoth1_td_dataset %>% 
+#   filter(id %in% test_ids) %>%
+#   select(id)
 
+# Partition data
+# training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
+# test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
+training_set <- oncoth1_td_dataset[train_rows,]
+test_set <- oncoth1_td_dataset[test_rows,]
+# training_set <- covariates[train_rows,]
+# test_set <- covariates[test_rows,]
 
-```{r}
-# Save IDs in training and test split
-write.csv(x = train_ids, file = "../partition_indices/glmnet_train_ids.csv", row.names = FALSE)
-write.csv(x = test_ids, file = "../partition_indices/glmnet_test_ids.csv", row.names = FALSE)
+# Checkfolds that IDs are not in training and test sets
+stopifnot(
+  identical(
+    sort(unique(training_set$id)), sort(unique(test_set$id))) == FALSE)
 
-# Save row number in training and test split
-write.csv(x = train_rows, file = "../partition_indices/glmnet_train_rows.csv", row.names = FALSE)
-write.csv(x = test_rows, file = "../partition_indices/glmnet_test_rows.csv", row.names = FALSE)
-```
+# # Partition response
+# training_response <- response[train_rows,]
+# test_response <- response[test_rows,]
 
-
-```{r}
-# Create target variable
-y <- with(oncoth1_survival_df, Surv(time, death))
-y
-```
-
-
-```{r}
-# Partition data using rows
-training_set <- oncoth1_survival_df[train_rows,]
-test_set <- oncoth1_survival_df[test_rows,]
-
-# Partition target
-y_train <- y[train_rows]
-y_test <- y[test_rows]
+# Surv response for full data
+response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
+# Get response for training and test sets
+training_response <- response[train_rows]
+test_response <- response[test_rows]
 
 # Check that all patients are accounted for in training and test set
 stopifnot(
-  nrow(training_set) + nrow(test_set) == nrow(oncoth1_transf),
-  length(y_train) + length(y_test) == length(y)
+  nrow(training_set) + nrow(test_set) == nrow(oncoth1_td_dataset),
+  length(training_response) + length(test_response) == length(response)
 )
 ```
 
 
 ```{r}
+# Create folds for k-fold CV
+
 # Number of folds
 kfolds <- 10
-```
 
+# Create a grouping variable for each ID
+unique_train_ids <- unique(train_ids)
 
-```{r}
-# Create a fold-map at the patient level
-shuffled_ids <- sample(unique_ids)
-fold_sizes <- floor(length(shuffled_ids) / kfolds)
-remainder <- length(shuffled_ids) %% kfolds
-
+# Shuffle and assign
+shuffled_train_ids <- sample(unique_train_ids)
+# Get size for each fold
+fold_sizes <- floor(length(shuffled_train_ids) / kfolds)
+remainder <- length(shuffled_train_ids) %% kfolds
 fold_vec <- rep(
   1:kfolds, 
-  times = c(
-    rep(fold_sizes + 1, remainder), 
-    rep(fold_sizes, kfolds - remainder)
-  )
+  times = c(rep(fold_sizes + 1, remainder), 
+            rep(fold_sizes, kfolds - remainder))
 )
-# Tibble with IDs and folds mapped
-fold_map <- tibble(id = shuffled_ids, fold = fold_vec)
 
-# Join to have row number
-cv_info_mapping <- fold_map %>%
-  left_join(ids_row_map, by = "id") %>%
-  mutate(set = case_when(
-    id %in% train_ids ~ "train",
-    id %in% test_ids ~ "test"
-    )
-    )
+# Map each ID to each fold
+fold_map <- data.frame(
+  patient_id = shuffled_train_ids,
+  fold = fold_vec
+)
 ```
-
-
-```{r}
-
-```
-
 
 
 ```{r}
 # Cross-validation loop
 set.seed(seed)
 
-# zero is ridge, 1 is lasso, in between is elastic net
-
 # Define lambda grid
-# alpha_grid <- c(0, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1) 
-# Lasso
-alpha_grid <- 1
-# Lasso regularization strenght
-lambda_grid <- c(0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 1)
+lambda1_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
+# lambda1_grid <- 1
+# lambda1_grid <- 10^seq(-4, 2, length.out = 50)
 
 # Store regularization pathway results
-# Do combinations of all folds and alpha values
-cv_out <- expand.grid(
-  alpha = alpha_grid, # alpha_grid, 
-  lambda = lambda_grid,
-  fold = 1:kfolds, 
+# Do combinations of all folds and lambda1 values
+regpath_results <- expand.grid(
+  lambda1 = lambda1_grid, 
+  fold = seq_len(kfolds), 
+  KEEP.OUT.ATTRS = FALSE, 
   stringsAsFactors = FALSE
   ) %>%
   as_tibble() %>%
@@ -429,118 +453,106 @@ cv_out <- expand.grid(
 # vif_results <- vector("list", length = k)
 
 # Loop over each row of that tibble
-for (i in seq_len(nrow(cv_out))) {
-  # Get alpha and fold from tibble with combinations
-  i_alpha <- cv_out$alpha[i]
-  i_lambda <- cv_out$lambda[i]
-  i_fold <- cv_out$fold[i]
+for (row_idx in seq_len(nrow(regpath_results))) {
   
-  # Get validation row number those not in this fold
-  valid_ids <- cv_info_mapping %>% 
-    filter(set == "train", fold == i_fold) %>% 
-    pull(id) %>%
-    as.integer()
-  # Get train row number
-  tr_ids <- cv_info_mapping %>% 
-    filter(set == "train", fold != i_fold) %>% 
-    pull(id) %>%
-    as.integer()
+  # Select lambda and fold value
+  l1 <- regpath_results$lambda1[row_idx]
+  fold_i <- regpath_results$fold[row_idx]
   
-  # Sanity check
-  stopifnot(!valid_ids %in% tr_ids)
+  # Determine training and validation patient IDs
+  validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
+  training_ids <- setdiff(unique_train_ids, validation_ids)
+
+  # Subset interval-level data
+  valid_data <- training_set %>% filter(id %in% validation_ids)
+  train_data <- training_set %>% filter(id %in% training_ids)
   
-  # Subset data
-  valid_data <- training_set %>% filter(id %in% valid_ids)
-  tr_data <- training_set %>% filter(id %in% train_ids)
+  # # Split by fold (as before)
+  # train_df <- filter(training_set, fold != fold_i)
+  # valid_df <- filter(training_set, fold == fold_i)
+  # 
+  # Build unscaled X’s
+  X_train_raw <- process_data(train_data, cols2select, apply_scaling = FALSE)
+  X_valid_raw <- process_data(valid_data, cols2select, apply_scaling = FALSE)
   
-  # Get dependent variable (Surv object)
-  y_valid <- with(valid_data, Surv(time, death))
-  y_train <- with(tr_data, Surv(time, death))
-  
-  # Sanity check
-  stopifnot(
-    all(tr_data$id %in% train_ids), 
-    all(valid_data$id %in% valid_ids)
+  # 1) Fit preProcess on TRAIN only
+  pp <- caret::preProcess(
+    x      = X_train_raw,
+    method = c("center", "scale"),
+    na.remove = TRUE
   )
   
-  # Select covariates
-  valid_data_subset <- process_data(valid_data, cols2select)
-  tr_data_subset <- process_data(tr_data, cols2select)
+  # 2) Apply to both train & valid
+  X_train <- predict(pp, X_train_raw)
+  X_valid <- predict(pp, X_valid_raw)
   
-  # Learn scaling parameters on train data
-  preproc <- caret::preProcess(
-    x = tr_data_subset,
-    method = c("center", "scale")
-  )
-  # Scale data
-  X_train <- predict(preproc, tr_data_subset)
-  X_valid <- predict(preproc, valid_data_subset)
+  # # Determine training and validation patient IDs
+  # validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
+  # training_ids <- setdiff(unique_train_ids, validation_ids)
+  # 
+  # # Subset interval-level data
+  # valid_data <- training_set %>% filter(id %in% validation_ids)
+  # train_data <- training_set %>% filter(id %in% training_ids)
+  # 
+  # # Sanity checks
+  # stopifnot(
+  #   setequal(validation_ids, unique(valid_data$id)),
+  #   setequal(training_ids, unique(train_data$id))
+  # )
+  # 
+  # # Process data
+  # X_valid <- process_data(valid_data, cols2select)
+  # X_train <- process_data(train_data, cols2select)
   
-  #--------------------------
-  cvfit <- cv.glmnet(
-    x = X_train,
-    y = y_train, 
-    family = "cox", 
-    alpha = 1, 
-    nfolds = 10
-  )
-  lambda_min <- cvfit$lambda.min     # λ that minimizes CV error
-  lambda_1se <- cvfit$lambda.1se     # most regularized λ within 1 SE
+  # Check that there are no missing values
+  # na_per_col <- colSums(is.na(X_valid))
+  # print("Showing NAs per column")
+  # na_per_col[na_per_col > 0]
+  # print(na_per_col)
   
-  # 4a) Coefficients at lambda.min
-  coefs_min <- coef(cvfit, s = "lambda.min")
-  selected_min <- rownames(coefs_min)[as.numeric(coefs_min) != 0]
+  # Check there are no missing values
+  stopifnot(!anyNA(X_train), !anyNA(X_valid))
   
-  # 4b) Coefficients at lambda.1se
-  coefs_1se <- coef(cvfit, s = "lambda.1se")
-  selected_1se <- rownames(coefs_1se)[as.numeric(coefs_1se) != 0]
+  # Find column mismatch if there is one
+  find_column_mismatch(X_valid, X_train)
   
-  cat("At lambda.min:", lambda_min, "selected:", selected_min, "\n")
-  cat("At lambda.1se:", lambda_1se, "selected:", selected_1se, "\n")
+  # Get responses
+  y_valid <- with(valid_data, Surv(tstart, tstop, death))
+  y_train <- with(train_data, Surv(tstart, tstop, death))
   
-  # On training data
-  lp_train <- predict(cvfit, newx = X_train, s = "lambda.min", type = "link")
-  cidx_train <- concordance(y_train ~ as.numeric(lp_train))$concordance
-  
-  # On held-out test data
-  # X_test <- as.matrix(test_df[, cols2select])
-  # Y_test <- with(test_df, Surv(time, event))
-  
-  lp_test <- predict(cvfit, newx = X_valid, s = "lambda.min", type = "link")
-  cidx_test <- concordance(y_valid ~ as.numeric(lp_test))$concordance
-  
-  cat("Train C-index:", round(cidx_train,3), 
-      " Valid C-index:", round(cidx_test,3), "\n")
-  #--------------------------
-  
-  
-  
-  
-  # Train lasso Cox model
+  # Fit penalized Cox on training fold
   lasso_cox <- glmnet(
     x = X_train, 
-    y = y_train,
+    y = y_train, 
     family = "cox", 
-    alpha = i_alpha, 
-    lambda = i_lambda
+    alpha = alpha
   )
   
-  coefs <- coef(lasso_cox, s = alpha)
+  
+  # pencox_cv <- penalized(
+  #   response = y_train,
+  #   penalized = X_train,
+  #   unpenalized = ~1, 
+  #   lambda1 = l1,
+  #   lambda2 = 0,
+  #   model = "cox", 
+  #   trace = FALSE
+  # )
+  # 
+  # # Get coefficients for all initial predictors
+  # b <- coef(pencox_cv, "all", standardize = TRUE)
+  
+  # Sanity check
+  stopifnot(names(b) == colnames(X_valid))
+  
+  # Compute the linear predictor η = β′X
+  lp_valid <- as.numeric(X_valid %*% b)
   
   # Evaluate using C-index
-  linear_pred <- as.numeric(predict(
-    lasso_cox, 
-    newx = X_valid, 
-    s = alpha, 
-    type = "link"
-    ))
-  
-  # Calculate C-index and add to results
-  cv_out$cindex[i] <- survival::concordance(y_valid ~ linear_pred)$concordance
+  regpath_results$cindex[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
   
   # Record selected variables
-  cv_out$selected_vars[[i]] <- coef(lasso_cox, s = alpha)
-  
+  regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
 }
 ```
 
@@ -548,9 +560,9 @@ for (i in seq_len(nrow(cv_out))) {
 ## Regularization pathway
 
 ```{r}
-# Summarize mean C-index by alpha
-summary_regpath <- cv_out %>%
-  group_by(lambda) %>%
+# Summarize mean C-index by lambda1
+summary_regpath <- regpath_results %>%
+  group_by(lambda1) %>%
   summarise(
     mean_cindex = mean(cindex, na.rm = TRUE), 
     .groups = "drop"
@@ -560,56 +572,52 @@ summary_regpath
 
 
 ```{r}
-# ggplot(summary_regpath, aes(x = lambda, y = mean_cindex)) + 
-#   geom_line(size = 1) + 
-#   geom_point(size = 2) + 
-#   scale_x_log10(
-#     breaks = unique(summary_regpath$lambda), 
-#     labels = scales::scientific_format(digits = 2)
-#   ) + 
-#   labs(
-#     x = "Lambda (lasso regularization parameter)", 
-#     y = "Mean CV C-index", 
-#     title = "Regularization path: mean C-index vs penalty strength"
-#   ) + 
-#   theme_minimal() + 
-#   theme(
-#     plot.title = element_text(hjust = 0.5), 
-#     axis.text.x = element_text(angle = 45, hjust = 1)
-#   )
+ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) + 
+  geom_line(size = 1) + 
+  geom_point(size = 2) + 
+  scale_x_log10(
+    breaks = unique(summary_regpath$lambda1), 
+    labels = scales::scientific_format(digits = 2)
+  ) + 
+  labs(
+    x = expression(log[10](lambda[1])), 
+    y = "Mean CV C-index", 
+    title = "Regularization path: mean C-index vs penalty strength"
+  ) + 
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 ```
 
 ## More frequently selected variables
 
 ```{r}
-freq_selected_vars <- cv_out %>%
+freq_selected_vars <- regpath_results %>%
   mutate(
     selected = map(
       selected_vars, 
-      # Extract rownames for non-zero coefficients
-      ~ {
-        nonzero_idx <- which(.x != 0)
-        if (length(nonzero_idx) == 0) {
-          character(0)
-        } else {
-          rownames(.x)[nonzero_idx]
-        }
-      }
+      ~ names(.x)[.x != 0] # get variables names with non-zero weights
     )
   ) %>%
   # Keep lambda/fold id and list of selected variables
-  select(alpha, fold, selected) %>%
+  select(lambda1, fold, selected) %>%
   # Explode the list-column to have lambda, fold and vars in one row
   unnest(selected) %>%
   # Count how many times each variable appears
   count(variable = selected, name = "freq") %>%
-  mutate(rel_freq = freq / nrow(cv_out)) %>%
+  mutate(rel_freq = freq / nrow(regpath_results)) %>%
   arrange(desc(rel_freq))
 
 freq_selected_vars
 ```
 
 
+
+```{r}
+aa
+```
 
 ```{r}
 # Then, train final model with selected features and compute C-index on test set

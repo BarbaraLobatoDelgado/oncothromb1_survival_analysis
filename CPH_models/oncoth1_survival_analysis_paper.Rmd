@@ -1113,6 +1113,7 @@ cph_vte_recurrence = coxph(Surv(
   ) 
 ```
 
+
 ```{r}
 # Test PH assumption
 cox.zph(cph_vte_recurrence)
@@ -1405,8 +1406,16 @@ stopifnot(
 
 ```{r}
 # Save IDs in training and test split
-write.csv(x = train_ids, file = "../partition_indices/stepwise_train_ids.csv", row.names = FALSE)
-write.csv(x = test_ids, file = "../partition_indices/stepwise_test_ids.csv", row.names = FALSE)
+train_ids_filepath <- "/mnt/ir-bioinf02/home/blobato/oncothromb1_survival_analysis/CPH_models/partition_indices/stepwise_train_ids.csv"
+test_ids_filepath <- "/mnt/ir-bioinf02/home/blobato/oncothromb1_survival_analysis/CPH_models/partition_indices/stepwise_test_ids.csv"
+
+if (!file.exists(train_ids_filepath)) {
+  write.csv(x = train_ids, file = train_ids_filepath, row.names = FALSE)
+}
+
+if (!file.exists(test_ids_filepath)) {
+  write.csv(x = test_ids, file = test_ids_filepath, row.names = FALSE)
+}
 ```
 
 

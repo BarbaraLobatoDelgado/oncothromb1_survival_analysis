@@ -197,8 +197,8 @@ cols2select <- c(
  # "histology_type_imp", # unequal categories between train and validation set
  "mucinous_histology_imp",
  # "grade_histological_differentiation_imp",
- # "catheter_device_imp", 
- # "family_background_vte", 
+ "catheter_device_imp",
+ # "family_background_vte",
  "previous_vte",
  "previous_ate", 
  "anticoag_tx_currently", # unequal categories between train and validation set
@@ -630,18 +630,24 @@ final_cox <- coxph(
     vte_event +			
     primary_tumor_simplified +		
     mucinous_histology_imp +			
-    gender,
+    # gender + # ,
+    catheter_device_imp, # +
+    # family_background_vte + 
+    # grade_histological_differentiation_imp,
   id = id,
   data = training_set_raw
   )
 
 # Check proportional hazards assumption for Cox model
 cox.zph(final_cox)
+```
 
+```{r}
 # Show HR and 95% CI
 final_cox %>% 
   gtsummary::tbl_regression(exp = TRUE)
 ```
+
 
 ```{r}
 # Inspect VIF in final model
