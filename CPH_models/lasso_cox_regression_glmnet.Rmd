@@ -67,7 +67,7 @@ pacman::p_load(
 
 ```{r cars}
 # # Load time-dependent dataset
-# oncoth1_td_dataset = read.csv(file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_td_dataset.csv")
+# oncoth1_survival_df = read.csv(file = "/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_survival_df.csv")
 ```
 
 
@@ -346,53 +346,64 @@ plot_ly(
 ## Dataset partition
 
 ```{r}
+# Load files containing IDs for each partition
+
+# Filepaths
+train_ids_filepath <- "/mnt/ir-bioinf02/home/blobato/oncothromb1_survival_analysis/CPH_models/partition_indices/stepwise_train_ids.csv"
+test_ids_filepath <- "/mnt/ir-bioinf02/home/blobato/oncothromb1_survival_analysis/CPH_models/partition_indices/stepwise_test_ids.csv"
+
+# Load
+train_ids <- scan(
+  file = train_ids_filepath, 
+  what = numeric(), 
+  sep = ",",
+  skip = 1 # skip first row
+)
+test_ids <- scan(
+  file = test_ids_filepath, 
+  what = numeric(), 
+  sep = ",",
+  skip = 1 # skip first row
+)
+```
+
+
+```{r}
 # Partition data with repeated rows per patient into training and test set
-
-# Get unique IDs
-unique_ids <- unique(oncoth1_survival_df$id)
-
-# Randomly assign each unique ID to either train or test
-train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
-test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
-
 # Get rows of train and test patients
-train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
-test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
+train_rows <- which(oncoth1_survival_df %in% train_ids)
+test_rows <- which(oncoth1_survival_df$id %in% test_ids)
 
 # # Partition data keeping the IDs (needed for stratified CV)
-# training_set_with_ids <- oncoth1_td_dataset %>% 
+# training_set_with_ids <- oncoth1_survival_df %>% 
 #   filter(id %in% train_ids) %>% 
 #   select(id)
-# testing_set_with_ids <- oncoth1_td_dataset %>% 
+# testing_set_with_ids <- oncoth1_survival_df %>% 
 #   filter(id %in% test_ids) %>%
 #   select(id)
 
 # Partition data
-# training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
-# test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
-training_set <- oncoth1_td_dataset[train_rows,]
-test_set <- oncoth1_td_dataset[test_rows,]
-# training_set <- covariates[train_rows,]
-# test_set <- covariates[test_rows,]
+training_set <- oncoth1_survival_df %>% filter(id %in% train_ids)
+test_set <- oncoth1_survival_df %>% filter(id %in% test_ids)
+# training_set <- oncoth1_survival_df[train_rows,]
+# test_set <- oncoth1_survival_df[test_rows,]
 
 # Checkfolds that IDs are not in training and test sets
 stopifnot(
   identical(
     sort(unique(training_set$id)), sort(unique(test_set$id))) == FALSE)
 
-# # Partition response
-# training_response <- response[train_rows,]
-# test_response <- response[test_rows,]
-
+# Partition response
 # Surv response for full data
-response = with(oncoth1_td_dataset, Surv(tstart, tstop, death))
+response <- with(oncoth1_survival_df, Surv(time, death))
 # Get response for training and test sets
-training_response <- response[train_rows]
-test_response <- response[test_rows]
+training_response <- with(training_set, Surv(time, death))
+test_response <- with(test_set, Surv(time, death))
 
 # Check that all patients are accounted for in training and test set
 stopifnot(
-  nrow(training_set) + nrow(test_set) == nrow(oncoth1_td_dataset),
+  nrow(training_set) + nrow(test_set) == nrow(oncoth1_survival_df),
+  sort(c(training_set$id, test_set$id)) == sort(oncoth1_survival_df$id), 
   length(training_response) + length(test_response) == length(response)
 )
 ```
