@@ -441,7 +441,7 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda_grid <- c(0.001, 0.01, 0.1, 1, 5, 10)
+lambda_grid <- c(0.0001, 0.001, 0.01, 0.1, 0.25, 1, 5, 10)
 # lambda_grid <- 1
 # lambda_grid <- 10^seq(-4, 2, length.out = 50)
 
