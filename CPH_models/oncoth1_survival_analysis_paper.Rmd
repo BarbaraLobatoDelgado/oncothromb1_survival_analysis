@@ -1473,6 +1473,9 @@ for (i in 1:k) {
   # Get the training fold
   training_fold <- stepwise_training_set[!(stepwise_training_set$id %in% validation_ids), ]
   
+  # Sanity check
+  stopifnot(!(unique(validation_fold$id) %in% unique(training_fold$id)))
+  
   # print("Training")
   # print(head(training_fold, n = k))
   # 
