@@ -315,30 +315,30 @@ plot_ly(
 ## Dataset partition
 
 ```{r}
-# Partition data with repeated rows per patient into training and test set
+# Load files containing IDs for each partition
 
-# Get unique IDs
-unique_ids <- unique(oncoth1_td_dataset$id)
+# Filepaths
+train_ids_filepath <- "/mnt/ir-bioinf02/home/blobato/oncothromb1_survival_analysis/CPH_models/partition_indices/stepwise_train_ids.csv"
+test_ids_filepath <- "/mnt/ir-bioinf02/home/blobato/oncothromb1_survival_analysis/CPH_models/partition_indices/stepwise_test_ids.csv"
 
-# Randomly assign each unique ID to either train or test
-train_ids <- sample(unique_ids, size = floor(0.8 * length(unique_ids))) # 80% for training
-test_ids <- setdiff(unique_ids, train_ids)  # Remaining IDs for testing
+# Load
+train_ids <- scan(
+  file = train_ids_filepath, 
+  what = numeric(), 
+  sep = ",",
+  skip = 1 # skip first row
+)
+test_ids <- scan(
+  file = test_ids_filepath, 
+  what = numeric(), 
+  sep = ",",
+  skip = 1 # skip first row
+)
+```
 
-# Get rows of train and test patients
-train_rows <- which(oncoth1_td_dataset$id %in% train_ids)
-test_rows <- which(oncoth1_td_dataset$id %in% test_ids)
 
-# # Partition data keeping the IDs (needed for stratified CV)
-# training_set_with_ids <- oncoth1_td_dataset %>% 
-#   filter(id %in% train_ids) %>% 
-#   select(id)
-# testing_set_with_ids <- oncoth1_td_dataset %>% 
-#   filter(id %in% test_ids) %>%
-#   select(id)
-
+```{r}
 # Partition data
-# training_set <- oncoth1_td_dataset %>% filter(id %in% train_ids)
-# test_set <- oncoth1_td_dataset %>% filter(id %in% test_ids)
 training_set_raw <- oncoth1_td_dataset[train_rows,]
 test_set_raw <- oncoth1_td_dataset[test_rows,]
 
