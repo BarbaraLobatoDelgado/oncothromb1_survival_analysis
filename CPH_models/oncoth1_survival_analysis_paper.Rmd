@@ -1553,7 +1553,7 @@ for (i in 1:k) {
   # Evaluate the predictions
   # C-index
   fold_cindex <- concordance(fold_cph_model, newdata = validation_fold)
-  print(paste("C-index in validation data:", fold_cindex$concordance))
+  print(paste("C-index on validation data:", fold_cindex$concordance))
   
   # Store the evaluation result
   stepwise_cv_index_valid[[i]] = validation_ids
