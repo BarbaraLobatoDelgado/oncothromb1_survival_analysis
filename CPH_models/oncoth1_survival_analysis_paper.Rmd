@@ -1627,8 +1627,16 @@ cox.zph(stepwise_cv_cph_final_model)
 
 # Show HR and 95% CI
 stepwise_cv_cph_final_model %>% 
-  gtsummary::tbl_regression(exp = TRUE)
+  gtsummary::tbl_regression(
+    exp = TRUE, 
+    pvalue_fun = as.character
+    )
 ```
+
+```{r}
+summary(stepwise_cv_cph_final_model)
+```
+
 
 
 ```{r}

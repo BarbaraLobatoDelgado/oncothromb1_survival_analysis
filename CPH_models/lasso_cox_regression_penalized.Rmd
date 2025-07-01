@@ -473,8 +473,8 @@ lambda1_grid <- c(0, 0.1, 1, 5, 10, 50, 75, 100)
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
 regpath_results <- expand.grid(
-  lambda1 = lambda1_grid, 
   fold = seq_len(kfolds), 
+  lambda1 = lambda1_grid, 
   KEEP.OUT.ATTRS = FALSE, 
   stringsAsFactors = FALSE
   ) %>%
@@ -490,8 +490,10 @@ regpath_results <- expand.grid(
 for (row_idx in seq_len(nrow(regpath_results))) {
   
   # Select lambda and fold value
-  l1 <- regpath_results$lambda1[row_idx]
   fold_i <- regpath_results$fold[row_idx]
+  print(paste0("Fold #", fold_i))
+  l1 <- regpath_results$lambda1[row_idx]
+  print(paste("Lambda value:", l1))
   
   # Determine training and validation patient IDs
   validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
@@ -587,23 +589,23 @@ summary_regpath
 
 
 ```{r}
-# ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) + 
-#   geom_line(size = 1) + 
-#   geom_point(size = 2) + 
-#   scale_x_log10(
-#     breaks = unique(summary_regpath$lambda1), 
-#     labels = scales::scientific_format(digits = 2)
-#   ) + 
-#   labs(
-#     x = expression(log[10](lambda[1])), 
-#     y = "Mean CV C-index", 
-#     title = "Regularization path: mean C-index vs penalty strength"
-#   ) + 
-#   theme_minimal() + 
-#   theme(
-#     plot.title = element_text(hjust = 0.5), 
-#     axis.text.x = element_text(angle = 45, hjust = 1)
-#   )
+ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_x_log10(
+    breaks = unique(summary_regpath$lambda1),
+    labels = scales::scientific_format(digits = 2)
+  ) +
+  labs(
+    x = expression(log[10](lambda[1])),
+    y = "Mean CV C-index",
+    title = "Regularization path: mean C-index vs penalty strength"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 ```
 
 
@@ -628,6 +630,8 @@ freq_selected_vars <- regpath_results %>%
 
 freq_selected_vars
 ```
+
+Our final model selects 8 features (considering that categorical variables are one hot encoded).
 
 
 ## Final model
