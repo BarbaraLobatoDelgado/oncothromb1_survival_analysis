@@ -405,7 +405,7 @@ fold_map <- data.frame(
 set.seed(seed)
 
 # Define lambda grid
-lambda1_grid <- c(0.1, 1, 5, 10, 50, 75, 100)
+lambda1_grid <- c(0, 0.001, 0.1, 1, 5) # , 10, 50, 75, 100
 
 # Store regularization pathway results
 # Do combinations of all folds and lambda1 values
@@ -484,16 +484,62 @@ for (row_idx in seq_len(nrow(regpath_results))) {
 
   # Get coefficients for all initial predictors
   b <- coef(pencox_cv, "all", standardize = TRUE)
+  
+  # print("Selected variables:")
+  # print(names(b))
 
   # Sanity check
   stopifnot(names(b) == colnames(X_valid))
+  
+  # # Train model with selected variables on validation data
+  # # Train final model
+  # selected_vars_cox <- coxph(
+  #   formula = as.formula(
+  #     sprintf(
+  #       '%s ~ %s',
+  #       'Surv(tstart, tstop, death)',
+  #       paste(names(b), collapse = " + "))
+  #     ),
+  #   id = id,
+  #   data = training_set_raw %>% filter(id %in% training_ids)
+  #   )
+  # 
+  # # Check proportional hazards assumption for Cox model
+  # cox.zph(selected_vars_cox)
+  
+  # # The result is the hazard of suffering the event. It's difficult to interpret
+  # predictions_train <- predict(selected_vars_cox, newdata = X_train)
+  # # print(predictions)
+  # 
+  # # Evaluate the predictions
+  # # C-index
+  # fold_cindex_train <- concordance(selected_vars_cox, newdata = X_train)
+  # print(paste("C-index in train:", fold_cindex_train))
+  # 
+  # # The result is the hazard of suffering the event. It's difficult to interpret
+  # predictions_valid <- predict(selected_vars_cox, newdata = X_valid)
+  # # print(predictions)
+  # 
+  # # Evaluate the predictions
+  # # C-index
+  # fold_cindex_valid <- concordance(selected_vars_cox, newdata = X_valid)
+  # print(paste("C-index in valid:", fold_cindex_valid))
+  
+  
 
   # Compute the linear predictor η = β′X
   lp_train <- as.numeric(X_train %*% b)
   lp_valid <- as.numeric(X_valid %*% b)
 
+  # Check predictiong and target has same length
+  stopifnot(
+    length(lp_train) == length(y_train),
+    length(lp_valid) == length(y_valid)
+  )
+
   # Evaluate using C-index
   regpath_results$cindex_train[row_idx] <- survival::concordance(y_train ~ lp_train)$concordance
+  # regpath_results$cindex_train[row_idx] <- survival::concordance(lp_train ~ y_train)$concordance
   regpath_results$cindex_valid[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
 
   # Record selected variables
