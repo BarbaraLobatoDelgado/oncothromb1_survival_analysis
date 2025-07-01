@@ -408,59 +408,44 @@ stopifnot(
 ```
 
 
-
-
 ```{r}
-# Prueba de Oriol
-training_set_processed <- process_data(training_set, cols2select, apply_scaling = FALSE)
-test_set_processed <- process_data(test_set, cols2select, FALSE)
-
-baseline_lasso <- penalized(
-    response = training_response,
-    penalized = training_set_processed,
-    unpenalized = ~1,
-    lambda1 = 10, # try zero and 0.1. C indices should be ~ 0.8
-    lambda2 = 0, # no L2 regularization
-    model = "cox",
-    trace = FALSE
-  )
-
-# Get coefficients for all initial predictors
-b <- coef(baseline_lasso, "all", standardize = TRUE)
-
-# Sanity check
-stopifnot(names(b) == colnames(test_set_processed))
-  
-# Compute the linear predictor η = β′X
-lp_train <- as.numeric(training_set_processed %*% b)
-lp_test <- as.numeric(test_set_processed %*% b)
-
-# Check predictiong and target has same length
-stopifnot(
-  length(lp_train) == length(training_response),
-  length(lp_test) == length(test_response)
-)
-
-# Evaluate using C-index
-cindex_train <- survival::concordance(training_response ~ lp_train, reverse = TRUE)$concordance
-cindex_test <- survival::concordance(test_response ~ lp_test, reverse = TRUE)$concordance
-
-print(paste("Cindex in train:", cindex_train))
-print(paste("Cindex in test:", cindex_test))
+# # Prueba de Oriol
+# training_set_processed <- process_data(training_set, cols2select, apply_scaling = FALSE)
+# test_set_processed <- process_data(test_set, cols2select, FALSE)
+# 
+# baseline_lasso <- penalized(
+#     response = training_response,
+#     penalized = training_set_processed,
+#     unpenalized = ~1,
+#     lambda1 = 0, # try zero and 0.1. C indices should be ~ 0.8
+#     lambda2 = 0, # no L2 regularization
+#     model = "cox",
+#     trace = FALSE
+#   )
+# 
+# # Get coefficients for all initial predictors
+# b <- coef(baseline_lasso, "all", standardize = TRUE)
+# 
+# # Sanity check
+# stopifnot(names(b) == colnames(test_set_processed))
+#   
+# # Compute the linear predictor η = β′X
+# lp_train <- as.numeric(training_set_processed %*% b)
+# lp_test <- as.numeric(test_set_processed %*% b)
+# 
+# # Check predictiong and target has same length
+# stopifnot(
+#   length(lp_train) == length(training_response),
+#   length(lp_test) == length(test_response)
+# )
+# 
+# # Evaluate using C-index
+# cindex_train <- survival::concordance(training_response ~ lp_train, reverse = TRUE)$concordance
+# cindex_test <- survival::concordance(test_response ~ lp_test, reverse = TRUE)$concordance
+# 
+# print(paste("Cindex in train:", cindex_train))
+# print(paste("Cindex in test:", cindex_test))
 ```
-
-
-```{r}
-aa
-```
-
-
-
-
-
-
-
-
 
 
 ```{r}
@@ -515,9 +500,6 @@ regpath_results <- expand.grid(
     selected_vars = vector("list", n())
   )
 
-# 
-# vif_results <- vector("list", length = k)
-
 # Loop over each row of that tibble
 for (row_idx in seq_len(nrow(regpath_results))) {
   
@@ -533,10 +515,12 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   valid_data <- training_set %>% filter(id %in% validation_ids)
   train_data <- training_set %>% filter(id %in% training_ids)
   
-  # # Split by fold (as before)
-  # train_df <- filter(training_set, fold != fold_i)
-  # valid_df <- filter(training_set, fold == fold_i)
-  # 
+  # Sanity checks
+  stopifnot(
+    setequal(validation_ids, unique(valid_data$id)),
+    setequal(training_ids, unique(train_data$id))
+  )
+  
   # Build unscaled X’s
   X_train_raw <- process_data(train_data, cols2select, apply_scaling = FALSE)
   X_valid_raw <- process_data(valid_data, cols2select, apply_scaling = FALSE)
@@ -551,27 +535,6 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   # 2) Apply to both train & valid
   X_train <- predict(pp, X_train_raw)
   X_valid <- predict(pp, X_valid_raw)
-  
-  
-  
-  
-  # # Determine training and validation patient IDs
-  # validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
-  # training_ids <- setdiff(unique_train_ids, validation_ids)
-  # 
-  # # Subset interval-level data
-  # valid_data <- training_set %>% filter(id %in% validation_ids)
-  # train_data <- training_set %>% filter(id %in% training_ids)
-  # 
-  # # Sanity checks
-  # stopifnot(
-  #   setequal(validation_ids, unique(valid_data$id)),
-  #   setequal(training_ids, unique(train_data$id))
-  # )
-  # 
-  # # Process data
-  # X_valid <- process_data(valid_data, cols2select)
-  # X_train <- process_data(train_data, cols2select)
   
   # Check that there are no missing values
   # na_per_col <- colSums(is.na(X_valid))
@@ -608,7 +571,7 @@ for (row_idx in seq_len(nrow(regpath_results))) {
     type = "link"
   )
   lp_train <- as.numeric(lp_train)
-  cindex_train <- concordance(y_train ~ lp_train)$concordance
+  cindex_train <- concordance(y_train ~ lp_train, reverse = TRUE)$concordance
   # Save result
   regpath_results$cindex_train[row_idx] <- cindex_train
   
@@ -620,7 +583,7 @@ for (row_idx in seq_len(nrow(regpath_results))) {
     type = "link"
   )
   lp_valid <- as.numeric(lp_valid)
-  cindex_valid <- concordance(y_valid ~ lp_valid)$concordance
+  cindex_valid <- concordance(y_valid ~ lp_valid, reverse = TRUE)$concordance
   # Save result
   regpath_results$cindex_valid[row_idx] <- cindex_valid
 
@@ -647,23 +610,24 @@ summary_regpath
 
 
 ```{r}
-# ggplot(summary_regpath, aes(x = lambda, y = mean_cindex)) + 
-#   geom_line(size = 1) + 
-#   geom_point(size = 2) + 
-#   scale_x_log10(
-#     breaks = unique(summary_regpath$lambda1), 
-#     labels = scales::scientific_format(digits = 2)
-#   ) + 
-#   labs(
-#     x = expression(log[10](lambda[1])), 
-#     y = "Mean CV C-index", 
-#     title = "Regularization path: mean C-index vs penalty strength"
-#   ) + 
-#   theme_minimal() + 
-#   theme(
-#     plot.title = element_text(hjust = 0.5), 
-#     axis.text.x = element_text(angle = 45, hjust = 1)
-#   )
+# Plot mean C-index (in validation data) vs L1 regularization strengh 
+ggplot(summary_regpath, aes(x = lambda, y = mean_cindex_valid)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_x_log10(
+    breaks = unique(summary_regpath$lambda),
+    labels = scales::scientific_format(digits = 2)
+  ) +
+  labs(
+    x = expression(log[10](lambda[1])),
+    y = "Mean CV C-index",
+    title = "Regularization path: mean C-index vs penalty strength"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 ```
 
 ## More frequently selected variables
