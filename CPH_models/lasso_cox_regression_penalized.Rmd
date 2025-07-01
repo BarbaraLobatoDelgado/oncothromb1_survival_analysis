@@ -457,10 +457,6 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   X_train <- predict(pp, X_train_raw)
   X_valid <- predict(pp, X_valid_raw)
 
-  # # Determine training and validation patient IDs
-  # validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
-  # training_ids <- setdiff(unique_train_ids, validation_ids)
-
   # Check there are no missing values
   stopifnot(!anyNA(X_train), !anyNA(X_valid))
 
