@@ -408,6 +408,61 @@ stopifnot(
 ```
 
 
+
+
+```{r}
+# Prueba de Oriol
+training_set_processed <- process_data(training_set, cols2select, apply_scaling = FALSE)
+test_set_processed <- process_data(test_set, cols2select, FALSE)
+
+baseline_lasso <- penalized(
+    response = training_response,
+    penalized = training_set_processed,
+    unpenalized = ~1,
+    lambda1 = 10, # try zero and 0.1. C indices should be ~ 0.8
+    lambda2 = 0, # no L2 regularization
+    model = "cox",
+    trace = FALSE
+  )
+
+# Get coefficients for all initial predictors
+b <- coef(baseline_lasso, "all", standardize = TRUE)
+
+# Sanity check
+stopifnot(names(b) == colnames(test_set_processed))
+  
+# Compute the linear predictor η = β′X
+lp_train <- as.numeric(training_set_processed %*% b)
+lp_test <- as.numeric(test_set_processed %*% b)
+
+# Check predictiong and target has same length
+stopifnot(
+  length(lp_train) == length(training_response),
+  length(lp_test) == length(test_response)
+)
+
+# Evaluate using C-index
+cindex_train <- survival::concordance(training_response ~ lp_train, reverse = TRUE)$concordance
+cindex_test <- survival::concordance(test_response ~ lp_test, reverse = TRUE)$concordance
+
+print(paste("Cindex in train:", cindex_train))
+print(paste("Cindex in test:", cindex_test))
+```
+
+
+```{r}
+aa
+```
+
+
+
+
+
+
+
+
+
+
 ```{r}
 # Create folds for k-fold CV
 

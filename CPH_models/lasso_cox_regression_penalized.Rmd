@@ -269,9 +269,28 @@ process_data <- function(data, cols2select, apply_scaling = FALSE) {
   # Transform covariates dataframe into matrix
   covariates <- as.matrix(data_dummies)
   
-  # Scale 
-  if (apply_scaling == TRUE) {
-    covariates <- scale(covariates)
+  # # Scale 
+  # if (apply_scaling == TRUE) {
+  #   covariates <- scale(covariates)
+  # }
+  
+  # Scale data
+  if (apply_scaling) {
+    # compute means & sds on each column
+    col_means <- colMeans(covariates, na.rm = TRUE)
+    col_sds   <- apply(covariates, 2, sd, na.rm = TRUE)
+    
+    # wherever sd == 0, replace by 1 so we don't divide by zero
+    zero_sd <- which(col_sds == 0)
+    if (length(zero_sd) > 0) {
+      warning("Columns with zero variance detected: ",
+              paste(names(col_sds)[zero_sd], collapse = ", "),
+              " — setting their 'scale' to 1, so they become all zeros after centering.")
+      col_sds[zero_sd] <- 1
+    }
+    
+    # now do the actual scaling
+    covariates <- scale(covariates, center = col_means, scale = col_sds)
   }
   
   return(covariates)
@@ -368,6 +387,63 @@ stopifnot(
   length(training_response) + length(test_response) == length(response)
 )
 ```
+
+
+
+```{r}
+# Prueba de Oriol
+lambda_zero <- 0
+lambda_test <- 0.1
+
+training_set_processed <- process_data(training_set_raw, cols2select, apply_scaling = FALSE)
+test_set_processed <- process_data(test_set_raw, cols2select, FALSE)
+
+baseline_lasso <- penalized(
+    response = training_response,
+    penalized = training_set_processed,
+    unpenalized = ~1,
+    lambda1 = lambda_zero,
+    lambda2 = 0, # no L2 regularization
+    model = "cox",
+    trace = FALSE
+  )
+
+# Get coefficients for all initial predictors
+b <- coef(baseline_lasso, "all", standardize = FALSE)
+
+# Sanity check
+stopifnot(names(b) == colnames(test_set_processed))
+  
+# Compute the linear predictor η = β′X
+lp_train <- as.numeric(training_set_processed %*% b)
+lp_test <- as.numeric(test_set_processed %*% b)
+
+# Check predictiong and target has same length
+stopifnot(
+  length(lp_train) == length(training_response),
+  length(lp_test) == length(test_response)
+)
+
+# Evaluate using C-index
+cindex_train <- survival::concordance(training_response ~ lp_train)$concordance
+cindex_test <- survival::concordance(test_response ~ lp_test)$concordance
+
+print(paste("Cindex in train:", cindex_train))
+print(paste("Cindex in test:", cindex_test))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ```{r}
@@ -534,9 +610,9 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   )
 
   # Evaluate using C-index
-  regpath_results$cindex_train[row_idx] <- survival::concordance(y_train ~ lp_train)$concordance
+  regpath_results$cindex_train[row_idx] <- survival::concordance(y_train ~ lp_train, reverse = TRUE)$concordance
   # regpath_results$cindex_train[row_idx] <- survival::concordance(lp_train ~ y_train)$concordance
-  regpath_results$cindex_valid[row_idx] <- survival::concordance(y_valid ~ lp_valid)$concordance
+  regpath_results$cindex_valid[row_idx] <- survival::concordance(y_valid ~ lp_valid, reverse = TRUE)$concordance
 
   # Record selected variables
   regpath_results$selected_vars[[row_idx]] <- coef(pencox_cv)
