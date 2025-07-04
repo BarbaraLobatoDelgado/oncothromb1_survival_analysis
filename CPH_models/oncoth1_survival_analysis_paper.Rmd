@@ -1469,7 +1469,8 @@ set.seed(seed)
 # Initialize a vector to store the evaluation results
 stepwise_cv_index_valid <- vector("list", length = k)
 stepwise_cv_vars_results <- vector("list", length = k)
-stepwise_cv_cindex_results <- vector("list", length = k)
+stepwise_cv_cindex_train_results <- vector("list", length = k)
+stepwise_cv_cindex_valid_results <- vector("list", length = k)
 stepwise_cv_vif_results <- vector("list", length = k) # Inspection of GVIF in trained models is necessary to detect multicollinearity issues
 
 for (i in 1:k) {
@@ -1561,17 +1562,34 @@ for (i in 1:k) {
   
   # Evaluate the predictions
   # C-index
-  fold_cindex <- concordance(fold_cph_model, newdata = validation_fold)
-  print(paste("C-index on validation data:", fold_cindex$concordance))
+  fold_cindex_train <- concordance(fold_cph_model, newdata = training_fold)$concordance
+  print(paste("C-index on training data:", fold_cindex_train))
+  fold_cindex_valid <- concordance(fold_cph_model, newdata = validation_fold)$concordance
+  print(paste("C-index on validation data:", fold_cindex_valid))
   
   # Store the evaluation result
   stepwise_cv_index_valid[[i]] = validation_ids
   stepwise_cv_vars_results[[i]] = selected_variables
-  stepwise_cv_cindex_results[[i]] = fold_cindex$concordance
+  stepwise_cv_cindex_train_results[[i]] <- fold_cindex_train
+  stepwise_cv_cindex_valid_results[[i]] <- fold_cindex_valid
   stepwise_cv_vif_results[[i]] = as.data.frame(vif_results)
 
 }
 ```
+
+```{r}
+# Show mean C-index on train and validation during CV
+# Train
+mean_cindex_train <- round(mean(unlist(stepwise_cv_cindex_train_results)), digits = 4)
+se_cindex_train <- round(plotrix::std.error(unlist(stepwise_cv_cindex_train_results)), digits = 4)
+print(paste("Mean C-index on train data = ", mean_cindex_train, "standard error = ", se_cindex_train))
+
+# Validation
+mean_cindex_valid <- round(mean(unlist(stepwise_cv_cindex_valid_results)), digits = 4)
+se_cindex_valid <- round(plotrix::std.error(unlist(stepwise_cv_cindex_valid_results)), digits = 4)
+print(paste("Mean C-index on valid data = ", mean_cindex_valid, "standard error = ", se_cindex_valid))
+```
+
 
 
 ```{r}
@@ -1593,8 +1611,10 @@ append2file(data = info_df)
 
 ```{r}
 # Variable selection frequency across 10-fold CV
-stepwise_var_selection_freq = as.data.frame(table(unlist(stepwise_cv_vars_results)))
-stepwise_var_selection_freq %<>% arrange(desc(Freq))
+stepwise_var_selection_freq <- as.data.frame(table(unlist(stepwise_cv_vars_results)))
+stepwise_var_selection_freq %<>% 
+  mutate(rel_freq = Freq / kfolds) %>%
+  arrange(desc(Freq))
 knitr::kable(stepwise_var_selection_freq)
 ```
 
@@ -1629,14 +1649,9 @@ cox.zph(stepwise_cv_cph_final_model)
 stepwise_cv_cph_final_model %>% 
   gtsummary::tbl_regression(
     exp = TRUE, 
-    pvalue_fun = as.character
+    # pvalue_fun = as.character
     )
 ```
-
-```{r}
-summary(stepwise_cv_cph_final_model)
-```
-
 
 
 ```{r}

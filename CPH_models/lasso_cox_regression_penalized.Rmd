@@ -491,9 +491,9 @@ for (row_idx in seq_len(nrow(regpath_results))) {
   
   # Select lambda and fold value
   fold_i <- regpath_results$fold[row_idx]
-  print(paste0("Fold #", fold_i))
+  # print(paste0("Fold #", fold_i))
   l1 <- regpath_results$lambda1[row_idx]
-  print(paste("Lambda value:", l1))
+  # print(paste("Lambda value:", l1))
   
   # Determine training and validation patient IDs
   validation_ids <- fold_map$patient_id[fold_map$fold == fold_i]
@@ -589,23 +589,23 @@ summary_regpath
 
 
 ```{r}
-ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  scale_x_log10(
-    breaks = unique(summary_regpath$lambda1),
-    labels = scales::scientific_format(digits = 2)
-  ) +
-  labs(
-    x = expression(log[10](lambda[1])),
-    y = "Mean CV C-index",
-    title = "Regularization path: mean C-index vs penalty strength"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(hjust = 0.5),
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+# ggplot(summary_regpath, aes(x = lambda1, y = mean_cindex)) +
+#   geom_line(size = 1) +
+#   geom_point(size = 2) +
+#   scale_x_log10(
+#     breaks = unique(summary_regpath$lambda1),
+#     labels = scales::scientific_format(digits = 2)
+#   ) +
+#   labs(
+#     x = expression(log[10](lambda[1])),
+#     y = "Mean CV C-index",
+#     title = "Regularization path: mean C-index vs penalty strength"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(hjust = 0.5),
+#     axis.text.x = element_text(angle = 45, hjust = 1)
+#   )
 ```
 
 
@@ -708,7 +708,7 @@ final_cox <- coxph(
     vte_event +			
     primary_tumor_simplified +		
     mucinous_histology_imp +			
-    # gender + # ,
+    gender + # ,
     catheter_device_imp, # +
     # family_background_vte + 
     # grade_histological_differentiation_imp,
