@@ -30,13 +30,15 @@ pacman::p_load(
   car,
   StepReg,
   plotly,
+  ggplot2, 
+  ggfortify,
   install = FALSE, update = FALSE
   )
 ```
 
 
 ```{r}
-survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, legend_labels, line_colours) {
+survplot_custom <- function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, legend_labels, line_colours) {
   
   # Customised ggplot for survfit objects
   
@@ -55,7 +57,7 @@ survplot_custom = function(survfit_obj, title, n_no_vte, n_vte, logrank_pval, le
   
   median_survival_days = surv_median(survfit_obj)[2, 2]
   
-  p = autoplot(
+  p <- survival::autoplot(
   survfit_obj, 
   censor = FALSE, 
   conf.int = FALSE) +
@@ -180,19 +182,19 @@ KM_curve_plots_VTE_another_covariate <- function(clinical_data, survival_data, c
     
     print(paste("p-value for", cat, "is = ", km_pval))
     
-    # Create KM plot for this category
-    km_plot <- survplot_custom(
-      km_fit, 
-      title = cat, 
-      n_no_vte = n_cat_no_vte, 
-      n_vte = n_cat_vte, 
-      legend_labels = c("No VTE", "VTE"), 
-      line_colours = c("black", "red"),
-      logrank_pval = km_pval
-    ) + theme(legend.position = "none")
-    
-    # Add plot to the list
-    km_plots[[cat]] <- km_plot
+    # # Create KM plot for this category
+    # km_plot <- survplot_custom(
+    #   km_fit, 
+    #   title = cat, 
+    #   n_no_vte = n_cat_no_vte, 
+    #   n_vte = n_cat_vte, 
+    #   legend_labels = c("No VTE", "VTE"), 
+    #   line_colours = c("black", "red"),
+    #   logrank_pval = km_pval
+    # ) + theme(legend.position = "none")
+    # 
+    # # Add plot to the list
+    # km_plots[[cat]] <- km_plot
   }
   
   # Return the list of plots
@@ -741,9 +743,9 @@ summary(survfit(
 
 
 ```{r}
-# # KM plots by VTE and age group
-# km_plot_vte_age_group <- KM_curve_plots_VTE_another_covariate(
-#   clinical_data = oncoth1_data, survival_data = survival_vte_tmerge, covariate = "age_when_cancer_dx_65")
+# KM plots by VTE and age group
+km_plot_vte_age_group <- KM_curve_plots_VTE_another_covariate(
+  clinical_data = oncoth1_data, survival_data = survival_vte_tmerge, covariate = "age_when_cancer_dx_65")
 ```
 
 
@@ -821,6 +823,7 @@ KM_curve_VTE_sex_combined_plot <- cowplot::plot_grid(
 
 KM_curve_VTE_sex_combined_plot
 ```
+
 
 ```{r}
 # Save plot
