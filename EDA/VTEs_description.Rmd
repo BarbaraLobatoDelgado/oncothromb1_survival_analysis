@@ -66,7 +66,7 @@ contigency_table2df_longer = function(df, column_names = c("cancer_type", "vte_t
 ```{r}
 # Load ONCOTHROMB1 DB
 # oncoth1 = get_project("oncothr1", version = "0.0.8003") 
-load("/mnt/ir-bioinf02/home/blobato/oncothromb01/oncothr1_versions/oncothr1.RData_0.0.8003")
+load("/mnt/ir-bioinf02/home/blobato/oncothromb01/data/processed/oncoth1_an9elproject_versions/oncoth1.RData_0.0.8003")
 oncoth1 = obj
 rm(obj)
 ```
